@@ -7,6 +7,7 @@ module Rubyists
   module Linear
     M :issue
     M :user
+    # Namespace for CLI
     module CLI
       module Issue
         List = Class.new Dry::CLI::Command
@@ -20,13 +21,6 @@ module Rubyists
           def call(**options)
             logger.debug "Listing issues"
             display issues_for(options), options
-          rescue SmellsBad => e
-            logger.error e.message
-            exit 1
-          rescue StandardError => e
-            logger.error e.message
-            logger.error e.backtrace.join("\n") if Rubyists::Linear.verbosity > 0
-            exit 5
           end
 
           def issues_for(options)

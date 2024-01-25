@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = "CLI for interacting with Linear.app."
   spec.description = "A CLI for interacting with Linear.app. Loosely based on the GitHub CLI"
   spec.homepage = "https://github.com/rubyists/linear-cli"
-  spec.required_ruby_version = ">= 2.6.0"
+  spec.required_ruby_version = ">= 3.3.0"
 
   spec.license = "MIT"
   spec.metadata["allowed_push_host"] = "https://rubygems.org"
