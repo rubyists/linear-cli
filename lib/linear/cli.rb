@@ -2,6 +2,7 @@
 
 require "dry/cli"
 require "dry/cli/completion/command"
+require "neatjson"
 require_relative "../linear"
 
 # The Rubyists module is the top-level namespace for all Rubyists projects
@@ -18,6 +19,16 @@ module Rubyists
             option :output, type: :string, default: "text", values: %w[text json], desc: "Output format"
             option :debug, type: :integer, default: 0, desc: "Debug level"
           end
+        end
+
+        def display(subject, options)
+          return puts(JSON.neat_generate(subject)) if options[:output] == "json"
+          return subject.display if subject.respond_to?(:display)
+          unless subject.respond_to?(:each)
+            raise SmellsBad, "Cannot display #{subject}, there is no #display method and it is not a collection"
+          end
+
+          subject.each(&:display)
         end
       end
 

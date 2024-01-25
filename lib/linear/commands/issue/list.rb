@@ -29,13 +29,6 @@ module Rubyists
             Rubyists::Linear::Issue.all
           end
 
-          def display(issues, options)
-            return puts "No issues found" if issues.empty?
-            return JSON.pretty_generate(issues) if options[:output] == "json"
-
-            issues.each(&:display)
-          end
-
           prepend Rubyists::Linear::CLI::Caller
         end
       end

@@ -38,6 +38,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "dry-cli-completion", "~> 1.0"
   spec.add_dependency "gqli", "~> 1.2"
   spec.add_dependency "httpx", "~> 1.2"
+  spec.add_dependency "neatjson"
   spec.add_dependency "semantic_logger", "~> 4.0"
 
   # For more information and examples about making a new gem, check out our

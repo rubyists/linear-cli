@@ -6,6 +6,7 @@ module Rubyists
   # Namespace for Linear
   module Linear
     L :api
+    L :fragments
     # The Issue class represents a Linear issue.
     class Issue
       extend GQLi::DSL
@@ -20,32 +21,38 @@ module Rubyists
         updatedAt
       end
 
-      PageInfo = fragment("PageInfo", "PageInfo") do
-        pageInfo do
-          hasNextPage
-          endCursor
-        end
-      end
-
-      def self.allq(filter: nil) # rubocop:disable Metrics/MethodLength
-        args = { first: 50 }
+      def self.allq(filter: nil, limit: 50, after: nil) # rubocop:disable Metrics/MethodLength
+        args = { first: limit }
         args[:filter] = filter if filter
+        args[:after] = after if after
         query do
           issues(args) do
             edges do
               node { ___ Base }
               cursor
             end
-            ___ PageInfo
+            ___ Fragments::PageInfo
           end
         end
       end
 
-      def self.all(filter: nil)
-        data = Api.query(allq(filter:))
-        data[:issues][:edges].map do |edge|
-          new edge[:node]
+      def self.issues_query(filter: nil, after: nil)
+        Api.query(allq(filter:, after:))
+      end
+
+      def self.all(edges: [], moar: true, after: nil, filter: nil) # rubocop:disable Metrics/MethodLength
+        while moar
+          data = issues_query(filter:, after:)
+          issues = data[:issues]
+          edges += issues[:edges]
+          if issues[:pageInfo][:hasNextPage]
+            after = issues[:pageInfo][:endCursor]
+          else
+            moar = false
+          end
+          require 'pry'; binding.pry
         end
+        edges.map { |edge| new edge[:node] }
       end
 
       attr_reader :issue

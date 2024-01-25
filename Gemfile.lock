@@ -7,6 +7,7 @@ PATH
       dry-cli-completion (~> 1.0)
       gqli (~> 1.2)
       httpx (~> 1.2)
+      neatjson
       semantic_logger (~> 4.0)
 
 GEM
@@ -94,6 +95,7 @@ GEM
       docopt_ng (~> 0.7, >= 0.7.1)
     multi_json (1.15.0)
     multi_test (1.1.0)
+    neatjson (0.10.5)
     parallel (1.24.0)
     parser (3.3.0.5)
       ast (~> 2.4.1)

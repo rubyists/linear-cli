@@ -19,12 +19,6 @@ module Rubyists
           display Rubyists::Linear::User.me, options
         end
 
-        def display(user, options)
-          return JSON.pretty_generate(user) if options[:output] == "json"
-
-          user.display
-        end
-
         prepend Rubyists::Linear::CLI::Caller
       end
       register "whoami", WhoAmI

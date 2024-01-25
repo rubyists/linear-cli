@@ -13,7 +13,7 @@ module Rubyists
         @retries ||= 0
         @retries += 1
         seconds = @retries * 2
-        logger.warn("Retry number #{@retries}, retrying #{@clean_url} after #{seconds} seconds")
+        logger.warn("Retry number #{@retries}, retrying after #{seconds} seconds")
         seconds
       end
 
@@ -34,6 +34,8 @@ module Rubyists
         gql = format('{ "query": "%s" }', query.to_s.gsub("\n", "").gsub('"', '\"'))
 
         res = session.post(BASE_URI, body: gql)
+        raise SmellsBad, "Bad Response from #{BASE_URI}: #{res}" if res.error
+
         data = JSON.parse(res.body.read, symbolize_names: true)
         raise SmellsBad, "No Data Returned for #{gql}" unless data&.key?(:data)
 
