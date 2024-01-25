@@ -13,6 +13,8 @@ module Rubyists
       include GQLi::DSL
       include SemanticLogger::Loggable
 
+      BASIC_FILTER = { completedAt: { null: true } }.freeze
+
       Base = fragment("BaseIssue", "Issue") do
         id
         identifier
@@ -23,7 +25,7 @@ module Rubyists
 
       def self.allq(filter: nil, limit: 50, after: nil) # rubocop:disable Metrics/MethodLength
         args = { first: limit }
-        args[:filter] = filter if filter
+        args[:filter] = filter ? BASIC_FILTER.merge(filter) : BASIC_FILTER
         args[:after] = after if after
         query do
           issues(args) do
@@ -40,17 +42,13 @@ module Rubyists
         Api.query(allq(filter:, after:))
       end
 
-      def self.all(edges: [], moar: true, after: nil, filter: nil) # rubocop:disable Metrics/MethodLength
+      def self.all(edges: [], moar: true, after: nil, filter: nil, max: 100)
         while moar
           data = issues_query(filter:, after:)
           issues = data[:issues]
           edges += issues[:edges]
-          if issues[:pageInfo][:hasNextPage]
-            after = issues[:pageInfo][:endCursor]
-          else
-            moar = false
-          end
-          require 'pry'; binding.pry
+          moar = false if edges.size >= max || !issues[:pageInfo][:hasNextPage]
+          after = issues[:pageInfo][:endCursor]
         end
         edges.map { |edge| new edge[:node] }
       end
