@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
-require_relative "lib/linear/cli/version"
+require_relative "lib/linear"
 
 Gem::Specification.new do |spec|
   spec.name = "linear-cli"
-  spec.version = Linear::Cli::VERSION
+  spec.version = Rubyists::Linear::VERSION
   spec.authors = ["Tj (bougyman) Vanderpoel"]
   spec.email = ["tj@rubyists.com"]
 
@@ -35,7 +35,9 @@ Gem::Specification.new do |spec|
   # Uncomment to register a new dependency of your gem
   spec.add_dependency "dry-cli", "~> 1.0"
   spec.add_dependency "dry-cli-completion", "~> 1.0"
+  spec.add_dependency "gqli", "~> 1.2"
   spec.add_dependency "httpx", "~> 1.2"
+  spec.add_dependency "semantic_logger", "~> 4.0"
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

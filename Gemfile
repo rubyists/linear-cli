@@ -9,6 +9,7 @@ group :development, :test do
   gem "aruba", "~> 2.2"
   gem "cucumber", "~> 9.1"
   gem "gem-release", "~> 2.2"
+  gem "pry-byebug"
   gem "rake", "~> 13.0"
   gem "rspec", "~> 3.0"
   gem "rubocop", "~> 1.21"
