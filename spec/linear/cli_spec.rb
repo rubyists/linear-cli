@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
-RSpec.describe Linear::Cli do
+require_relative "../helper"
+
+RSpec.describe "Rubyists::Linear::CLI" do
   it "has a version number" do
-    expect(Linear::Cli::VERSION).not_to be_nil
+    expect(Rubyists::Linear::VERSION).not_to be_nil
   end
 end
