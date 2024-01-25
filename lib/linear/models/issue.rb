@@ -8,25 +8,35 @@ module Rubyists
     L :api
     # The Issue class represents a Linear issue.
     class Issue
+      extend GQLi::DSL
+      include GQLi::DSL
+      include SemanticLogger::Loggable
+
+      Base = fragment("BaseIssue", "Issue") do
+        id
+        identifier
+        title
+        createdAt
+        updatedAt
+      end
+
+      PageInfo = fragment("PageInfo", "PageInfo") do
+        pageInfo do
+          hasNextPage
+          endCursor
+        end
+      end
+
       def self.allq(filter: nil) # rubocop:disable Metrics/MethodLength
         args = { first: 50 }
         args[:filter] = filter if filter
-        GQLi::DSL.query do
+        query do
           issues(args) do
             edges do
-              node do
-                id
-                identifier
-                title
-                createdAt
-                updatedAt
-              end
+              node { ___ Base }
               cursor
             end
-            pageInfo do
-              hasNextPage
-              endCursor
-            end
+            ___ PageInfo
           end
         end
       end

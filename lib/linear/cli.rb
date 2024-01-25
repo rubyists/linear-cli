@@ -20,6 +20,28 @@ module Rubyists
           end
         end
       end
+
+      # This module is prepended to all commands to log their calls
+      module Caller
+        LEVELS = %i[warn info debug trace].freeze
+        def self.prepended(_mod) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
+          Caller.class_eval do
+            define_method :call do |**method_args| # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+              debug = method_args[:debug].to_i
+              Rubyists::Linear.verbosity = debug
+              logger.trace "Calling #{self.class} with #{method_args}"
+              super(**method_args)
+            rescue SmellsBad => e
+              logger.error e.message
+              exit 1
+            rescue StandardError => e
+              logger.error e.message
+              logger.error e.backtrace.join("\n")
+              exit 5
+            end
+          end
+        end
+      end
     end
   end
 
@@ -31,11 +53,6 @@ module Rubyists
   module Linear
     # Open this back up to register commands
     module CLI
-      # Register all commands here
-      register "issue", aliases: %w[i] do |issue|
-        issue.register "ls", Issue::List
-      end
-
       register "completion", Dry::CLI::Completion::Command[self]
     end
   end

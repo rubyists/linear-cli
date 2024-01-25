@@ -33,6 +33,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Uncomment to register a new dependency of your gem
+  spec.add_dependency "base64"
   spec.add_dependency "dry-cli", "~> 1.0"
   spec.add_dependency "dry-cli-completion", "~> 1.0"
   spec.add_dependency "gqli", "~> 1.2"

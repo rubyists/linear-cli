@@ -31,11 +31,10 @@ module Rubyists
       end
 
       def query(query)
-        gql = format('{ "query": "%s" }', query.to_s.gsub("\n", ""))
+        gql = format('{ "query": "%s" }', query.to_s.gsub("\n", "").gsub('"', '\"'))
 
         res = session.post(BASE_URI, body: gql)
         data = JSON.parse(res.body.read, symbolize_names: true)
-        require "pry-byebug"; binding.pry
         raise SmellsBad, "No Data Returned for #{gql}" unless data&.key?(:data)
 
         data[:data]
