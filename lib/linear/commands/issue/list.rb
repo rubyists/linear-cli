@@ -16,7 +16,7 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
 
-          option :mine, type: :boolean, desc: "Only show my issues"
+          option :mine, type: :boolean, default: true, desc: "Only show my issues"
 
           def call(**options)
             logger.debug "Listing issues"
