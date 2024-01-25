@@ -32,7 +32,7 @@ module Rubyists
         id = user[:id]
         query do
           user(id:) do
-            assignedIssues(first:) do
+            assignedIssues(first:, filter: { completedAt: { null: true } }) do
               nodes { ___ Issue::Base }
             end
           end
