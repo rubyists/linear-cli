@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-lc i ls
+system("lc i ls")
