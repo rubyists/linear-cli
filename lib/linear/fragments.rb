@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-require "gqli"
+require 'gqli'
 
 module Rubyists
   module Linear
     # Reusable fragments
     module Fragments
       extend GQLi::DSL
-      PageInfo = fragment("PageInfo", "PageInfo") do
+      PageInfo = fragment('PageInfo', 'PageInfo') do
         pageInfo do
           hasNextPage
           endCursor

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "gqli"
+require 'gqli'
 
 module Rubyists
   # Namespace for Linear
@@ -12,7 +12,7 @@ module Rubyists
       include GQLi::DSL
       include SemanticLogger::Loggable
 
-      Base = fragment("BaseUser", "User") do
+      Base = fragment('BaseUser', 'User') do
         id
         name
         email

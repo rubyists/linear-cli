@@ -1,14 +1,14 @@
 # frozen_string_literal: true
 
-require "httpx"
-require "semantic_logger"
+require 'httpx'
+require 'semantic_logger'
 
 module Rubyists
   module Linear
     # Responsible for making requests to the Linear API
     class GraphApi
       include SemanticLogger::Loggable
-      BASE_URI = "https://api.linear.app/graphql"
+      BASE_URI = 'https://api.linear.app/graphql'
       RETRY_AFTER = lambda do |*|
         @retries ||= 0
         @retries += 1
@@ -25,13 +25,13 @@ module Rubyists
 
       def headers
         @headers ||= {
-          "Content-Type" => "application/json",
-          "Authorization" => api_key
+          'Content-Type' => 'application/json',
+          'Authorization' => api_key
         }
       end
 
       def query(query)
-        gql = format('{ "query": "%s" }', query.to_s.gsub("\n", "").gsub('"', '\"'))
+        gql = format('{ "query": "%s" }', query.to_s.gsub("\n", '').gsub('"', '\"'))
 
         res = session.post(BASE_URI, body: gql)
         raise SmellsBad, "Bad Response from #{BASE_URI}: #{res}" if res.error
@@ -43,7 +43,7 @@ module Rubyists
       end
 
       def api_key
-        @api_key ||= ENV.fetch("LINEAR_API_KEY")
+        @api_key ||= ENV.fetch('LINEAR_API_KEY')
       end
     end
     Api = Rubyists::Linear::GraphApi.new

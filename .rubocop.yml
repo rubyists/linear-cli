@@ -4,12 +4,12 @@ require:
   - rubocop-rspec
 
 AllCops:
-  TargetRubyVersion: 3.3.0
+  TargetRubyVersion: 3.2.0
   NewCops: enable
 
 Style/StringLiterals:
   Enabled: true
-  EnforcedStyle: double_quotes
+  EnforcedStyle: single_quotes
 
 Style/StringLiteralsInInterpolation:
   Enabled: true

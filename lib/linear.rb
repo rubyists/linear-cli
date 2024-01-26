@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "pathname"
-require "semantic_logger"
+require 'pathname'
+require 'semantic_logger'
 SemanticLogger.default_level = :info
 SemanticLogger.add_appender(io: $stderr, formatter: :color)
 
@@ -17,7 +17,7 @@ module Rubyists
   module Linear
     include SemanticLogger::Loggable
     # rubocop:disable Layout/SpaceAroundOperators
-    ROOT = (Pathname(__FILE__)/"../..").expand_path
+    ROOT = (Pathname(__FILE__)/'../..').expand_path
     LIBROOT = ROOT/:lib/:linear
     MODEL_ROOT = ROOT/:lib/:linear/:models
     SPEC_ROOT = ROOT/:spec
@@ -42,7 +42,7 @@ module Rubyists
     def self.verbosity=(debug)
       return verbosity unless debug
 
-      logger.warn "Debug level should be between 0 and 3" unless debug.between?(0, 3)
+      logger.warn 'Debug level should be between 0 and 3' unless debug.between?(0, 3)
       @verbosity = debug
       level = @verbosity > (DEBUG_LEVELS.size - 1) ? :trace : DEBUG_LEVELS[@verbosity]
       SemanticLogger.default_level = level

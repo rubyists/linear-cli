@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "gqli"
+require 'gqli'
 
 module Rubyists
   # Namespace for Linear
@@ -15,7 +15,7 @@ module Rubyists
 
       BASIC_FILTER = { completedAt: { null: true } }.freeze
 
-      Base = fragment("BaseIssue", "Issue") do
+      Base = fragment('BaseIssue', 'Issue') do
         id
         identifier
         title

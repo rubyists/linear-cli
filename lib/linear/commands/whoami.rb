@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "semantic_logger"
+require 'semantic_logger'
 
 module Rubyists
   # Namespace for Linear
@@ -15,13 +15,13 @@ module Rubyists
         include Rubyists::Linear::CLI::CommonOptions
 
         def call(**options)
-          logger.debug "Getting user info"
+          logger.debug 'Getting user info'
           display Rubyists::Linear::User.me, options
         end
 
         prepend Rubyists::Linear::CLI::Caller
       end
-      register "whoami", WhoAmI
+      register 'whoami', WhoAmI
     end
   end
 end

@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-require "dry/cli"
-require "dry/cli/completion/command"
-require "neatjson"
-require_relative "../linear"
+require 'dry/cli'
+require 'dry/cli/completion/command'
+require 'neatjson'
+require_relative '../linear'
 
 # The Rubyists module is the top-level namespace for all Rubyists projects
 module Rubyists
@@ -16,13 +16,13 @@ module Rubyists
       module CommonOptions
         def self.included(mod)
           mod.instance_eval do
-            option :output, type: :string, default: "text", values: %w[text json], desc: "Output format"
-            option :debug, type: :integer, default: 0, desc: "Debug level"
+            option :output, type: :string, default: 'text', values: %w[text json], desc: 'Output format'
+            option :debug, type: :integer, default: 0, desc: 'Debug level'
           end
         end
 
         def display(subject, options)
-          return puts(JSON.neat_generate(subject)) if options[:output] == "json"
+          return puts(JSON.neat_generate(subject)) if options[:output] == 'json'
           return subject.each(&:display) if subject.respond_to?(:each)
           unless subject.respond_to?(:display)
             raise SmellsBad, "Cannot display #{subject}, there is no #display method and it is not a collection"
@@ -57,14 +57,14 @@ module Rubyists
   end
 
   # Load all our commands
-  Pathname.new(__FILE__).dirname.join("commands").glob("*.rb").each do |file|
+  Pathname.new(__FILE__).dirname.join('commands').glob('*.rb').each do |file|
     require file.expand_path
   end
 
   module Linear
     # Open this back up to register commands
     module CLI
-      register "completion", Dry::CLI::Completion::Command[self]
+      register 'completion', Dry::CLI::Completion::Command[self]
     end
   end
 end

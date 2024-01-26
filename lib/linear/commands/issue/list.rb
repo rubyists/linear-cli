@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "semantic_logger"
+require 'semantic_logger'
 
 module Rubyists
   # Namespace for Linear
@@ -16,10 +16,10 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
 
-          option :mine, type: :boolean, default: true, desc: "Only show my issues"
+          option :mine, type: :boolean, default: true, desc: 'Only show my issues'
 
           def call(**options)
-            logger.debug "Listing issues"
+            logger.debug 'Listing issues'
             display issues_for(options), options
           end
 
@@ -32,8 +32,8 @@ module Rubyists
           prepend Rubyists::Linear::CLI::Caller
         end
       end
-      register "issue", aliases: %w[i] do |issue|
-        issue.register "ls", Issue::List
+      register 'issue', aliases: %w[i] do |issue|
+        issue.register 'ls', Issue::List
       end
     end
   end

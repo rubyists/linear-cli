@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "linear"
+require 'linear'
 Rubyists::Linear::L :cli
 Dry::CLI.new(Rubyists::Linear::CLI).call
