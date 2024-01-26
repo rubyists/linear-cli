@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-system("lc i ls")
+exec lc i ls "$@"
