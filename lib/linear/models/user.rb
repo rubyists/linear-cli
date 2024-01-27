@@ -6,10 +6,11 @@ module Rubyists
   # Namespace for Linear
   module Linear
     L :api
-    # The Issue class represents a Linear issue.
+    M :base_model
+    M :issue
+    User = Class.new(BaseModel)
+    # The User class represents a Linear user.
     class User
-      extend GQLi::DSL
-      include GQLi::DSL
       include SemanticLogger::Loggable
 
       Base = fragment('BaseUser', 'User') do
@@ -29,7 +30,7 @@ module Rubyists
       end
 
       def issue_query(first)
-        id = user[:id]
+        id = data[:id]
         query do
           user(id:) do
             assignedIssues(first:, filter: { completedAt: { null: true } }) do
@@ -46,19 +47,9 @@ module Rubyists
         end
       end
 
-      attr_reader :user
-
-      def initialize(user)
-        @user = user
-      end
-
-      def to_json(*_args)
-        user.to_json
-      end
-
       def display
         format = "%-20s: %s <%s>\n"
-        printf format, user[:id], user[:name], user[:email]
+        printf format, data[:id], data[:name], data[:email]
       end
     end
   end
