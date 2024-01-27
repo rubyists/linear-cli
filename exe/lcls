@@ -1,2 +1,4 @@
-#!/usr/bin/env bash
-exec lc i ls "$@"
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+exec File.join(__dir__, 'lcls.sh'), *ARGV

@@ -11,25 +11,37 @@ module Rubyists
       include GQLi::DSL
       include SemanticLogger::Loggable
 
-      def self.included(klass)
-        klass.extend ClassMethods
-      end
-
       # Class methods for Linear models.
-      module ClassMethods
-        def allq(filter: nil, limit: 50, after: nil) # rubocop:disable Metrics/MethodLength
+      class << self
+        def allq(filter: nil, limit: 50, after: nil)
           args = { first: limit }
-          args[:filter] = filter ? BASIC_FILTER.merge(filter) : BASIC_FILTER
+          args[:filter] = filter ? basic_filter.merge(filter) : basic_filter
           args[:after] = after if after
+          all_query args, plural.to_s, base_fragment
+        end
+
+        def all_query(args, subject, base_fragment)
           query do
-            subject(args) do
+            __node(subject, args) do
               edges do
-                node { ___ Base }
+                node { ___ base_fragment }
                 cursor
               end
               ___ Fragments::PageInfo
             end
           end
+        end
+
+        def base_fragment
+          const_get(:Base)
+        end
+
+        def basic_filter
+          const_get(:BASIC_FILTER)
+        end
+
+        def plural
+          const_get(:PLURAL)
         end
 
         def gql_query(filter: nil, after: nil)
@@ -39,7 +51,7 @@ module Rubyists
         def all(edges: [], moar: true, after: nil, filter: nil, max: 100)
           while moar
             data = gql_query(filter:, after:)
-            subjects = data[PLURAL]
+            subjects = data[plural]
             edges += subjects[:edges]
             moar = false if edges.size >= max || !subjects[:pageInfo][:hasNextPage]
             after = subjects[:pageInfo][:endCursor]

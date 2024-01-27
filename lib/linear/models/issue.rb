@@ -28,7 +28,7 @@ module Rubyists
 
       def display
         format = "%-10s %s (%s)\n"
-        printf format, data[:identifier], data[:title], data[:assignee][:name]
+        printf format, data[:identifier], data[:title], data.dig(:assignee, :name)
       end
     end
   end
