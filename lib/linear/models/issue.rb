@@ -26,9 +26,26 @@ module Rubyists
         updatedAt
       end
 
+      include BaseModel::MethodMagic
+
+      def inspect
+        format '#<Rubyists::Linear::Issue:%<id>s id: %<identifier>s title: %<title>s>', id:, identifier:, title:
+      end
+
+      def to_s
+        format('%<id>-12s %<title>s', id: data[:identifier], title: data[:title])
+      end
+
+      def full
+        if (name = data.dig(:assignee, :name))
+          format('%<basic>s (%<name>s)', basic: to_s, name:)
+        else
+          to_s
+        end
+      end
+
       def display
-        format = "%-10s %s (%s)\n"
-        printf format, data[:identifier], data[:title], data.dig(:assignee, :name)
+        printf "%s\n", full
       end
     end
   end

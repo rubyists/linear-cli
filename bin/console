@@ -9,4 +9,4 @@ require 'linear'
 # with your gem easier. You can also use a different console, if you like.
 
 Rubyists::Linear::L :cli
-Rubyists::Linear::CLI.pry
+Rubyists::Linear.pry
