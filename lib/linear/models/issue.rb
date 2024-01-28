@@ -26,8 +26,6 @@ module Rubyists
         updatedAt
       end
 
-      include BaseModel::MethodMagic
-
       def inspect
         format '#<Rubyists::Linear::Issue:%<id>s id: %<identifier>s title: %<title>s>', id:, identifier:, title:
       end

@@ -13,15 +13,17 @@ module Rubyists
 
       # Methods for Linear models.
       module MethodMagic
-        def self.included(base)
-          base.base_fragment.__nodes.each do |node|
-            sym = node.__name.to_sym
-            define_method node.__name do
-              updated_data[sym]
-            end
+        def self.included(base) # rubocop:disable Metrics/MethodLength
+          base.instance_eval do
+            base.base_fragment.__nodes.each do |node|
+              sym = node.__name.to_sym
+              define_method node.__name do
+                updated_data[sym]
+              end
 
-            define_method "#{node.__name}=" do |value|
-              updated_data[sym] = value
+              define_method "#{node.__name}=" do |value|
+                updated_data[sym] = value
+              end
             end
           end
         end
@@ -29,6 +31,12 @@ module Rubyists
 
       # Class methods for Linear models.
       class << self
+        def const_added(const)
+          return unless const == :Base
+
+          include MethodMagic
+        end
+
         def allq(filter: nil, limit: 50, after: nil)
           args = { first: limit }
           args[:filter] = filter ? basic_filter.merge(filter) : basic_filter
