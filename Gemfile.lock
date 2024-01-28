@@ -1,14 +1,15 @@
 PATH
   remote: .
   specs:
-    linear-cli (0.1.11)
+    linear-cli (0.1.12)
       base64
       dry-cli (~> 1.0)
       dry-cli-completion (~> 1.0)
       gqli (~> 1.2)
       httpx (~> 1.2)
-      neatjson
       semantic_logger (~> 4.0)
+      sequel
+      sqlite3
 
 GEM
   remote: https://rubygems.org/
@@ -23,6 +24,7 @@ GEM
       thor (~> 1.0)
     ast (2.4.2)
     base64 (0.2.0)
+    bigdecimal (3.1.6)
     builder (3.2.4)
     byebug (11.1.3)
     coderay (1.1.3)
@@ -90,12 +92,12 @@ GEM
       rake (~> 13.0)
     method_source (1.0.0)
     mini_mime (1.1.5)
+    mini_portile2 (2.8.5)
     mister_bin (0.7.6)
       colsole (>= 0.8.1, < 2)
       docopt_ng (~> 0.7, >= 0.7.1)
     multi_json (1.15.0)
     multi_test (1.1.0)
-    neatjson (0.10.5)
     parallel (1.24.0)
     parser (3.3.0.5)
       ast (~> 2.4.1)
@@ -151,6 +153,11 @@ GEM
     ruby-progressbar (1.13.0)
     semantic_logger (4.15.0)
       concurrent-ruby (~> 1.0)
+    sequel (5.76.0)
+      bigdecimal
+    sqlite3 (1.7.1)
+      mini_portile2 (~> 2.8.0)
+    sqlite3 (1.7.1-x86_64-linux)
     sys-uname (1.2.3)
       ffi (~> 1.1)
     thor (1.3.0)

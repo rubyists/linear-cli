@@ -24,14 +24,13 @@ module Rubyists
     FEATURE_ROOT = ROOT/:features
     DEBUG_LEVELS = %i[warn info debug trace].freeze
 
-    def self.L(library) # rubocop:disable Naming/MethodName
-      require LIBROOT/library
+    def self.L(*libraries) # rubocop:disable Naming/MethodName
+      Array(libraries).each { |library| require LIBROOT/library }
     end
-    L :exceptions
-    L :version
+    L :exceptions, :version
 
-    def self.M(model) # rubocop:disable Naming/MethodName
-      require MODEL_ROOT/model
+    def self.M(*models) # rubocop:disable Naming/MethodName
+      Array(models).each { |model| require MODEL_ROOT/model }
     end
     # rubocop:enable Layout/SpaceAroundOperators
 

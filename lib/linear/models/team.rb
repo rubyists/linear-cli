@@ -5,28 +5,25 @@ require 'gqli'
 module Rubyists
   # Namespace for Linear
   module Linear
-    L :api
-    L :fragments
-    M :base_model
-    M :user
-    Issue = Class.new(BaseModel)
+    L :api, :fragments
+    M :base_model, :issue, :user
+    Team = Class.new(BaseModel)
     # The Issue class represents a Linear issue.
-    class Issue
+    class Team
       include SemanticLogger::Loggable
 
-      BASIC_FILTER = { completedAt: { null: true } }.freeze
-
-      Base = fragment('BaseIssue', 'Issue') do
+      Base = fragment('BaseIssue', 'Team') do
         id
-        identifier
-        title
-        assignee { ___ User::Base }
+        name
         createdAt
         updatedAt
       end
 
-      def inspection
-        format('id: "%<identifier>s" title: "%<title>s"', identifier:, title:)
+      WithMembers = fragment('WithMembers', 'Team') do
+        ___ Base
+        members do
+          node { ___ User::Base }
+        end
       end
 
       def to_s

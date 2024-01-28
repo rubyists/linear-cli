@@ -2,6 +2,7 @@
 
 require 'gqli'
 require 'semantic_logger'
+require 'sequel/extensions/inflector'
 
 module Rubyists
   module Linear
@@ -57,16 +58,24 @@ module Rubyists
           end
         end
 
+        def just_name
+          name.split('::').last
+        end
+
         def base_fragment
-          const_get(:Base)
+          return const_get(:Base)
         end
 
         def basic_filter
-          const_get(:BASIC_FILTER) || {}
+          return const_get(:BASIC_FILTER) if const_defined?(:BASIC_FILTER)
+
+          {}
         end
 
         def plural
-          const_get(:PLURAL)
+          return const_get(:PLURAL) if const_defined?(:PLURAL)
+
+          just_name.downcase.pluralize.to_sym
         end
 
         def gql_query(filter: nil, after: nil)
@@ -105,6 +114,14 @@ module Rubyists
 
       def to_json(*_args)
         updated_data.to_json
+      end
+
+      def inspection
+        format('name: "%<name>s"', name:)
+      end
+
+      def inspect
+        format '#<%<name>s:%<id>s %<inspection>s>', name: self.class.name, id:, inspection:
       end
     end
   end
