@@ -38,7 +38,7 @@ module Rubyists
 
       def initialize(data)
         super(data)
-        self.teams = data[:teams]
+        self.teams = data[:teams] if data.key? :teams
       end
 
       def issue_query(first)
