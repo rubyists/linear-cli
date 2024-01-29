@@ -94,7 +94,7 @@ module Rubyists
         format('%<id>-20s: %<name>s <%<email>s>', id:, name:, email:)
       end
 
-      def display
+      def display(_options)
         return printf("%s\n", to_s) if @teams.nil?
 
         printf "%<to_s>s (%<teams>s)\n", to_s:, teams: @teams.map(&:name).join(', ')

@@ -24,7 +24,7 @@ module Rubyists
       end
 
       def to_s
-        format('%<title>s', id:, title: data[:name])
+        format('%<title>s', title: data[:name])
       end
 
       def full
@@ -45,7 +45,7 @@ module Rubyists
         @members = data.dig(:team, :members, :nodes)&.map { |member| User.new member } || []
       end
 
-      def display
+      def display(_options)
         printf "%s\n", full
       end
     end

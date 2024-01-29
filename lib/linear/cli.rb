@@ -22,12 +22,12 @@ module Rubyists
 
         def display(subject, options)
           return puts(JSON.pretty_generate(subject)) if options[:output] == 'json'
-          return subject.each(&:display) if subject.respond_to?(:each)
+          return subject.each { |s| s.display(options) } if subject.respond_to?(:each)
           unless subject.respond_to?(:display)
             raise SmellsBad, "Cannot display #{subject}, there is no #display method and it is not a collection"
           end
 
-          subject.display
+          subject.display(options)
         end
       end
 

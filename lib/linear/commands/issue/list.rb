@@ -17,6 +17,7 @@ module Rubyists
           include Rubyists::Linear::CLI::CommonOptions
 
           option :mine, type: :boolean, default: true, desc: 'Only show my issues'
+          option :full, type: :boolean, default: false, desc: 'Show full issue details'
 
           def call(**options)
             logger.debug 'Listing issues'

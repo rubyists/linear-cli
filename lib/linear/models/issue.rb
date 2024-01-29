@@ -21,6 +21,7 @@ module Rubyists
         identifier
         title
         assignee { ___ User::Base }
+        description
         createdAt
         updatedAt
       end
@@ -30,19 +31,18 @@ module Rubyists
       end
 
       def to_s
-        format('%<id>-12s %<title>s', id: data[:identifier], title: data[:title])
+        basic = format('%<id>-12s %<title>s', id: data[:identifier], title: data[:title])
+        return basic unless (name = data.dig(:assignee, :name))
+
+        format('%<basic>s (%<name>s)', basic:, name:)
       end
 
       def full
-        if (name = data.dig(:assignee, :name))
-          format('%<basic>s (%<name>s)', basic: to_s, name:)
-        else
-          to_s
-        end
+        format("%<to_s>s\n\n%<description>s", to_s:, description:)
       end
 
-      def display
-        printf "%s\n", full
+      def display(options)
+        printf "%s\n\n", (options[:full] ? full : to_s)
       end
     end
   end
