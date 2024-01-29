@@ -16,7 +16,7 @@ A command line interface to https://linear.app.
 $ git clone https://github.com/rubyists/linear-cli.git
 $ cd linear-cli
 $ bundle install
-$ bundle exec rake install
+$ rake install
 ----
 
 == Usage
