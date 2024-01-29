@@ -63,7 +63,7 @@ module Rubyists
         end
 
         def base_fragment
-          return const_get(:Base)
+          const_get(:Base)
         end
 
         def basic_filter
