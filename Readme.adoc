@@ -1,0 +1,44 @@
+= Linear Command line interface
+:toc: right
+:toclevels: 2
+:sectanchors:
+:icons: font
+:experimental:
+
+A command line interface to https://linear.app.
+
+== Installation
+
+=== From Source
+
+[source,sh]
+----
+$ git clone https://github.com/rubyists/linear-cli.git
+$ cd linear-cli
+$ bundle install
+$ bundle exec rake install
+----
+
+== Usage
+
+=== Configuration
+
+You must set the LINEAR_API_KEY environment variable to your Linear API key. You can find your API key at https://linear.app/settings/api.
+
+=== Commands
+
+==== Who Am I?
+
+[source,sh]
+----
+$ lc whoami
+$ lc whoami --teams
+----
+
+==== List Issues
+
+[source,sh]
+----
+$ lcls
+$ lcls --full
+----
