@@ -38,11 +38,12 @@ module Rubyists
       end
 
       def full
-        format("%<to_s>s\n\n%<description>s", to_s:, description:)
+        sep = '-' * to_s.length
+        format("%<to_s>s\n%<sep>s\n%<description>s\n", sep:, to_s:, description:)
       end
 
       def display(options)
-        printf "%s\n\n", (options[:full] ? full : to_s)
+        printf "%s\n", (options[:full] ? full : to_s)
       end
     end
   end
