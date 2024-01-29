@@ -12,30 +12,37 @@ module Rubyists
     class Team
       include SemanticLogger::Loggable
 
-      Base = fragment('BaseIssue', 'Team') do
+      Base = fragment('BaseTeam', 'Team') do
         id
         name
         createdAt
         updatedAt
       end
 
-      WithMembers = fragment('WithMembers', 'Team') do
-        ___ Base
-        members do
-          node { ___ User::Base }
-        end
+      def self.mine
+        User.me.teams
       end
 
       def to_s
-        format('%<id>-12s %<title>s', id: data[:identifier], title: data[:title])
+        format('%<title>s', id:, title: data[:name])
       end
 
       def full
-        if (name = data.dig(:assignee, :name))
-          format('%<basic>s (%<name>s)', basic: to_s, name:)
-        else
-          to_s
+        format('%<id>-12s %<to_s>s', id:, to_s:)
+      end
+
+      def members
+        return @members unless @members.empty?
+
+        q = query do
+          team(id:) do
+            members do
+              nodes { ___ User::Base }
+            end
+          end
         end
+        data = Api.query(q)
+        @members = data.dig(:team, :members, :nodes)&.map { |member| User.new member } || []
       end
 
       def display

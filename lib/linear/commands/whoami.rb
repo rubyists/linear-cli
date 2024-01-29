@@ -14,9 +14,11 @@ module Rubyists
         include SemanticLogger::Loggable
         include Rubyists::Linear::CLI::CommonOptions
 
+        option :teams, type: :boolean, default: false, desc: 'Show teams'
+
         def call(**options)
           logger.debug 'Getting user info'
-          display Rubyists::Linear::User.me, options
+          display Rubyists::Linear::User.me(teams: options[:teams]), options
         end
 
         prepend Rubyists::Linear::CLI::Caller
