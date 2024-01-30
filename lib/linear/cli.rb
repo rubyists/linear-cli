@@ -11,10 +11,22 @@ module Rubyists
     module CLI
       extend Dry::CLI::Registry
 
+      # Watch for the call method to be added to a command
+      module Watcher
+        def self.extended(_mod)
+          define_method :method_added do |method_name|
+            return unless method_name == :call
+
+            prepend Rubyists::Linear::CLI::Caller
+          end
+        end
+      end
+
       # The CommonOptions module contains common options for all commands
       module CommonOptions
         def self.included(mod)
           mod.instance_eval do
+            extend Rubyists::Linear::CLI::Watcher
             option :output, type: :string, default: 'text', values: %w[text json], desc: 'Output format'
             option :debug, type: :integer, default: 0, desc: 'Debug level'
           end
@@ -33,7 +45,6 @@ module Rubyists
 
       # This module is prepended to all commands to log their calls
       module Caller
-        LEVELS = %i[warn info debug trace].freeze
         def self.prepended(_mod) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
           Caller.class_eval do
             define_method :call do |**method_args| # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
@@ -61,7 +72,7 @@ module Rubyists
   end
 
   module Linear
-    # Open this back up to register commands
+    # Open this back up to register 3rd party/other commands
     module CLI
       register 'completion', Dry::CLI::Completion::Command[self]
     end

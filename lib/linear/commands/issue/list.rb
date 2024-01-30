@@ -29,12 +29,7 @@ module Rubyists
 
             Rubyists::Linear::Issue.all
           end
-
-          prepend Rubyists::Linear::CLI::Caller
         end
-      end
-      register 'issue', aliases: %w[i] do |issue|
-        issue.register 'ls', Issue::List
       end
     end
   end
