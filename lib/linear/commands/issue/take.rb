@@ -16,11 +16,13 @@ module Rubyists
           include Rubyists::Linear::CLI::CommonOptions
           argument :issue_id, required: true, desc: 'Issue Identifier'
 
-          def call(issue_id:, **)
+          def call(issue_id:, **options)
             me = Rubyists::Linear::User.me
             logger.debug 'Taking issue', issue_id:, assignee: me.to_h
             issue = Rubyists::Linear::Issue.find(issue_id)
-            issue.assign! Rubyists::Linear::User.me
+            updated = issue.assign! Rubyists::Linear::User.me
+            logger.debug 'Issue taken', issue: updated
+            display updated, options
           end
         end
       end

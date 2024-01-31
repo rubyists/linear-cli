@@ -30,16 +30,24 @@ module Rubyists
         }
       end
 
-      def query(query)
-        gql = format('{ "query": "%s" }', query.to_s.gsub("\n", '').gsub('"', '\"'))
-
-        res = session.post(BASE_URI, body: gql)
+      def call(body)
+        res = session.post(BASE_URI, body:)
         raise SmellsBad, "Bad Response from #{BASE_URI}: #{res}" if res.error
 
         data = JSON.parse(res.body.read, symbolize_names: true)
-        raise SmellsBad, "No Data Returned for #{gql}" unless data&.key?(:data)
+        raise SmellsBad, "No Data Returned for #{body}" unless data&.key?(:data)
 
         data[:data]
+      end
+
+      def mutation(mutation)
+        q = format('{ "query": "%s" }', mutation.to_s.gsub("\n", '').gsub('"', '\"'))
+        require 'pry' ; binding.pry
+        call q
+      end
+
+      def query(query)
+        call format('{ "query": "%s" }', query.to_s.gsub("\n", '').gsub('"', '\"'))
       end
 
       def api_key

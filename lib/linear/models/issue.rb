@@ -26,6 +26,26 @@ module Rubyists
         updatedAt
       end
 
+      class << self
+        def find(slug)
+          q = query { issue(id: slug) { ___ Base } }
+          data = Api.query(q)
+          raise NotFoundError, "Issue not found: #{slug}" if data.nil?
+
+          new(data[:issue])
+        end
+      end
+
+      def assign!(user)
+        id_for_this = identifier
+        m = mutation { issueUpdate(id: id_for_this, input: { assigneeId: user.id }) { issue { ___ Base } } }
+        data = Api.query(m)
+        updated = data.dig(:issueUpdate, :issue)
+        raise SmellsBad, "Unknown response for issue update: #{data} (should have :issueUpdate key)" if updated.nil?
+
+        Issue.new updated
+      end
+
       def inspection
         format('id: "%<identifier>s" title: "%<title>s"', identifier:, title:)
       end
