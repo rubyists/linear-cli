@@ -40,12 +40,6 @@ module Rubyists
         data[:data]
       end
 
-      def mutation(mutation)
-        q = format('{ "query": "%s" }', mutation.to_s.gsub("\n", '').gsub('"', '\"'))
-        require 'pry' ; binding.pry
-        call q
-      end
-
       def query(query)
         call format('{ "query": "%s" }', query.to_s.gsub("\n", '').gsub('"', '\"'))
       end
