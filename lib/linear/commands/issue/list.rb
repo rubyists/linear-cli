@@ -16,6 +16,14 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
 
+          desc 'List issues'
+          example [
+            '            # List your issues',
+            '--no-mine   # List The most recent 100 issues',
+            '-u          # List unassigned issues',
+            '-fu         # List unassigned issues with full details',
+            'CRY-123     # Show issue CRY-123'
+          ]
           argument :ids, type: :array, default: [], desc: 'Issue IDs to list'
           option :mine, type: :boolean, default: true, desc: 'Only show my issues'
           option :unassigned, aliases: ['-u'], type: :boolean, default: false, desc: 'Show unassigned issues only'
