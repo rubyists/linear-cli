@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    linear-cli (0.3.4)
+    linear-cli (0.3.5)
       base64
       dry-cli (~> 1.0)
       dry-cli-completion (~> 1.0)
