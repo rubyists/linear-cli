@@ -13,7 +13,9 @@ module Rubyists
       include SemanticLogger::Loggable
 
       Base = fragment('BaseTeam', 'Team') do
+        description
         id
+        key
         name
         createdAt
         updatedAt
@@ -24,11 +26,11 @@ module Rubyists
       end
 
       def to_s
-        format('%<title>s', title: data[:name])
+        format('%<name>s', name:)
       end
 
       def full
-        format('%<id>-12s %<to_s>s', id:, to_s:)
+        format('%<key>-6s %<to_s>s', key:, to_s:)
       end
 
       def members
