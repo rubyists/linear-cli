@@ -14,15 +14,18 @@ module Rubyists
         class Take
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
-          argument :issue_id, required: true, desc: 'Issue Identifier'
+          argument :issue_ids, type: :array, required: true, desc: 'Issue Identifiers'
 
-          def call(issue_id:, **options)
+          def call(issue_ids:, **options)
             me = Rubyists::Linear::User.me
-            logger.debug 'Taking issue', issue_id:, assignee: me.to_h
-            issue = Rubyists::Linear::Issue.find(issue_id)
-            updated = issue.assign! Rubyists::Linear::User.me
-            logger.debug 'Issue taken', issue: updated
-            display updated, options
+            updates = issue_ids.map do |issue_id|
+              issue = Rubyists::Linear::Issue.find(issue_id)
+              logger.debug 'Taking issue', issue:, assignee: me
+              updated = issue.assign! me
+              logger.debug 'Issue taken', issue: updated
+              updated
+            end
+            display updates, options
           end
         end
       end
