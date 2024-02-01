@@ -33,15 +33,15 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Uncomment to register a new dependency of your gem
-  spec.add_dependency 'base64'
+  spec.add_dependency 'base64', '~> 0.2'
   spec.add_dependency 'dry-cli', '~> 1.0'
   spec.add_dependency 'dry-cli-completion', '~> 1.0'
   spec.add_dependency 'gqli', '~> 1.2'
   spec.add_dependency 'httpx', '~> 1.2'
   spec.add_dependency 'semantic_logger', '~> 4.0'
-  spec.add_dependency 'sequel'
-  spec.add_dependency 'sqlite3'
-  spec.add_dependency 'tty-markdown'
+  spec.add_dependency 'sequel', '~> 5.0'
+  spec.add_dependency 'sqlite3', '~> 1.7'
+  spec.add_dependency 'tty-markdown', '~> 0.7'
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
