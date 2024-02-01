@@ -14,9 +14,10 @@ module Rubyists
         class Take
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
+          desc 'Assign one or more issues to yourself'
           argument :issue_ids, type: :array, required: true, desc: 'Issue Identifiers'
 
-          def call(issue_ids:, **options)
+          def call(issue_ids:, **options) # rubocop:disable Metrics/MethodLength
             me = Rubyists::Linear::User.me
             updates = issue_ids.map do |issue_id|
               issue = Rubyists::Linear::Issue.find(issue_id)
@@ -24,7 +25,10 @@ module Rubyists
               updated = issue.assign! me
               logger.debug 'Issue taken', issue: updated
               updated
-            end
+            rescue NotFoundError => e
+              logger.error e.message
+              next
+            end.compact
             display updates, options
           end
         end

@@ -55,9 +55,11 @@ module Rubyists
             rescue SmellsBad => e
               logger.error e.message
               exit 1
+            rescue NotFoundError => e
+              logger.error e.message
             rescue StandardError => e
               logger.error e.message
-              logger.error e.backtrace.join("\n")
+              logger.error e.backtrace.join("\n") if Rubyists::Linear.verbosity.positive?
               exit 5
             end
           end
