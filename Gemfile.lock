@@ -1,16 +1,16 @@
 PATH
   remote: .
   specs:
-    linear-cli (0.3.9)
+    linear-cli (0.3.10)
       base64 (~> 0.2)
       dry-cli (~> 1.0)
       dry-cli-completion (~> 1.0)
       gqli (~> 1.2)
       httpx (~> 1.2)
       semantic_logger (~> 4.0)
-      sequel
-      sqlite3
-      tty-markdown
+      sequel (~> 5.0)
+      sqlite3 (~> 1.7)
+      tty-markdown (~> 0.7)
 
 GEM
   remote: https://rubygems.org/

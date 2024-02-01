@@ -31,10 +31,6 @@ module Rubyists
           prepend Rubyists::Linear::CLI::Caller
         end
       end
-
-      register 'team', aliases: %w[t] do |team|
-        team.register 'ls', Team::List
-      end
     end
   end
 end
