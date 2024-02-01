@@ -59,7 +59,10 @@ module Rubyists
 
       def full
         sep = '-' * to_s.length
-        format("%<to_s>s\n%<sep>s\n%<description>s\n", sep:, to_s:, description:)
+        format("%<to_s>s\n%<sep>s\n%<description>s\n",
+               sep:,
+               to_s:,
+               description: (TTY::Markdown.parse(data[:description]) rescue 'No Description?')) # rubocop:disable Style/RescueModifier
       end
 
       def display(options)

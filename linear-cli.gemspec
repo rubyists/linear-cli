@@ -41,6 +41,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'semantic_logger', '~> 4.0'
   spec.add_dependency 'sequel'
   spec.add_dependency 'sqlite3'
+  spec.add_dependency 'tty-markdown'
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html

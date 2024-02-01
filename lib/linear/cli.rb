@@ -3,6 +3,7 @@
 require 'dry/cli'
 require 'dry/cli/completion/command'
 require_relative '../linear'
+require 'tty-markdown'
 
 # The Rubyists module is the top-level namespace for all Rubyists projects
 module Rubyists

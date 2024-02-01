@@ -45,7 +45,10 @@ module Rubyists
       end
 
       def api_key
-        @api_key ||= ENV.fetch('LINEAR_API_KEY')
+        return @api_key if @api_key
+        raise NoKeyError, 'No LINEAR_API_KEY found in Environment variables.' unless ENV.key?('LINEAR_API_KEY')
+
+        @api_key = ENV.fetch('LINEAR_API_KEY')
       end
     end
     Api = Rubyists::Linear::GraphApi.new
