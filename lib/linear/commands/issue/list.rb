@@ -30,7 +30,7 @@ module Rubyists
 
           def issues_for(options)
             logger.debug('Fetching issues', options:)
-            return options[:ids].map { |id| Rubyists::Linear::Issue.find(id) } if options[:ids].any?
+            return options[:ids].map { |id| Rubyists::Linear::Issue.find(id) } if options[:ids]
             return Rubyists::Linear::Issue.all(filter: { assignee: { null: true } }) if options[:unassigned]
             return Rubyists::Linear::User.me.issues if options[:mine]
 
