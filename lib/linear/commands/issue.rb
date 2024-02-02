@@ -23,7 +23,6 @@ module Rubyists
           title = title_for options[:title]
           description = description_for options[:description]
           team = team_for options[:team]
-          require 'pry'; binding.pry
           labels = labels_for team, options[:labels]
           Rubyists::Linear::Issue.create(title:, description:, team:, labels:)
         end

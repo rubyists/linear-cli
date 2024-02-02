@@ -38,7 +38,7 @@ module Rubyists
         end
 
         def team_for(key = nil)
-          return Team.find(key) if key
+          return Rubyists::Linear::Team.find(key) if key
 
           ask_for_team
         end
@@ -46,7 +46,7 @@ module Rubyists
         def description_for(description = nil)
           return description if description
 
-          prompt.multiline('Description:')
+          prompt.multiline('Description:').join(' ')
         end
 
         def title_for(title = nil)
