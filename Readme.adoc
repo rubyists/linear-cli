@@ -25,20 +25,74 @@ $ rake install
 
 You must set the LINEAR_API_KEY environment variable to your Linear API key. You can find your API key at https://linear.app/settings/api.
 
+==== Tab Completion
+
+If you are using bash or zsh, you can enable tab completion by adding the following to your .bashrc or .zshrc:
+
+Bash:
+
+[source,sh]
+----
+eval "$(lc completion bash)"
+----
+
+Zsh:
+
+[source,sh]
+----
+eval "$(lc completion zsh)"
+----
+
 === Commands
 
+=== Help
+
+You can get help/usage for any command or subcommand by using the `--help` flag.
+
+[source,sh]
+----
+$ lc
+$ lc [COMMAND] --help
+$ lc [COMMAND] [SUBCOMMAND] --help
+----
+
 ==== Who Am I?
+
+You can use the 'w' alias for 'whoami'
 
 [source,sh]
 ----
 $ lc whoami
-$ lc whoami --teams
+$ lc w --teams
 ----
 
 ==== List Issues
+
+`lcls` is a helper provided to list issues. It's an alias for `lc issues list`.
 
 [source,sh]
 ----
 $ lcls
 $ lcls --full
 ----
+
+==== Assign one or more issues to yourself (take em!)
+
+'i' is a shortcut for the 'issue' command
+
+[source,sh]
+----
+$ lc i take CRY-1234
+$ lc issue take CRY-456 CRY-789
+----
+
+==== Create an issue
+
+'c' is a shortcut for the 'create' subcommand of the issue command
+
+[source,sh]
+----
+$ lc i c --title "My new issue" --description "This is a new issue"
+----
+
+NOTE: If you don't provide a title or description, you will be prompted to enter them.
