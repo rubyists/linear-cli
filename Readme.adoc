@@ -9,7 +9,14 @@ A command line interface to https://linear.app.
 
 == Installation
 
-=== From Source
+=== Gem (Most should use this)
+
+[source,sh]
+----
+$ gem install linear-cli
+----
+
+=== From Source (You are obviously a developer)
 
 [source,sh]
 ----
@@ -23,20 +30,21 @@ $ rake install
 
 === Configuration
 
-You must set the LINEAR_API_KEY environment variable to your Linear API key. You can find your API key at https://linear.app/settings/api.
+You must set the LINEAR_API_KEY environment variable to your Linear API key.
+You can find your API key in your https://linear.app/settings/api[Linear Settings].
 
 ==== Tab Completion
 
-If you are using bash or zsh, you can enable tab completion by adding the following to your .bashrc or .zshrc:
+If you are using bash or zsh, you can enable tab completion by adding the following to your `.bashrc` or `.zshrc`:
 
-Bash:
+bash:
 
 [source,sh]
 ----
 eval "$(lc completion bash)"
 ----
 
-Zsh:
+zsh:
 
 [source,sh]
 ----
