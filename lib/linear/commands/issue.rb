@@ -12,7 +12,7 @@ module Rubyists
         include CLI::SubCommands
         # Aliases for Issue commands
         ALIASES = {
-          create: %w[new add c],        # aliases for the create command
+          create: %w[c new add],        # aliases for the create command
           list: %w[l ls],               # aliases for the list command
           show: %w[s view v display d], # aliases for the show command
           issue: %w[i issues]           # aliases for the main issue command itself
@@ -23,6 +23,7 @@ module Rubyists
           title = title_for options[:title]
           description = description_for options[:description]
           team = team_for options[:team]
+          require 'pry'; binding.pry
           labels = labels_for team, options[:labels]
           Rubyists::Linear::Issue.create(title:, description:, team:, labels:)
         end

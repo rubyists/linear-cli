@@ -25,6 +25,8 @@ module Rubyists
             logger.debug('Creating issue', options:)
             issue = make_da_issue!(**options)
             logger.debug('Issue created', issue:)
+            prompt.yes?('Do you want to take this issue?') && gimme_da_issue!(issue.id, User.me)
+            display issue, options
           end
         end
       end

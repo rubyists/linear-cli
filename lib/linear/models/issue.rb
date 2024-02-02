@@ -34,6 +34,16 @@ module Rubyists
 
           new(data[:issue])
         end
+
+        def create(title:, description:, team:, labels: [])
+          team_id = team.id
+          label_ids = labels.map(&:id)
+          input = { title:, description:, teamId: team_id }
+          input.merge!(labelIds: label_ids) unless label_ids.empty?
+          m = mutation { issueCreate(input:) { issue { ___ Base } } }
+          data = Api.query(m)
+          new(data[:issueCreate][:issue])
+        end
       end
 
       def assign!(user)

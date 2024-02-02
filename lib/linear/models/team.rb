@@ -12,6 +12,9 @@ module Rubyists
     class Team
       include SemanticLogger::Loggable
 
+      # TODO: Make this configurable
+      IgnoredLabels = [/-ios$/, /-android$/].freeze # rubocop:disable Naming/ConstantName
+
       Base = fragment('BaseTeam', 'Team') do
         description
         id
@@ -44,8 +47,34 @@ module Rubyists
         format('%<key>-6s %<to_s>s', key:, to_s:)
       end
 
+      def label_query
+        team_id = id
+        query do
+          team(id: team_id) do
+            labels do
+              nodes { ___ Label::Base }
+            end
+          end
+        end
+      end
+
+      def label_filter(labels = nil)
+        return [] unless labels
+
+        labels.reject { |label| IgnoredLabels.detect { |i| label.name.match? i } }
+      end
+
+      def labels
+        return @labels if @labels && !@labels.empty?
+
+        all = Api.query(label_query).dig(:team, :labels, :nodes)&.map do |label|
+          Label.new label
+        end
+        @labels = label_filter(all)
+      end
+
       def members
-        return @members unless @members.empty?
+        return @members if @members && !@members.empty?
 
         q = query do
           team(id:) do
