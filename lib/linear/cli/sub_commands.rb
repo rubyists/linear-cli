@@ -15,7 +15,16 @@ module Rubyists
           end
         end
 
-        def ask_for_team # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+        def choose_a_team!(teams)
+          prompt.on(:keypress) do |event|
+            prompt.trigger(:keydown) if event.value == 'j'
+            prompt.trigger(:keyup) if event.value == 'k'
+          end
+          key = prompt.select('Choose a team', teams.to_h { |t| [t.name, t.key] })
+          Rubyists::Linear::Team.find key
+        end
+
+        def ask_for_team
           teams = Rubyists::Linear::Team.mine
           if teams.size == 1
             logger.info('Only one team found, using it', team: teams.first.name)
@@ -24,12 +33,7 @@ module Rubyists
             logger.error('No teams found for you. Please join a team or pass an existing team name.')
             raise SmellsBad, 'No team given and none found for you'
           else
-            prompt.on(:keypress) do |event|
-              prompt.trigger(:keydown) if event.value == 'j'
-              prompt.trigger(:keyup) if event.value == 'k'
-            end
-            key = prompt.select('Choose a team', teams.to_h { |t| [t.name, t.key] })
-            Rubyists::Linear::Team.find key
+            choose_a_team! teams
           end
         end
 

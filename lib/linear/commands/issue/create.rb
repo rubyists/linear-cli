@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'semantic_logger'
+require_relative '../issue'
 
 module Rubyists
   # Namespace for Linear
@@ -14,11 +15,11 @@ module Rubyists
         class Create
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
-          include Rubyists::Linear::CLI::Issue # for #gimme_da_issue and other methods
+          include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Create a  new issue'
           option :title, type: :string, aliases: ['-t'], desc: 'Issue Title'
-          option :team, type: :string, aliases: ['-T'], desc: 'Team Identifier'
           option :description, type: :string, aliases: ['-d'], desc: 'Issue Description'
+          option :team, type: :string, aliases: ['-T'], desc: 'Team Identifier'
           option :labels, type: :array, aliases: ['-l'], desc: 'Labels for the issue (Comma separated list)'
 
           def call(**options)
