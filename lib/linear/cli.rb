@@ -3,70 +3,53 @@
 require 'dry/cli'
 require 'dry/cli/completion/command'
 require_relative '../linear'
+require 'semantic_logger'
 require 'tty-markdown'
+require 'tty-prompt'
 
 # The Rubyists module is the top-level namespace for all Rubyists projects
 module Rubyists
   module Linear
     # The CLI module is a Dry::CLI::Registry that contains all the commands
     module CLI
+      include SemanticLogger::Loggable
       extend Dry::CLI::Registry
 
-      # Watch for the call method to be added to a command
-      module Watcher
-        def self.extended(_mod)
-          define_method :method_added do |method_name|
-            return unless method_name == :call
+      def self.prompt
+        @prompt ||= TTY::Prompt.new
+      end
 
-            prepend Rubyists::Linear::CLI::Caller
-          end
+      def self.register_sub!(command, sub_file, klass)
+        # The filename is expected to define a class of the same name, but capitalized
+        name = sub_file.basename('.rb').to_s
+        subklass = klass.const_get(name.capitalize)
+        if (aliases = klass::ALIASES[name.to_sym])
+          command.register name, subklass, aliases: Array(aliases)
+        else
+          command.register name, subklass
         end
       end
 
-      # The CommonOptions module contains common options for all commands
-      module CommonOptions
-        def self.included(mod)
-          mod.instance_eval do
-            extend Rubyists::Linear::CLI::Watcher
-            option :output, type: :string, default: 'text', values: %w[text json], desc: 'Output format'
-            option :debug, type: :integer, default: 0, desc: 'Debug level'
-          end
-        end
-
-        def display(subject, options)
-          return puts(JSON.pretty_generate(subject)) if options[:output] == 'json'
-          return subject.each { |s| s.display(options) } if subject.respond_to?(:each)
-          unless subject.respond_to?(:display)
-            raise SmellsBad, "Cannot display #{subject}, there is no #display method and it is not a collection"
-          end
-
-          subject.display(options)
+      def self.register_subcommands!(command, name, klass)
+        Pathname.new(__FILE__).dirname.join("commands/#{name}").glob('*.rb').each do |file|
+          require file.expand_path
+          register_sub! command, file, klass
         end
       end
 
-      # This module is prepended to all commands to log their calls
-      module Caller
-        def self.prepended(_mod) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
-          Caller.class_eval do
-            define_method :call do |**method_args| # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
-              debug = method_args[:debug].to_i
-              Rubyists::Linear.verbosity = debug
-              logger.trace "Calling #{self.class} with #{method_args}"
-              super(**method_args)
-            rescue SmellsBad => e
-              logger.error e.message
-              exit 1
-            rescue NotFoundError => e
-              logger.error e.message
-            rescue StandardError => e
-              logger.error e.message
-              logger.error e.backtrace.join("\n") if Rubyists::Linear.verbosity.positive?
-              exit 5
-            end
-          end
+      def self.load_and_register!(command)
+        logger.debug "Registering #{command}"
+        name = command.name.split('::').last.downcase
+        command_aliases = command::ALIASES[name.to_sym] || []
+        register name, aliases: Array(command_aliases) do |cmd|
+          register_subcommands! cmd, name, command
         end
       end
     end
+  end
+
+  Pathname.new(__FILE__).dirname.join('cli').glob('*.rb').each do |file|
+    require file.expand_path
   end
 
   # Load all our commands

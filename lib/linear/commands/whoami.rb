@@ -14,7 +14,9 @@ module Rubyists
         include SemanticLogger::Loggable
         include Rubyists::Linear::CLI::CommonOptions
 
-        option :teams, type: :boolean, default: false, desc: 'Show teams'
+        desc 'Get your own user info'
+
+        option :teams, aliases: ['-t'], type: :boolean, default: false, desc: 'Show teams'
 
         def call(**options)
           logger.debug 'Getting user info'
@@ -23,7 +25,7 @@ module Rubyists
 
         prepend Rubyists::Linear::CLI::Caller
       end
-      register 'whoami', WhoAmI
+      register 'whoami', WhoAmI, aliases: %w[me w who whodat]
     end
   end
 end

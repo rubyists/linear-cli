@@ -17,18 +17,10 @@ module Rubyists
           desc 'Assign one or more issues to yourself'
           argument :issue_ids, type: :array, required: true, desc: 'Issue Identifiers'
 
-          def gimme_da_issue(issue_id, me) # rubocop:disable Naming/MethodParameterName
-            issue = Rubyists::Linear::Issue.find(issue_id)
-            logger.debug 'Taking issue', issue:, assignee: me
-            updated = issue.assign! me
-            logger.debug 'Issue taken', issue: updated
-            updated
-          end
-
           def call(issue_ids:, **options)
             me = Rubyists::Linear::User.me
             updates = issue_ids.map do |issue_id|
-              gimme_da_issue issue_id, me
+              gimme_da_issue! issue_id, me # gimme_da_issue! is defined in Rubyists::Linear::CLI::Issue
             rescue NotFoundError => e
               logger.warn e.message
               next

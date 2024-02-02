@@ -21,6 +21,17 @@ module Rubyists
         updatedAt
       end
 
+      def self.find(key)
+        q = query do
+          team(id: key) { ___ Base }
+        end
+        data = Api.query(q)
+        hash = data[:team]
+        raise NotFoundError, "Team not found: #{key}" unless hash
+
+        new hash
+      end
+
       def self.mine
         User.me.teams
       end

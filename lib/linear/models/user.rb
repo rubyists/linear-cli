@@ -18,15 +18,17 @@ module Rubyists
         email
       end
 
-      WithTeams = fragment('UserWithTeams', 'User') do
-        ___ Base
-        teams do
-          nodes { ___ Team::Base }
+      def self.with_teams
+        @with_teams = fragment('UserWithTeams', 'User') do
+          ___ Base
+          teams do
+            nodes { ___ Team::Base }
+          end
         end
       end
 
       def self.me(teams: false)
-        fragment = teams ? WithTeams : Base
+        fragment = teams ? with_teams : Base
         q = query do
           viewer do
             ___ fragment

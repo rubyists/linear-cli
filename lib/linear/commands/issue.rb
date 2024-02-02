@@ -1,23 +1,38 @@
 # frozen_string_literal: true
 
+require_relative '../cli/sub_commands'
+
 module Rubyists
   module Linear
     # The Cli module is defined in cli.rb and is the top-level namespace for all CLI commands
     module CLI
+      # The Issue module is the namespace for all issue-related commands, and
+      # should be included in any command that deals with issues
       module Issue
-        # This ALIASES hash will return the key as the value if the key is not found,
-        # otherwise it will return the value of the existing key
-        ALIASES = Hash.new { |h, k| h[k] = k }.merge(
-          'list' => 'ls'
-        )
-      end
+        include CLI::SubCommands
+        # Aliases for Issue commands
+        ALIASES = {
+          create: %w[new add c],        # aliases for the create command
+          list: %w[l ls],               # aliases for the list command
+          show: %w[s view v display d], # aliases for the show command
+          issue: %w[i issues]           # aliases for the main issue command itself
+        }.freeze
 
-      Pathname.new(__FILE__).dirname.join('issue').glob('*.rb').each do |file|
-        require file.expand_path
-        register 'issue', aliases: %w[i] do |issue|
-          basename = File.basename(file, '.rb')
-          # The filename is expected to define a class of the same name, but capitalized
-          issue.register Issue::ALIASES[basename], Issue.const_get(basename.capitalize)
+        def make_da_issue!(**options)
+          # These *_for methods are defined in Rubyists::Linear::CLI::SubCommands
+          title = title_for options[:title]
+          description = description_for options[:description]
+          team = team_for options[:team]
+          labels = labels_for team, options[:labels]
+          Rubyists::Linear::Issue.create(title:, description:, team:, labels:)
+        end
+
+        def gimme_da_issue!(issue_id, me) # rubocop:disable Naming/MethodParameterName
+          issue = Rubyists::Linear::Issue.find(issue_id)
+          logger.debug 'Taking issue', issue:, assignee: me
+          updated = issue.assign! me
+          logger.debug 'Issue taken', issue: updated
+          updated
         end
       end
     end
