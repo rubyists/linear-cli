@@ -45,7 +45,7 @@ eval "$(lc completion zsh)"
 
 === Commands
 
-=== Help
+==== Help
 
 You can get help/usage for any command or subcommand by using the `--help` flag.
 
