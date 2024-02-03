@@ -1,0 +1,4 @@
+type: Changed
+title: >
+  Changed default branch to use upstream default branch name
+author: bougyman
