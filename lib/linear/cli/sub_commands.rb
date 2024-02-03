@@ -107,7 +107,7 @@ module Rubyists
         end
 
         def default_branch
-          @default_branch ||= Git.default_branch git.repo.path
+          @default_branch ||= Git.default_branch git.remote.url
         end
       end
     end
