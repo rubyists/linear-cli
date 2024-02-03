@@ -13,8 +13,9 @@ module Rubyists
         # Aliases for Issue commands
         ALIASES = {
           create: %w[c new add],        # aliases for the create command
+          develop: %w[d dev],           # aliases for the create command
           list: %w[l ls],               # aliases for the list command
-          show: %w[s view v display d], # aliases for the show command
+          show: %w[s view v],           # aliases for the show command
           issue: %w[i issues]           # aliases for the main issue command itself
         }.freeze
 
@@ -28,10 +29,16 @@ module Rubyists
         end
 
         def gimme_da_issue!(issue_id, me) # rubocop:disable Naming/MethodParameterName
+          logger.trace('Looking up issue', issue_id:, me:)
           issue = Rubyists::Linear::Issue.find(issue_id)
-          logger.debug 'Taking issue', issue:, assignee: me
+          if issue.assignee && issue.assignee[:id] == me.id
+            prompt.say("You are already assigned #{issue_id}")
+            return issue
+          end
+
+          prompt.say("Assigning issue #{issue_id} to ya")
           updated = issue.assign! me
-          logger.debug 'Issue taken', issue: updated
+          logger.trace 'Issue taken', issue: updated
           updated
         end
       end

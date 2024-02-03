@@ -12,12 +12,27 @@ module Rubyists
     class Label
       include SemanticLogger::Loggable
 
+      PLURAL = :issueLabels
       Base = fragment('BaseLabel', 'IssueLabel') do
         id
         description
         name
+        isGroup
         createdAt
         updatedAt
+      end
+
+      def self.base_fragment # rubocop:disable Metrics/AbcSize
+        define_method(:team) { updated_data[:team] }
+        define_method(:team=) { |val| updated_data[:team] = val }
+        define_method(:parent) { updated_data[:parent] }
+        define_method(:parent=) { |val| updated_data[:parent] = val }
+
+        fragment('LabelWithTeams', 'IssueLabel') do
+          ___ Base
+          parent { ___ Base }
+          team { ___ Team::Base }
+        end
       end
 
       def self.find_all_by_name(names)
@@ -46,7 +61,7 @@ module Rubyists
       end
 
       def full
-        format('%<to_s>-10s %<description>s', description: , to_s:)
+        format('%<to_s>-10s %<description>s', description:, to_s:)
       end
 
       def display(_options)

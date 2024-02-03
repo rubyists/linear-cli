@@ -21,6 +21,7 @@ module Rubyists
         identifier
         title
         assignee { ___ User::Base }
+        branchName
         description
         createdAt
         updatedAt

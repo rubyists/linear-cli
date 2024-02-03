@@ -16,11 +16,12 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
-          desc 'Create a  new issue'
+          desc 'Create a new issue'
           option :title, type: :string, aliases: ['-t'], desc: 'Issue Title'
           option :description, type: :string, aliases: ['-d'], desc: 'Issue Description'
           option :team, type: :string, aliases: ['-T'], desc: 'Team Identifier'
           option :labels, type: :array, aliases: ['-l'], desc: 'Labels for the issue (Comma separated list)'
+          option :develop, type: :boolean, aliases: ['-D', '--dev'], desc: 'Start development after creating the issue'
 
           def call(**options)
             logger.debug('Creating issue', options:)
@@ -28,6 +29,7 @@ module Rubyists
             logger.debug('Issue created', issue:)
             prompt.yes?('Do you want to take this issue?') && gimme_da_issue!(issue.id, User.me)
             display issue, options
+            Rubyists::Linear::CLI::Issue::Develop.new.call(issue_id: issue.id, **options) if options[:develop]
           end
         end
       end
