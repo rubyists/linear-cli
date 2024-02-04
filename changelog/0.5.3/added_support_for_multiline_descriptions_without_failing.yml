@@ -1,0 +1,4 @@
+type: Added
+title: >
+  Added support for multiline descriptions without failing
+author: bougyman

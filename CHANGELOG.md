@@ -2,7 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.4] - 2024-02-04
+
 ## [0.5.3] - 2024-02-03
+### Added
+- Added support for multiline descriptions without failing (@bougyman)
+
 ### Changed
 - Changed default branch to use upstream default branch name (@bougyman)
 
@@ -10,5 +15,6 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.5.4...HEAD
+[0.5.4]: https://github.com/rubyists/linear-cli/compare/v0.5.3...0.5.4
 [0.5.3]: https://github.com/rubyists/linear-cli/compare/v0.5.2...v0.5.3

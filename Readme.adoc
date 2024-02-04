@@ -82,6 +82,7 @@ $ lc w --teams
 ----
 $ lcls
 $ lcls --full
+$ lcls -f CRY-1
 ----
 
 ==== Assign one or more issues to yourself (take em!)
@@ -100,7 +101,21 @@ $ lc issue take CRY-456 CRY-789
 
 [source,sh]
 ----
-$ lc i c --title "My new issue" --description "This is a new issue"
+$ lc i c --title "My new issue" --description "This is a new issue" --labels Bug,Feature --team CRY
+$ lc i c -t "My new issue" -T CRY -l Improvment,Feature
 ----
 
-NOTE: If you don't provide a title or description, you will be prompted to enter them.
+NOTE: If you don't provide a title, team, labels or description, you will be prompted to enter them.
+
+==== Develop an issue
+
+This will switch to the branch for the issue, creating the branch if it doesn't exist.
+
+'dev' is a shortcut for the 'develop' subcommand of the issue command
+
+[source,sh]
+----
+$ lc i dev CRY-1234
+----
+
+TIP: You may pass the --dev option to the create subcommand to immediately develop the creted issue.
