@@ -41,7 +41,13 @@ module Rubyists
       end
 
       def query(query)
-        call format('{ "query": "%s" }', query.to_s.gsub("\n", '').gsub('"', '\"'))
+        call format('{ "query": %s }', query.to_s.to_json)
+      rescue StandardError => e
+        logger.error('Error in query', query:, error: e)
+        raise e unless Rubyists::Linear.verbosity > 2
+
+        require 'pry'
+        binding.pry # rubocop:disable Lint/Debugger
       end
 
       def api_key
@@ -51,6 +57,7 @@ module Rubyists
         @api_key = ENV.fetch('LINEAR_API_KEY')
       end
     end
+    # Acts as a singleton for a GraphApi instance
     Api = Rubyists::Linear::GraphApi.new
   end
 end

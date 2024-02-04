@@ -50,7 +50,7 @@ module Rubyists
         def description_for(description = nil)
           return description if description
 
-          prompt.multiline('Description:').join(' ')
+          prompt.multiline('Description:').map(&:chomp).join('\\n')
         end
 
         def title_for(title = nil)
