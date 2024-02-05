@@ -9,4 +9,9 @@ then
     linear-cli "$@" 2>&1|sed 's/linear-cli/lc/g'
     exit 0
 fi
-exec linear-cli "$@"
+if ! linear-cli "$@"
+then
+    printf "lc: linear-cli failed\n" >&2
+    lc "$@" --help 2>&1
+    exit 1
+fi
