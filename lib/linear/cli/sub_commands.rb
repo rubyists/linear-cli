@@ -54,6 +54,14 @@ module Rubyists
           prompt.ask(question)
         end
 
+        def cancelled_state_for(thingy)
+          states = thingy.cancelled_states
+          return states.first if states.size == 1
+
+          selection = prompt.select('Choose a cancelled state', states.to_h { |s| [s.name, s.id] })
+          Rubyists::Linear::WorkflowState.find selection
+        end
+
         def completed_state_for(thingy)
           states = thingy.completed_states
           return states.first if states.size == 1

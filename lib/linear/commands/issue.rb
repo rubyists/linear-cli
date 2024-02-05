@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# This is where the #reason_for, #title_for, #description_for, #team_for, and #labels_for methods are defined
+# as well as other helpers which are used in multiple commands and subcommands
+# This is also where the #prompt method is defined, which is used to display messages to the user and get input
 require_relative '../cli/sub_commands'
 
 module Rubyists
@@ -27,12 +30,23 @@ module Rubyists
           prompt.ok("Comment added to #{issue.identifier}")
         end
 
-        def close_issue(issue, **options)
-          reason = reason_for(options[:reason], four: "closing #{issue.identifier} - #{issue.title}")
+        def cancel_issue(issue, **options)
+          reason = reason_for(options[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
           issue_comment(issue, reason)
-          close_state = completed_state_for(issue)
-          issue.close!(state: close_state, trash: options[:trash])
-          prompt.ok("#{issue.identifier} was closed")
+          cancel_state = cancel_state_for(issue)
+          issue.close!(state: cancel_state, trash: options[:trash])
+          prompt.ok("#{issue.identifier} was cancelled")
+        end
+
+        def close_issue(issue, **options)
+          cancelled = options[:cancel]
+          doing = cancelled ? 'cancelling' : 'closing'
+          done = cancelled ? 'cancelled' : 'closed'
+          workflow_state = cancelled ? cancelled_state_for(issue) : completed_state_for(issue)
+          reason = reason_for(options[:reason], four: "#{doing} #{issue.identifier} - #{issue.title}")
+          issue_comment(issue, reason)
+          issue.close!(state: workflow_state, trash: options[:trash])
+          prompt.ok("#{issue.identifier} was #{done}")
         end
 
         def issue_pr(issue)

@@ -9,4 +9,7 @@ require 'linear'
 # with your gem easier. You can also use a different console, if you like.
 
 Rubyists::Linear::L :cli
-Rubyists::Linear.pry
+Dir.mktmpdir(".linear-cli-console") do |dir|
+  Rubyists::Linear.tmpdir = dir
+  Rubyists::Linear.pry
+end

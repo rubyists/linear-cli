@@ -24,6 +24,14 @@ module Rubyists
     FEATURE_ROOT = ROOT/:features
     DEBUG_LEVELS = %i[warn info debug trace].freeze
 
+    def self.tmpdir=(other)
+      @tmpdir = other.is_a?(Pathname) ? other : Pathname(other)
+    end
+
+    def self.tmpdir
+      @tmpdir || raise('tmpdir not set')
+    end
+
     def self.L(*libraries) # rubocop:disable Naming/MethodName
       Array(libraries).each { |library| require LIBROOT/library }
     end

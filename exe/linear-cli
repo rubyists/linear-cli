@@ -3,4 +3,11 @@
 
 require 'linear'
 Rubyists::Linear::L :cli
-Dry::CLI.new(Rubyists::Linear::CLI).call
+begin
+  Dir.mktmpdir(Process.pid.to_s) do |dir|
+    Rubyists::Linear.tmpdir = dir
+    Dry::CLI.new(Rubyists::Linear::CLI).call
+  end
+ensure
+  FileUtils.rm_rf(Rubyists::Linear.tmpdir) if Rubyists::Linear.tmpdir.exist?
+end

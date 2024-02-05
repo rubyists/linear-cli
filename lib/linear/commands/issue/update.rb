@@ -18,18 +18,32 @@ module Rubyists
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Update an issue'
-          argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. ISS-1)'
+          argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. CRY-1)'
           option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue'
           option :pr, type: :boolean, aliases: ['--pull-request'], default: false, desc: 'Create a pull request'
+          option :cancel, type: :boolean, default: false, desc: 'Cancel the issue'
           option :close, type: :boolean, default: false, desc: 'Close the issue'
           option :reason, type: :string, aliases: ['--butwhy'], desc: 'Reason for closing the issue'
+          option :trash,
+                 type: :boolean,
+                 default: false,
+                 desc: 'Also trash the issue (--close and --cancel support this option)'
+
+          example [
+            '--comment "This is a comment" CRY-1 CRY2    # Add a comment to multiple issues',
+            '--pr CRY-10                                 # Create a pull request for the issue',
+            '--close CRY-2                               # Close an issue. Will be prompted for a reason',
+            '--close --reason "Done" CRY-1 CRY-2         # Close multiple issues with a reason',
+            '--cancel --trash --reason "Garbage" CRY-2   # Cancel an issue, and throw it in the trash'
+          ]
 
           def call(issue_ids:, **options)
-            prompt.error('You should provide at least one issue ID') && raise(SmellsBad) if issue_ids.empty?
+            raise SmellsBad, 'No issue IDs provided!' if issue_ids.empty?
+            raise SmellsBad, 'You may only open a PR against a single issue' if options[:pr] && issue_ids.size > 1
 
             logger.debug('Updating issues', issue_ids:, options:)
             Rubyists::Linear::Issue.find_all(issue_ids).each do |issue|
-              update_issue(issue, **options)
+              update_issue(issue, **options) # defined in lib/linear/commands/issue.rb
             end
           end
         end
