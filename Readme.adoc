@@ -78,6 +78,8 @@ $ lc w --teams
 
 `lcls` is a helper provided to list issues. It's an alias for `lc issues list`.
 
+image::cinemas/listings.cinema.gif[]
+
 [source,sh]
 ----
 $ lcls
