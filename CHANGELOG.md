@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.5.5] - 2024-02-04
+### Added
+- Added lclose alias and 'issue update' subcommand (@bougyman)
+
 ## [0.5.4] - 2024-02-04
 
 ## [0.5.3] - 2024-02-03
@@ -15,6 +19,7 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.5.4...HEAD
-[0.5.4]: https://github.com/rubyists/linear-cli/compare/v0.5.3...0.5.4
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.5.5...HEAD
+[0.5.5]: https://github.com/rubyists/linear-cli/compare/v0.5.4...0.5.5
+[0.5.4]: https://github.com/rubyists/linear-cli/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/rubyists/linear-cli/compare/v0.5.2...v0.5.3
