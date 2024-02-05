@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2024-02-04
+### Fixed
+- Fixed problem when trying to develop an unassigned issue (@bougyman)
+
 ## [0.7.1] - 2024-02-04
 ### Fixed
 - Fixed extra output when commenting on an inssue (@bougyman)
@@ -33,8 +37,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.1...HEAD
-[0.7.1]: https://github.com/rubyists/linear-cli/compare/v0.7.0...0.7.1
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.2...HEAD
+[0.7.2]: https://github.com/rubyists/linear-cli/compare/v0.7.1...0.7.2
+[0.7.1]: https://github.com/rubyists/linear-cli/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/rubyists/linear-cli/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/rubyists/linear-cli/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/rubyists/linear-cli/compare/v0.5.5...v0.6.0
