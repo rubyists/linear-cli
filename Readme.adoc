@@ -139,3 +139,13 @@ $ lc issue update --comment "Here is a comment" CRY-1234
 $ lc i u --close --reason "These were closable" CRY-1234 CRY-2
 ----
 
+=== Aliases
+
+Some command aliases are available to make things easier to type.
+
+[source,sh]
+----
+$ lcls
+$ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
+$ lclose --reason "This issues suck" CRY-1234 CRY-456
+----
