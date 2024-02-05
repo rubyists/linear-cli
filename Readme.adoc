@@ -119,3 +119,23 @@ $ lc i dev CRY-1234
 ----
 
 TIP: You may pass the --dev option to the create subcommand to immediately develop the creted issue.
+
+==== Update an issue
+
+All of the update options can work on multiple issues, so long as it's not more than 50
+at a time. You can also use the 'u' alias for 'update', and as always, the 'i' alias for 'issue'.
+
+===== Add a comment to one or more issues
+
+[source,sh]
+----
+$ lc issue update --comment "Here is a comment" CRY-1234
+----
+
+===== Close one or many issues
+
+[source,sh]
+----
+$ lc i u --close --reason "These were closable" CRY-1234 CRY-2
+----
+
