@@ -22,7 +22,6 @@ module Rubyists
           issue: %w[i issues]    # aliases for the main issue command itself
         }.freeze
 
-
         def issue_comment(issue, comment)
           issue.add_comment(comment)
           prompt.ok("Comment added to #{issue.identifier}")
@@ -45,6 +44,7 @@ module Rubyists
           issue_comment(issue, options[:comment]) if options[:comment]
           return close_issue(issue, **options) if options[:close]
           return issue_pr(issue) if options[:pr]
+          return if options[:comment]
 
           prompt.warn('No action taken, no options specified')
           prompt.ok('Issue was not updated')

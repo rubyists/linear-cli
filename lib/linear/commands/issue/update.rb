@@ -26,6 +26,7 @@ module Rubyists
 
           def call(issue_ids:, **options)
             prompt.error('You should provide at least one issue ID') && raise(SmellsBad) if issue_ids.empty?
+
             logger.debug('Updating issues', issue_ids:, options:)
             Rubyists::Linear::Issue.find_all(issue_ids).each do |issue|
               update_issue(issue, **options)
