@@ -18,17 +18,17 @@ module Rubyists
         email
       end
 
-      def self.with_teams
+      def self.base_fragment
         @with_teams = fragment('UserWithTeams', 'User') do
           ___ Base
           teams do
-            nodes { ___ Team::Base }
+            nodes { ___ Team.base_fragment }
           end
         end
       end
 
-      def self.me(teams: false)
-        fragment = teams ? with_teams : Base
+      def self.me(**)
+        fragment = base_fragment
         q = query do
           viewer do
             ___ fragment
@@ -48,7 +48,7 @@ module Rubyists
         query do
           user(id:) do
             assignedIssues(first:, filter: { completedAt: { null: true } }) do
-              nodes { ___ Issue::Base }
+              nodes { ___ Issue.base_fragment }
             end
           end
         end
