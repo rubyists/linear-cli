@@ -1,0 +1,4 @@
+type: Added
+title: >
+  Added lclose alias and 'issue update' subcommand
+author: bougyman
