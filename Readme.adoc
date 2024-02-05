@@ -3,6 +3,8 @@
 :toclevels: 3
 :sectanchors:
 :icons: font
+:tip-caption: 💡
+:note-caption: 📝
 :experimental:
 
 A command line interface to https://linear.app.
