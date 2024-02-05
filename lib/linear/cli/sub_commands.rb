@@ -58,7 +58,8 @@ module Rubyists
           states = thingy.completed_states
           return states.first if states.size == 1
 
-          prompt.select('Choose a completed state', states.to_h { |s| [s.name, s.id] })
+          selection = prompt.select('Choose a completed state', states.to_h { |s| [s.name, s.id] })
+          Rubyists::Linear::WorkflowState.find selection
         end
 
         def description_for(description = nil)

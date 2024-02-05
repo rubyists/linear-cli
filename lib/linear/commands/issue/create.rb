@@ -27,7 +27,7 @@ module Rubyists
             logger.debug('Creating issue', options:)
             issue = make_da_issue!(**options)
             logger.debug('Issue created', issue:)
-            prompt.yes?('Do you want to take this issue?') && gimme_da_issue!(issue.id, User.me)
+            prompt.yes?('Do you want to take this issue?') && gimme_da_issue!(issue.id, me: User.me)
             display issue, options
             Rubyists::Linear::CLI::Issue::Develop.new.call(issue_id: issue.id, **options) if options[:develop]
           end

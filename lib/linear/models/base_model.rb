@@ -49,6 +49,13 @@ module Rubyists
           end
         end
 
+        def find(id_val)
+          camel_name = just_name.camelize :lower
+          bf = base_fragment
+          query_data = Api.query(query { __node(camel_name, id: id_val) { ___ bf } })
+          new query_data[camel_name.to_sym]
+        end
+
         def const_added(const)
           return unless const == :Base
 
