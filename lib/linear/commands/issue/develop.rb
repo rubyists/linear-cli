@@ -22,7 +22,7 @@ module Rubyists
 
           def call(issue_id:, **options)
             logger.debug('Developing issue', options:)
-            issue = gimme_da_issue!(issue_id, Rubyists::Linear::User.me)
+            issue = gimme_da_issue!(issue_id, me: Rubyists::Linear::User.me)
             branch_name = issue.branchName
             branch = branch_for(branch_name)
             branch.checkout

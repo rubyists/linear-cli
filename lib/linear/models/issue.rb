@@ -10,8 +10,8 @@ module Rubyists
     # The Issue class represents a Linear issue.
     class Issue # rubocop:disable Metrics/ClassLength
       include SemanticLogger::Loggable
-      has_one :assignee, :User
-      has_one :team, :Team
+      one_to_one :assignee, :User
+      one_to_one :team, :Team
 
       BASIC_FILTER = { completedAt: { null: true } }.freeze
 

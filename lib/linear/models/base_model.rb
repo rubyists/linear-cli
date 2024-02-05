@@ -34,11 +34,12 @@ module Rubyists
 
       # Class methods for Linear models.
       class << self
-        def has_one(relation, klass) # rubocop:disable Naming/PredicateName
+        def one_to_one(relation, klass)
           define_method relation do
             return instance_variable_get("@#{relation}") if instance_variable_defined?("@#{relation}")
+            return unless (val = data[relation])
 
-            instance_variable_set("@#{relation}", Rubyists::Linear.const_get(klass).new(data[relation]))
+            instance_variable_set("@#{relation}", Rubyists::Linear.const_get(klass).new(val))
           end
 
           define_method "#{relation}=" do |val|

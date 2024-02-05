@@ -61,6 +61,7 @@ module Rubyists
 
         def gimme_da_issue!(issue_id, me: Rubyists::Linear::User.me) # rubocop:disable Naming/MethodParameterName
           logger.trace('Looking up issue', issue_id:, me:)
+          require 'pry'; binding.pry
           issue = Rubyists::Linear::Issue.find(issue_id)
           if issue.assignee && issue.assignee[:id] == me.id
             prompt.say("You are already assigned #{issue_id}")
