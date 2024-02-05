@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.5] - 2024-02-05
+### Fixed
+- Fixed problem when choosing from multiple completed states (@bougyman)
+
 ## [0.7.3] - 2024-02-04
 ### Fixed
 - Fixed problem with issue relationship to user (@bougyman)
@@ -41,8 +45,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.3...HEAD
-[0.7.3]: https://github.com/rubyists/linear-cli/compare/v0.7.2...0.7.3
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.5...HEAD
+[0.7.5]: https://github.com/rubyists/linear-cli/compare/v0.7.3...0.7.5
+[0.7.3]: https://github.com/rubyists/linear-cli/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/rubyists/linear-cli/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/rubyists/linear-cli/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/rubyists/linear-cli/compare/v0.6.1...v0.7.0
