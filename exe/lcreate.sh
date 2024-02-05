@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-exec lc issue create "$@"
+exec linear-cli issue create "$@"

@@ -10,6 +10,9 @@ module Rubyists
       # should be included in any command that deals with issues
       module Issue
         include CLI::SubCommands
+
+        DESCRIPTION = 'Manage issues'
+
         # Aliases for Issue commands
         ALIASES = {
           create: %w[c new add], # aliases for the create command
@@ -18,6 +21,7 @@ module Rubyists
           update: %w[u],         # aliases for the close command
           issue: %w[i issues]    # aliases for the main issue command itself
         }.freeze
+
 
         def issue_comment(issue, comment)
           issue.add_comment(comment)

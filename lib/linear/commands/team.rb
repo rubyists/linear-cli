@@ -12,6 +12,8 @@ module Rubyists
           list: %w[ls l],   # aliases for the list command
           team: %w[t teams] # aliases for the main team command itself
         }.freeze
+
+        DESCRIPTION = 'Manage teams'
       end
     end
   end
