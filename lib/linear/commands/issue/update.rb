@@ -19,10 +19,10 @@ module Rubyists
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Update an issue'
           argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. ISS-1)'
-          option :comment, type: :string, aliases: ['--message'], desc: 'Comment to add to the issue'
+          option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue'
           option :pr, type: :boolean, aliases: ['--pull-request'], default: false, desc: 'Create a pull request'
           option :close, type: :boolean, default: false, desc: 'Close the issue'
-          option :reason, type: :string, aliases: ['--close-reason'], desc: 'Reason for closing the issue'
+          option :reason, type: :string, aliases: ['--butwhy'], desc: 'Reason for closing the issue'
 
           def call(issue_ids:, **options)
             logger.debug('Updating issues', issue_ids:, options:)

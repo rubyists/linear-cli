@@ -37,12 +37,10 @@ module Rubyists
         end
       end
 
-      def self.load_and_register!(command, description: nil)
-        description ||= command::DESCRIPTION
-        logger.debug "Registering #{command} #{description}"
+      def self.load_and_register!(command)
         name = command.name.split('::').last.downcase
         command_aliases = command::ALIASES[name.to_sym] || []
-        register name, description:, aliases: Array(command_aliases) do |cmd|
+        register name, aliases: Array(command_aliases) do |cmd|
           register_subcommands! cmd, name, command
         end
       end
