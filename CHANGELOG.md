@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.3] - 2024-02-04
+### Fixed
+- Fixed problem with issue relationship to user (@bougyman)
+
 ## [0.7.2] - 2024-02-04
 ### Fixed
 - Fixed problem when trying to develop an unassigned issue (@bougyman)
@@ -37,8 +41,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.2...HEAD
-[0.7.2]: https://github.com/rubyists/linear-cli/compare/v0.7.1...0.7.2
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.3...HEAD
+[0.7.3]: https://github.com/rubyists/linear-cli/compare/v0.7.2...0.7.3
+[0.7.2]: https://github.com/rubyists/linear-cli/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/rubyists/linear-cli/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/rubyists/linear-cli/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/rubyists/linear-cli/compare/v0.6.0...v0.6.1
