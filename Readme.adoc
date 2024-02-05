@@ -59,7 +59,7 @@ You can get help/usage for any command or subcommand by using the `--help` flag.
 
 [source,sh]
 ----
-$ lc
+$ lc --help
 $ lc [COMMAND] --help
 $ lc [COMMAND] [SUBCOMMAND] --help
 ----
@@ -149,5 +149,5 @@ Some command aliases are available to make things easier to type.
 ----
 $ lcls
 $ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
-$ lclose --reason "This issues suck" CRY-1234 CRY-456
+$ lclose --reason "This issue sucks" CRY-1234 CRY-456
 ----
