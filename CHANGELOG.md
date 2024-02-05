@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2024-02-04
+### Added
+- Added better help when using the lc bin and aliases (@bougyman)
+
 ## [0.6.1] - 2024-02-04
 ### Added
 - Added lcreate alias (@bougyman)
@@ -25,8 +29,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.6.1...HEAD
-[0.6.1]: https://github.com/rubyists/linear-cli/compare/v0.6.0...0.6.1
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.0...HEAD
+[0.7.0]: https://github.com/rubyists/linear-cli/compare/v0.6.1...0.7.0
+[0.6.1]: https://github.com/rubyists/linear-cli/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/rubyists/linear-cli/compare/v0.5.5...v0.6.0
 [0.5.5]: https://github.com/rubyists/linear-cli/compare/v0.5.4...v0.5.5
 [0.5.4]: https://github.com/rubyists/linear-cli/compare/v0.5.3...v0.5.4
