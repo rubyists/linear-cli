@@ -5,8 +5,7 @@ require 'gqli'
 module Rubyists
   # Namespace for Linear
   module Linear
-    L :api, :fragments
-    M :base_model, :issue, :user
+    M :base_model, :issue, :user, :workflow_state
     Team = Class.new(BaseModel)
     # The Issue class represents a Linear issue.
     class Team
@@ -95,6 +94,26 @@ module Rubyists
 
       def display(_options)
         printf "%s\n", full
+      end
+
+      def workflow_states_query
+        team_id = id
+        query do
+          team(id: team_id) do
+            states do
+              nodes { ___ WorkflowState.base_fragment }
+            end
+          end
+        end
+      end
+
+      def workflow_states
+        return @workflow_states if @workflow_states
+
+        data = Api.query(workflow_states_query)
+        @workflow_states = data.dig(:team, :states, :nodes)&.map do |state|
+          WorkflowState.new state
+        end
       end
     end
   end

@@ -31,14 +31,14 @@ module Rubyists
         fragment('LabelWithTeams', 'IssueLabel') do
           ___ Base
           parent { ___ Base }
-          team { ___ Team::Base }
+          team { ___ Team.base_fragment }
         end
       end
 
       def self.find_all_by_name(names)
         q = query do
           issueLabels(filter: { name: { in: names } }) do
-            edges { node { ___ Base } }
+            edges { node { ___ base_fragment } }
           end
         end
         data = Api.query(q)

@@ -47,6 +47,20 @@ module Rubyists
           ask_for_team
         end
 
+        def reason_for(reason = nil, four: nil)
+          return reason if reason
+
+          question = four ? "Reason for #{four}:" : 'Reason:'
+          prompt.ask(question)
+        end
+
+        def completed_state_for(thingy)
+          states = thingy.completed_states
+          return states.first if states.size == 1
+
+          prompt.select('Choose a completed state', states.to_h { |s| [s.name, s.id] })
+        end
+
         def description_for(description = nil)
           return description if description
 

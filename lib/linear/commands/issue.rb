@@ -12,12 +12,39 @@ module Rubyists
         include CLI::SubCommands
         # Aliases for Issue commands
         ALIASES = {
-          create: %w[c new add],        # aliases for the create command
-          develop: %w[d dev],           # aliases for the create command
-          list: %w[l ls],               # aliases for the list command
-          show: %w[s view v],           # aliases for the show command
-          issue: %w[i issues]           # aliases for the main issue command itself
+          create: %w[c new add], # aliases for the create command
+          develop: %w[d dev],    # aliases for the develop command
+          list: %w[l ls],        # aliases for the list command
+          update: %w[u],         # aliases for the close command
+          issue: %w[i issues]    # aliases for the main issue command itself
         }.freeze
+
+        def issue_comment(issue, comment)
+          issue.add_comment(comment)
+          prompt.ok("Comment added to #{issue.identifier}")
+        end
+
+        def close_issue(issue, **options)
+          reason = reason_for(options[:reason], four: "closing #{issue.identifier} - #{issue.title}")
+          issue_comment(issue, reason)
+          close_state = completed_state_for(issue)
+          issue.close!(state: close_state, trash: options[:trash])
+          prompt.ok("#{issue.identifier} was closed")
+        end
+
+        def issue_pr(issue)
+          issue.create_pr!
+          prompt.ok("Pull request created for #{issue.identifier}")
+        end
+
+        def update_issue(issue, **options)
+          issue_comment(issue, options[:comment]) if options[:comment]
+          return close_issue(issue, **options) if options[:close]
+          return issue_pr(issue) if options[:pr]
+
+          prompt.warn('No action taken, no options specified')
+          prompt.ok('Issue was not updated')
+        end
 
         def make_da_issue!(**options)
           # These *_for methods are defined in Rubyists::Linear::CLI::SubCommands
@@ -28,7 +55,7 @@ module Rubyists
           Rubyists::Linear::Issue.create(title:, description:, team:, labels:)
         end
 
-        def gimme_da_issue!(issue_id, me) # rubocop:disable Naming/MethodParameterName
+        def gimme_da_issue!(issue_id, me: Rubyists::Linear::User.me) # rubocop:disable Naming/MethodParameterName
           logger.trace('Looking up issue', issue_id:, me:)
           issue = Rubyists::Linear::Issue.find(issue_id)
           if issue.assignee && issue.assignee[:id] == me.id

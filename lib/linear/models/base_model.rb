@@ -5,7 +5,9 @@ require 'semantic_logger'
 require 'sequel/extensions/inflector'
 
 module Rubyists
+  #  Namespace for Linear
   module Linear
+    L :api, :fragments
     # Module which provides a base model for Linear models.
     class BaseModel
       extend GQLi::DSL
@@ -32,6 +34,20 @@ module Rubyists
 
       # Class methods for Linear models.
       class << self
+        def has_one(relation, klass) # rubocop:disable Naming/PredicateName
+          define_method relation do
+            return instance_variable_get("@#{relation}") if instance_variable_defined?("@#{relation}")
+
+            instance_variable_set("@#{relation}", Rubyists::Linear.const_get(klass).new(data[relation]))
+          end
+
+          define_method "#{relation}=" do |val|
+            hash = val.is_a?(Hash) ? val : val.data
+            updated_data[relation] = hash
+            instance_variable_set("@#{relation}", Rubyists::Linear.const_get(klass).new(hash))
+          end
+        end
+
         def const_added(const)
           return unless const == :Base
 
@@ -106,6 +122,10 @@ module Rubyists
 
       def changed?
         data != updated_data
+      end
+
+      def completed_states
+        workflow_states.select { |ws| ws.type == 'completed' }
       end
 
       def to_h
