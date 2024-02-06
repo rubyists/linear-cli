@@ -1,9 +1,6 @@
 # frozen_string_literal: true
 
 require 'pathname'
-require 'semantic_logger'
-SemanticLogger.default_level = :info
-SemanticLogger.add_appender(io: $stderr, formatter: :color)
 
 # Add the / operator for path separation
 class Pathname
@@ -15,7 +12,6 @@ end
 module Rubyists
   # Namespace for Linear classes
   module Linear
-    include SemanticLogger::Loggable
     # rubocop:disable Layout/SpaceAroundOperators
     ROOT = (Pathname(__FILE__)/'../..').expand_path
     LIBROOT = ROOT/:lib/:linear
@@ -44,6 +40,16 @@ module Rubyists
 
     def self.verbosity
       @verbosity ||= 0
+    end
+
+    def self.logger
+      return @logger if @logger
+
+      require 'semantic_logger'
+
+      SemanticLogger.default_level = :info
+      SemanticLogger.add_appender(io: $stderr, formatter: :color)
+      @logger = SemanticLogger['Rubyists::Linear']
     end
 
     def self.verbosity=(debug)

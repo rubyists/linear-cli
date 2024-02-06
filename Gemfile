@@ -3,8 +3,6 @@
 source 'https://rubygems.org'
 
 gem 'semantic_logger', '~> 4.0'
-# Specify your gem's dependencies in linear-cli.gemspec
-gemspec
 
 group :development, :test do
   gem 'aruba', '~> 2.2'
@@ -18,3 +16,6 @@ group :development, :test do
   gem 'rubocop-rake', require: false
   gem 'rubocop-rspec', require: false
 end
+
+# Specify your gem's dependencies in linear-cli.gemspec
+gemspec

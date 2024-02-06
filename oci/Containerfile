@@ -1,0 +1,16 @@
+FROM docker.io/ruby:3.3.0-alpine3.19
+
+# Setting env up
+ARG APP_ROOT=/app
+ENV LANG C.UTF-8
+ENV BUNDLE_SILENCE_ROOT_WARNING=1
+
+#Install dependencies needed for compilation
+RUN apk --update add bash ruby-dev build-base git sqlite-dev
+
+WORKDIR $APP_ROOT
+
+COPY . $APP_ROOT
+RUN bundle install && bundle exec rake install
+
+CMD %w[bundle exec lc]
