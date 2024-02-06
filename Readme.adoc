@@ -133,8 +133,13 @@ at a time. You can also use the 'u' alias for 'update', and as always, the 'i' a
 
 [source,sh]
 ----
-$ lc issue update --comment "Here is a comment" CRY-1234
+$ lc issue update --comment "Here is a comment" CRY-1234 <1>
+$ lc issue update --comment - CRY-14 CRY-15 <2>
+$ lcomment CRY-1234 CRY-3 <3>
 ----
+<1> This will use the provided comment
+<2> This will use the provided comment
+<3> This will prompt you for a comment
 
 ===== Close one or many issues
 
