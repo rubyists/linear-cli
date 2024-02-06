@@ -53,46 +53,6 @@ module Rubyists
           prompt.ok "#{issue.identifier} was #{done}"
         end
 
-        def pr_type_for(issue)
-          proposed_type = issue.title.match(/^(#{ALLOWED_PR_TYPES})/i)
-          return proposed_type[1].downcase if proposed_type
-
-          prompt.select('What type of PR is this?', %w[fix feature chore refactor test docs style ci perf security])
-        end
-
-        def pr_scope_for(title)
-          proposed_scope = title.match(/^\w+\(([^\)]+)\)/)
-          return proposed_scope[1].downcase if proposed_scope
-
-          scope = prompt.ask('What is the scope of this PR?', default: 'none')
-          return nil if scope.empty? && scope == 'none'
-
-          scope
-        end
-
-        def pr_title_for(issue)
-          proposed = [pr_type_for(issue)]
-          proposed_scope = pr_scope_for(issue.title)
-          proposed << "(#{proposed_scope})" if proposed_scope
-          summary = issue.title.sub(/(?:#{ALLOWED_PR_TYPES})(\([^)]+\))? /, '')
-          proposed << ": #{issue.identifier} - #{summary}"
-          prompt.ask("Title for PR for #{issue.identifier} - #{summary}", default: proposed.join)
-        end
-
-        def pr_description_for(issue)
-          tmpfile = Tempfile.new([issue.identifier, '.md'], Rubyists::Linear.tmpdir)
-          # TODO: Look up templates
-          proposed = "# Context\n\n#{issue.description}\n\n## Issue\n\n#{issue.identifier}\n\n# Solution\n\n# Testing\n\n# Notes\n\n" # rubocop:disable Layout/LineLength
-          tmpfile.write(proposed) && tmpfile.close
-          desc = TTY::Editor.open(tmpfile.path)
-          return tmpfile if desc
-
-          File.open(tmpfile.path, 'w+') do |file|
-            file.puts prompt.ask("Description for PR for #{issue.identifier} - #{issue.title}", default: proposed)
-          end
-          tmpfile
-        end
-
         def create_pr!(title:, body:)
           return `gh pr create -a @me --title "#{title}" --body-file "#{body.path}"` if body.respond_to?(:path)
 
@@ -105,10 +65,17 @@ module Rubyists
           create_pr!(title:, body:)
         end
 
+        def attach_project(issue, project_search)
+          project = project_for(issue.team, project_search)
+          issue.attach_to_project project
+          prompt.ok "#{issue.identifier} was attached to #{project.name}"
+        end
+
         def update_issue(issue, **options)
           issue_comment(issue, options[:comment]) if options[:comment]
           return close_issue(issue, **options) if options[:close]
           return issue_pr(issue) if options[:pr]
+          return attach_project(issue, options[:project]) if options[:project]
           return if options[:comment]
 
           prompt.warn 'No action taken, no options specified'

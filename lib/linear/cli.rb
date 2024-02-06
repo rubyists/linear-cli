@@ -16,7 +16,14 @@ module Rubyists
       extend Dry::CLI::Registry
 
       def self.prompt
-        @prompt ||= TTY::Prompt.new
+        return @prompt if @prompt
+
+        @prompt = TTY::Prompt.new
+        @prompt.on(:keypress) do |event|
+          @prompt.trigger(:keydown) if event.value == 'j'
+          @prompt.trigger(:keyup) if event.value == 'k'
+        end
+        @prompt
       end
 
       def self.register_sub!(command, sub_file, klass)

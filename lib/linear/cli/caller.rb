@@ -9,8 +9,13 @@ module Rubyists
           # Global options for all commands
           mod.instance_eval do
             option :output, type: :string, default: 'text', values: %w[text json], desc: 'Output format'
-            option :debug, type: :integer, default: 0, desc: 'Debug level'
+            option :debug,
+                   type: :integer,
+                   aliases: ['-D'],
+                   default: 0,
+                   desc: 'Debug level (greater than 0 to see backtraces)'
           end
+
           Caller.class_eval do
             # Wraps the :call method so the debug option is honored, and we can trace the call
             # as well as handle any exceptions that are raised

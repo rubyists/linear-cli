@@ -35,6 +35,21 @@ module Rubyists
         end
       end
 
+      def update!(input)
+        id_for_this = identifier
+        m = mutation { issueUpdate(id: id_for_this, input:) { issue { ___ Issue.full_fragment } } }
+        query_data = Api.query(m)
+        updated = query_data.dig(:issueUpdate, :issue)
+        raise SmellsBad, "Unknown response for issue update: #{data} (should have :issueUpdate key)" if updated.nil?
+
+        @data = @updated_data = updated
+        self
+      end
+
+      def attach_to_project(project)
+        update!({ projectId: project.id })
+      end
+
       # Reference for this mutation:
       # https://studio.apollographql.com/public/Linear-API/variant/current/schema/reference/inputs/CommentCreateInput
       def add_comment(comment)

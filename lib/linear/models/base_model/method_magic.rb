@@ -5,17 +5,15 @@ module Rubyists
     class BaseModel
       # Methods for Linear models.
       module MethodMagic
-        def self.included(base) # rubocop:disable Metrics/MethodLength
+        def self.included(base) # rubocop:disable Metrics/AbcSize
           base.instance_eval do
             base.base_fragment.__nodes.each do |node|
               sym = node.__name.to_sym
-              define_method node.__name do
-                updated_data[sym]
-              end
+              define_method(sym) { updated_data[sym] } unless instance_methods.include? sym
+              esym = :"#{sym}="
+              next if instance_methods.include? esym
 
-              define_method "#{node.__name}=" do |value|
-                updated_data[sym] = value
-              end
+              define_method(esym) { |value| updated_data[sym] = value }
             end
           end
         end

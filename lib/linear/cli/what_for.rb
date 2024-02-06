@@ -64,13 +64,74 @@ module Rubyists
           prompt.ask('Title:')
         end
 
+        def ask_for_projects(projects, search: true)
+          prompt.warn("No project found matching #{search}.") if search
+          return projects.first if projects.size == 1
+
+          prompt.select('Project:', projects.to_h { |p| [p.name, p] })
+        end
+
+        def project_scores(projects, search_term)
+          projects.select { |p| p.match_score?(search_term).positive? }.sort_by { |p| p.match_score?(search_term) }
+        end
+
+        def project_for(team, project = nil)
+          projects = team.projects
+          return nil if projects.empty?
+
+          possibles = project_scores(projects, project)
+          return ask_for_projects(projects, search: project) if possibles.empty?
+
+          first = possibles.first
+          return first if first.match_score?(project) == 100
+
+          selections = possibles + (projects - possibles)
+          prompt.select('Project:', selections.to_h { |p| [p.name, p] }) if possibles.size.positive?
+        end
+
+        def pr_title_for(issue)
+          proposed = [pr_type_for(issue)]
+          proposed_scope = pr_scope_for(issue.title)
+          proposed << "(#{proposed_scope})" if proposed_scope
+          summary = issue.title.sub(/(?:#{ALLOWED_PR_TYPES})(\([^)]+\))? /, '')
+          proposed << ": #{issue.identifier} - #{summary}"
+          prompt.ask("Title for PR for #{issue.identifier} - #{summary}", default: proposed.join)
+        end
+
+        def pr_description_for(issue)
+          tmpfile = Tempfile.new([issue.identifier, '.md'], Rubyists::Linear.tmpdir)
+          # TODO: Look up templates
+          proposed = "# Context\n\n#{issue.description}\n\n## Issue\n\n#{issue.identifier}\n\n# Solution\n\n# Testing\n\n# Notes\n\n" # rubocop:disable Layout/LineLength
+          tmpfile.write(proposed) && tmpfile.close
+          desc = TTY::Editor.open(tmpfile.path)
+          return tmpfile if desc
+
+          File.open(tmpfile.path, 'w+') do |file|
+            file.puts prompt.ask("Description for PR for #{issue.identifier} - #{issue.title}", default: proposed)
+          end
+          tmpfile
+        end
+
+        def pr_type_for(issue)
+          proposed_type = issue.title.match(/^(#{ALLOWED_PR_TYPES})/i)
+          return proposed_type[1].downcase if proposed_type
+
+          prompt.select('What type of PR is this?', %w[fix feature chore refactor test docs style ci perf security])
+        end
+
+        def pr_scope_for(title)
+          proposed_scope = title.match(/^\w+\(([^\)]+)\)/)
+          return proposed_scope[1].downcase if proposed_scope
+
+          scope = prompt.ask('What is the scope of this PR?', default: 'none')
+          return nil if scope.empty? && scope == 'none'
+
+          scope
+        end
+
         def labels_for(team, labels = nil)
           return Rubyists::Linear::Label.find_all_by_name(labels.map(&:strip)) if labels
 
-          prompt.on(:keypress) do |event|
-            prompt.trigger(:keydown) if event.value == 'j'
-            prompt.trigger(:keyup) if event.value == 'k'
-          end
           prompt.multi_select('Labels:', team.labels.to_h { |t| [t.name, t] })
         end
       end
