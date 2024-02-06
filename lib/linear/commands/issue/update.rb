@@ -19,11 +19,11 @@ module Rubyists
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Update an issue'
           argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. CRY-1)'
-          option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue'
-          option :pr, type: :boolean, aliases: ['--pull-request'], default: false, desc: 'Create a pull request'
+          option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue. - openan editor'
+          option :project, type: :string, aliases: ['-p'], desc: 'Project to move the issue to. - select from a list'
           option :cancel, type: :boolean, default: false, desc: 'Cancel the issue'
           option :close, type: :boolean, default: false, desc: 'Close the issue'
-          option :reason, type: :string, aliases: ['--butwhy'], desc: 'Reason for closing the issue'
+          option :reason, type: :string, aliases: ['--butwhy'], desc: 'Reason for closing the issue. - open an editor'
           option :trash,
                  type: :boolean,
                  default: false,
@@ -31,7 +31,8 @@ module Rubyists
 
           example [
             '--comment "This is a comment" CRY-1 CRY2    # Add a comment to multiple issues',
-            '--pr CRY-10                                 # Create a pull request for the issue',
+            '--comment -                   CRY-1 CRY2    # Add a comment to multiple issues, open an editor',
+            '--project "Manhattan" CRY-3 CRY-4           # Move tickets to a different project',
             '--close CRY-2                               # Close an issue. Will be prompted for a reason',
             '--close --reason "Done" CRY-1 CRY-2         # Close multiple issues with a reason',
             '--cancel --trash --reason "Garbage" CRY-2   # Cancel an issue, and throw it in the trash'

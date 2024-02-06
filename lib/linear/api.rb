@@ -42,7 +42,7 @@ module Rubyists
 
       def query(query)
         call format('{ "query": %s }', query.to_s.to_json)
-      rescue StandardError => e
+      rescue SmellsBad => e
         logger.error('Error in query', query:, error: e)
         raise e unless Rubyists::Linear.verbosity > 2
 

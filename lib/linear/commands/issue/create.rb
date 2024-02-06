@@ -21,6 +21,7 @@ module Rubyists
           option :description, type: :string, aliases: ['-d'], desc: 'Issue Description'
           option :team, type: :string, aliases: ['-T'], desc: 'Team Identifier'
           option :labels, type: :array, aliases: ['-l'], desc: 'Labels for the issue (Comma separated list)'
+          option :project, type: :string, aliases: ['-p'], desc: 'Project Identifier'
           option :develop, type: :boolean, aliases: ['-D', '--dev'], desc: 'Start development after creating the issue'
 
           def call(**options)

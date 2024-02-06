@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require 'semantic_logger'
-require 'git'
 require_relative '../issue'
 
 module Rubyists

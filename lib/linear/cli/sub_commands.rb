@@ -1,10 +1,15 @@
 # frozen_string_literal: true
 
+# This is where all the _for methods live
+require_relative 'what_for'
+
 module Rubyists
   module Linear
     module CLI
       # The SubCommands module should be included in all commands with subcommands
       module SubCommands
+        include CLI::WhatFor
+
         def self.included(mod)
           mod.instance_eval do
             def const_added(const)
@@ -39,73 +44,6 @@ module Rubyists
 
         def prompt
           @prompt ||= CLI.prompt
-        end
-
-        def team_for(key = nil)
-          return Rubyists::Linear::Team.find(key) if key
-
-          ask_for_team
-        end
-
-        def reason_for(reason = nil, four: nil)
-          return reason if reason
-
-          question = four ? "Reason for #{four}:" : 'Reason:'
-          prompt.ask(question)
-        end
-
-        def cancelled_state_for(thingy)
-          states = thingy.cancelled_states
-          return states.first if states.size == 1
-
-          selection = prompt.select('Choose a cancelled state', states.to_h { |s| [s.name, s.id] })
-          Rubyists::Linear::WorkflowState.find selection
-        end
-
-        def completed_state_for(thingy)
-          states = thingy.completed_states
-          return states.first if states.size == 1
-
-          selection = prompt.select('Choose a completed state', states.to_h { |s| [s.name, s.id] })
-          Rubyists::Linear::WorkflowState.find selection
-        end
-
-        def description_for(description = nil)
-          return description if description
-
-          prompt.multiline('Description:').map(&:chomp).join('\\n')
-        end
-
-        def title_for(title = nil)
-          return title if title
-
-          prompt.ask('Title:')
-        end
-
-        def labels_for(team, labels = nil)
-          return Rubyists::Linear::Label.find_all_by_name(labels.map(&:strip)) if labels
-
-          prompt.on(:keypress) do |event|
-            prompt.trigger(:keydown) if event.value == 'j'
-            prompt.trigger(:keyup) if event.value == 'k'
-          end
-          prompt.multi_select('Labels:', team.labels.to_h { |t| [t.name, t] })
-        end
-
-        def cut_branch!(branch_name)
-          if current_branch != default_branch
-            prompt.yes?("You are not on the default branch (#{default_branch}). Do you want to checkout #{default_branch} and create a new branch?") && git.checkout(default_branch) # rubocop:disable Layout/LineLength
-          end
-          git.branch(branch_name)
-        end
-
-        def branch_for(branch_name)
-          logger.trace('Looking for branch', branch_name:)
-          existing = git.branches[branch_name]
-          return cut_branch!(branch_name) unless existing
-
-          logger.trace('Branch found', branch: existing&.name)
-          existing
         end
 
         def current_branch

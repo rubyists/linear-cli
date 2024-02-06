@@ -5,13 +5,15 @@ require 'gqli'
 module Rubyists
   # Namespace for Linear
   module Linear
-    M :base_model, :user
+    M :base_model
     Issue = Class.new(BaseModel)
+    M 'issue/class_methods'
     # The Issue class represents a Linear issue.
-    class Issue # rubocop:disable Metrics/ClassLength
+    class Issue
       include SemanticLogger::Loggable
-      one_to_one :assignee, :User
-      one_to_one :team, :Team
+      extend ClassMethods
+      many_to_one :assignee, :User
+      many_to_one :team, :Team
 
       BASIC_FILTER = { completedAt: { null: true } }.freeze
 
@@ -23,38 +25,6 @@ module Rubyists
         description
         createdAt
         updatedAt
-      end
-
-      class << self
-        def base_fragment
-          @base_fragment ||= fragment('IssueWithTeams', 'Issue') do
-            ___ Base
-            assignee { ___ User.base_fragment }
-            team { ___ Team.base_fragment }
-          end
-        end
-
-        def find(slug)
-          q = query { issue(id: slug) { ___ Issue.base_fragment } }
-          data = Api.query(q)
-          raise NotFoundError, "Issue not found: #{slug}" if data.nil?
-
-          new(data[:issue])
-        end
-
-        def find_all(*slugs)
-          slugs.flatten.map { |slug| find(slug) }
-        end
-
-        def create(title:, description:, team:, labels: [])
-          team_id = team.id
-          label_ids = labels.map(&:id)
-          input = { title:, description:, teamId: team_id }
-          input[:labelIds] = label_ids unless label_ids.empty?
-          m = mutation { issueCreate(input:) { issue { ___ Issue.base_fragment } } }
-          query_data = Api.query(m)
-          new query_data.dig(:issueCreate, :issue)
-        end
       end
 
       def comment_fragment
@@ -81,7 +51,7 @@ module Rubyists
         id_for_this = identifier
         input = { stateId: close_state.id }
         input[:trash] = true if trash
-        mutation { issueUpdate(id: id_for_this, input:) { issue { ___ Issue.base_fragment } } }
+        mutation { issueUpdate(id: id_for_this, input:) { issue { ___ Issue.full_fragment } } }
       end
 
       def close!(state: nil, trash: false)
@@ -97,7 +67,7 @@ module Rubyists
 
       def assign!(user)
         this_id = identifier
-        m = mutation { issueUpdate(id: this_id, input: { assigneeId: user.id }) { issue { ___ Issue.base_fragment } } }
+        m = mutation { issueUpdate(id: this_id, input: { assigneeId: user.id }) { issue { ___ Issue.full_fragment } } }
         query_data = Api.query(m)
         updated = query_data.dig(:issueUpdate, :issue)
         raise SmellsBad, "Unknown response for issue update: #{data} (should have :issueUpdate key)" if updated.nil?

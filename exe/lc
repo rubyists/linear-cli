@@ -1,4 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-exec File.join(__dir__, 'lc.sh'), *ARGV
+require 'pathname'
+script_dir = Pathname(__dir__).join('scripts')
+basename = File.basename(__FILE__)
+script = script_dir.join(basename).exist? ? script_dir.join(basename) : script_dir.join("#{basename}.sh")
+exec script.to_s, *ARGV
