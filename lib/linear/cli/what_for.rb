@@ -30,10 +30,13 @@ module Rubyists
         end
 
         def reason_for(reason = nil, four: nil)
-          return reason if reason
+          return reason if reason && reason != '-'
 
-          question = four ? "Reason for #{four}:" : 'Reason:'
-          prompt.ask(question)
+          question = four ? "Reason for #{TTY::Markdown.parse(four)}" : 'Reason'
+          answer = prompt.ask("#{question} (- to open an editor):", default: '-')
+          return answer unless answer == '-'
+
+          editor_for %w[reason .md]
         end
 
         def cancelled_state_for(thingy)

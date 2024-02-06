@@ -47,7 +47,7 @@ module Rubyists
           doing = cancelled ? 'cancelling' : 'closing'
           done = cancelled ? 'cancelled' : 'closed'
           workflow_state = cancelled ? cancelled_state_for(issue) : completed_state_for(issue)
-          reason = reason_for(options[:reason], four: "#{doing} #{issue.identifier} - #{issue.title}")
+          reason = reason_for(options[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
           issue_comment issue, reason
           issue.close! state: workflow_state, trash: options[:trash]
           prompt.ok "#{issue.identifier} was #{done}"

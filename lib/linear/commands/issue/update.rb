@@ -19,7 +19,7 @@ module Rubyists
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Update an issue'
           argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. CRY-1)'
-          option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue. - openan editor'
+          option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue. - open an editor'
           option :project, type: :string, aliases: ['-p'], desc: 'Project to move the issue to. - select from a list'
           option :cancel, type: :boolean, default: false, desc: 'Cancel the issue'
           option :close, type: :boolean, default: false, desc: 'Close the issue'
