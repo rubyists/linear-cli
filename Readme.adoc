@@ -138,8 +138,8 @@ $ lc issue update --comment - CRY-14 CRY-15 <2>
 $ lcomment CRY-1234 CRY-3 <3>
 ----
 <1> This will use the provided comment
-<2> This will use the provided comment
-<3> This will prompt you for a comment
+<2> This will prompt for a comment (use '-' to prompt)
+<3> This will always prompt you for a comment ('lcomment' is an alias for 'lc issue update --comment -')
 
 ===== Close one or many issues
 
@@ -157,4 +157,5 @@ Some command aliases are available to make things easier to type.
 $ lcls
 $ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
 $ lclose --reason "This issue sucks" CRY-1234 CRY-456
+$ lcancel --reason "These should never have been here" --trash CRY-1234 CRY-456
 ----
