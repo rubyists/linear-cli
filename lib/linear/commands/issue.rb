@@ -30,7 +30,7 @@ module Rubyists
         }.freeze
 
         def issue_comment(issue, comment)
-          issue.add_comment comment
+          issue.add_comment comment_for(issue, comment)
           prompt.ok "Comment added to #{issue.identifier}"
         end
 
@@ -121,7 +121,8 @@ module Rubyists
           description = description_for(options[:description])
           team = team_for(options[:team])
           labels = labels_for(team, options[:labels])
-          Rubyists::Linear::Issue.create(title:, description:, team:, labels:)
+          project = project_for(team, options[:project])
+          Rubyists::Linear::Issue.create(title:, description:, team:, labels:, project:)
         end
 
         def gimme_da_issue!(issue_id, me: Rubyists::Linear::User.me) # rubocop:disable Naming/MethodParameterName

@@ -5,11 +5,12 @@ require 'gqli'
 module Rubyists
   # Namespace for Linear
   module Linear
-    M :base_model, :issue, :user, :workflow_state
+    M :base_model, :issue, :project, :workflow_state, :user
     Team = Class.new(BaseModel)
     # The Issue class represents a Linear issue.
     class Team
       include SemanticLogger::Loggable
+      one_to_many :projects
 
       # TODO: Make this configurable
       BaseFilter = { # rubocop:disable Naming/ConstantName
@@ -29,15 +30,11 @@ module Rubyists
         updatedAt
       end
 
-      def self.find(key)
-        q = query do
-          team(id: key) { ___ Base }
+      def self.full_fragment
+        @full_fragment ||= fragment('WholeTeam', 'Team') do
+          ___ Base
+          projects { nodes { ___ Project.base_fragment } }
         end
-        data = Api.query(q)
-        hash = data[:team]
-        raise NotFoundError, "Team not found: #{key}" unless hash
-
-        new hash
       end
 
       def self.mine
