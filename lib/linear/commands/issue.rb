@@ -4,6 +4,8 @@
 # as well as other helpers which are used in multiple commands and subcommands
 # This is also where the #prompt method is defined, which is used to display messages to the user and get input
 require_relative '../cli/sub_commands'
+require 'tty-editor'
+require 'git'
 
 module Rubyists
   module Linear
@@ -15,6 +17,7 @@ module Rubyists
         include CLI::SubCommands
 
         DESCRIPTION = 'Manage issues'
+        ALLOWED_PR_TYPES = 'bug|fix|sec(urity)|feat(ure)|chore|refactor|test|docs|style|ci|perf'
 
         # Aliases for Issue commands
         ALIASES = {
@@ -22,6 +25,7 @@ module Rubyists
           develop: %w[d dev],    # aliases for the develop command
           list: %w[l ls],        # aliases for the list command
           update: %w[u],         # aliases for the close command
+          pr: %w[pull-request],  # aliases for the pr command
           issue: %w[i issues]    # aliases for the main issue command itself
         }.freeze
 
@@ -49,11 +53,56 @@ module Rubyists
           prompt.ok "#{issue.identifier} was #{done}"
         end
 
+        def pr_type_for(issue)
+          proposed_type = issue.title.match(/^(#{ALLOWED_PR_TYPES})/i)
+          return proposed_type[1].downcase if proposed_type
+
+          prompt.select('What type of PR is this?', %w[fix feature chore refactor test docs style ci perf security])
+        end
+
+        def pr_scope_for(title)
+          proposed_scope = title.match(/^\w+\(([^\)]+)\)/)
+          return proposed_scope[1].downcase if proposed_scope
+
+          scope = prompt.ask('What is the scope of this PR?', default: 'none')
+          return nil if scope.empty? && scope == 'none'
+
+          scope
+        end
+
+        def pr_title_for(issue)
+          proposed = [pr_type_for(issue)]
+          proposed_scope = pr_scope_for(issue.title)
+          proposed << "(#{proposed_scope})" if proposed_scope
+          summary = issue.title.sub(/(?:#{ALLOWED_PR_TYPES})(\([^)]+\))? /, '')
+          proposed << ": #{issue.identifier} - #{summary}"
+          prompt.ask("Title for PR for #{issue.identifier} - #{summary}", default: proposed.join)
+        end
+
+        def pr_description_for(issue)
+          tmpfile = Tempfile.new([issue.identifier, '.md'], Rubyists::Linear.tmpdir)
+          # TODO: Look up templates
+          proposed = "# Context\n\n#{issue.description}\n\n## Issue\n\n#{issue.identifier}\n\n# Solution\n\n# Testing\n\n# Notes\n\n" # rubocop:disable Layout/LineLength
+          tmpfile.write(proposed) && tmpfile.close
+          desc = TTY::Editor.open(tmpfile.path)
+          return tmpfile if desc
+
+          File.open(tmpfile.path, 'w+') do |file|
+            file.puts prompt.ask("Description for PR for #{issue.identifier} - #{issue.title}", default: proposed)
+          end
+          tmpfile
+        end
+
+        def create_pr!(title:, body:)
+          return `gh pr create -a @me --title "#{title}" --body-file "#{body.path}"` if body.respond_to?(:path)
+
+          `gh pr create -a @me --title "#{title}" --body "#{body}"`
+        end
+
         def issue_pr(issue, **options)
           title = options[:title] || pr_title_for(issue)
           body = options[:description] || pr_description_for(issue)
-          issue.create_pr!(title:, body:)
-          prompt.ok "Pull request created for #{issue.identifier}"
+          create_pr!(title:, body:)
         end
 
         def update_issue(issue, **options)
