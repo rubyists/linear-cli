@@ -12,7 +12,7 @@ RUN apk --update add bash ruby-dev build-base git sqlite-dev
 WORKDIR $APP_ROOT
 
 COPY . $APP_ROOT
-RUN bundle install && bundle exec rake build
+RUN gem i semantic_logger && bundle install && bundle exec rake build
 
 CMD %w[bundle exec lc]
 

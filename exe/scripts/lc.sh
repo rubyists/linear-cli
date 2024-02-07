@@ -3,6 +3,10 @@ if [ "$#" -eq 0 ]; then
     printf "No subcommand provided, defaulting to 'lc issue list'\nlc --help to see subcommands\n" >&2
     exec linear-cli issue list
 fi
+if [[ "$*" =~ --version ]]
+then
+    exec linear-cli version
+fi
 if [[ "$*" =~ --help|-h ]]
 then
     printf "Each subcommand has its own help, use 'lc <subcommand> --help' to see it\n" >&2

@@ -15,6 +15,7 @@ end
 module Rubyists
   # Namespace for Linear classes
   module Linear
+    include SemanticLogger::Loggable
     # rubocop:disable Layout/SpaceAroundOperators
     ROOT = (Pathname(__FILE__)/'../..').expand_path
     LIBROOT = ROOT/:lib/:linear
