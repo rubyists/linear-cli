@@ -24,6 +24,7 @@ module Dry
           out.puts Completely::Completions.new(
             Input.new(@registry, @program_name).call(include_aliases:)
           ).script
+          # Here is the only change in our monkeypatch! Lame, right?
           out.puts 'complete -F _linear-cli_completions lc'
           out.string
         end
@@ -44,6 +45,7 @@ module Rubyists
         return @prompt if @prompt
 
         @prompt = TTY::Prompt.new
+        # This gives ex/vim style navigation to menus
         @prompt.on(:keypress) do |event|
           @prompt.trigger(:keydown) if event.value == 'j'
           @prompt.trigger(:keyup) if event.value == 'k'
@@ -92,8 +94,8 @@ module Rubyists
   module Linear
     # Open this back up to register 3rd party/other commands
     module CLI
-      register 'completion', Dry::CLI::Completion::Command[self]
       # NOTE: We have monkeypatched the Generator to add our 'lc' alias
+      register 'completion', Dry::CLI::Completion::Command[self]
     end
   end
 end

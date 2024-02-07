@@ -21,10 +21,6 @@ module Rubyists
         end
 
         def choose_a_team!(teams)
-          prompt.on(:keypress) do |event|
-            prompt.trigger(:keydown) if event.value == 'j'
-            prompt.trigger(:keyup) if event.value == 'k'
-          end
           key = prompt.select('Choose a team', teams.to_h { |t| [t.name, t.key] })
           Rubyists::Linear::Team.find key
         end
