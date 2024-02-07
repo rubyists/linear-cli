@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.4] - 2024-02-07
+### Fixed
+- Fixed issue with canceled issues showing up in lcls (@bougyman)
+
 ## [0.9.3] - 2024-02-07
 ### Fixed
 - Fixed probblem with tempfile for editing operations (@bougyman)
@@ -79,8 +83,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.3...HEAD
-[0.9.3]: https://github.com/rubyists/linear-cli/compare/v0.9.1...0.9.3
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.4...HEAD
+[0.9.4]: https://github.com/rubyists/linear-cli/compare/v0.9.3...0.9.4
+[0.9.3]: https://github.com/rubyists/linear-cli/compare/v0.9.1...v0.9.3
 [0.9.1]: https://github.com/rubyists/linear-cli/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/rubyists/linear-cli/compare/v0.8.6...v0.9.0
 [0.8.6]: https://github.com/rubyists/linear-cli/compare/v0.8.4...v0.8.6

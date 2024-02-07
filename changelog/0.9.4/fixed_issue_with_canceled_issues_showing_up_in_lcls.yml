@@ -1,0 +1,4 @@
+type: Fixed
+title: >
+  Fixed issue with canceled issues showing up in lcls
+author: bougyman
