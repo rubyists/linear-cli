@@ -7,6 +7,31 @@ require 'semantic_logger'
 require 'tty-markdown'
 require 'tty-prompt'
 
+module Dry
+  class CLI
+    module Completion
+      # Monkeypatching the Generator just to add our 'lc' alias :(
+      class Generator
+        def call(shell:, include_aliases: false, out: StringIO.new) # rubocop:disable Metrics/MethodLength
+          raise ArgumentError, 'Unknown shell' unless SUPPORTED_SHELLS.include?(shell)
+
+          if shell == ZSH
+            out.puts '# enable bash completion support, see https://github.com/dannyben/completely#completions-in-zsh'
+            out.puts 'autoload -Uz +X compinit && compinit'
+            out.puts 'autoload -Uz +X bashcompinit && bashcompinit'
+          end
+
+          out.puts Completely::Completions.new(
+            Input.new(@registry, @program_name).call(include_aliases:)
+          ).script
+          out.puts 'complete -F _linear-cli_completions lc'
+          out.string
+        end
+      end
+    end
+  end
+end
+
 # The Rubyists module is the top-level namespace for all Rubyists projects
 module Rubyists
   module Linear
@@ -54,12 +79,13 @@ module Rubyists
     end
   end
 
-  Pathname.new(__FILE__).dirname.join('cli').glob('*.rb').each do |file|
+  # Load CLI Helpers/libraries
+  Pathname.new(__dir__).join('cli').glob('*.rb').each do |file|
     require file.expand_path
   end
 
-  # Load all our commands
-  Pathname.new(__FILE__).dirname.join('commands').glob('*.rb').each do |file|
+  # Load all our commands and subcommands
+  Pathname.new(__dir__).join('commands').glob('*.rb').each do |file|
     require file.expand_path
   end
 
@@ -67,6 +93,7 @@ module Rubyists
     # Open this back up to register 3rd party/other commands
     module CLI
       register 'completion', Dry::CLI::Completion::Command[self]
+      # NOTE: We have monkeypatched the Generator to add our 'lc' alias
     end
   end
 end
