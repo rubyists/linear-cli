@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2024-02-06
+### Added
+- Added Containerfile to build oci image (@bougyman)
+
 ## [0.7.7] - 2024-02-06
 ### Added
 - Added ability to attach project to command (@bougyman)
@@ -51,8 +55,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.7.7...HEAD
-[0.7.7]: https://github.com/rubyists/linear-cli/compare/v0.7.5...0.7.7
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.8.0...HEAD
+[0.8.0]: https://github.com/rubyists/linear-cli/compare/v0.7.7...0.8.0
+[0.7.7]: https://github.com/rubyists/linear-cli/compare/v0.7.5...v0.7.7
 [0.7.5]: https://github.com/rubyists/linear-cli/compare/v0.7.3...v0.7.5
 [0.7.3]: https://github.com/rubyists/linear-cli/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/rubyists/linear-cli/compare/v0.7.1...v0.7.2
