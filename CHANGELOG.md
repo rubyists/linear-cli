@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2024-02-06
+### Fixed
+- Fixed wrapper to be more normal about help when listing leaf commands (@bougyman)
+
 ## [0.9.0] - 2024-02-06
 ### Added
 - Added version. Ready for 0.9.0, now test-test-test-test before 1.0 (@bougyman)
@@ -71,8 +75,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.0...HEAD
-[0.9.0]: https://github.com/rubyists/linear-cli/compare/v0.8.6...0.9.0
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.1...HEAD
+[0.9.1]: https://github.com/rubyists/linear-cli/compare/v0.9.0...0.9.1
+[0.9.0]: https://github.com/rubyists/linear-cli/compare/v0.8.6...v0.9.0
 [0.8.6]: https://github.com/rubyists/linear-cli/compare/v0.8.4...v0.8.6
 [0.8.4]: https://github.com/rubyists/linear-cli/compare/v0.8.1...v0.8.4
 [0.8.1]: https://github.com/rubyists/linear-cli/compare/v0.8.0...v0.8.1
