@@ -9,13 +9,17 @@ then
 fi
 if [[ "$*" =~ --help|-h ]]
 then
-    printf "Each subcommand has its own help, use 'lc <subcommand> --help' to see it\n" >&2
+    printf "Each subcommand has its own help, use 'lc <subcommand> --help' to see them\n" >&2
     linear-cli "$@" 2>&1|sed 's/linear-cli/lc/g'
     exit 0
 fi
 linear-cli "$@"
 result=$?
 if [ $result -gt 1 ]; then
+    if [ $result -eq 130 ]; then
+        printf "\n\nlc: linear-cli interrupted\n" >&2
+        exit 130
+    fi
     printf "lc: linear-cli failed %s\n" $result >&2
     lc "$@" --help 2>&1
     exit 1

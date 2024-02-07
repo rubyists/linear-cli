@@ -57,15 +57,21 @@ bash:
 
 [source,sh]
 ----
-eval "$(lc completion bash)"
+eval "$(lc completion bash)" <1>
+eval "$(lc completion -a bash)" <2>
 ----
+<1> This will enable tab completion for the 'lc' command in bash
+<2> This will include the subcommand aliases as well
 
 zsh:
 
 [source,sh]
 ----
-eval "$(lc completion zsh)"
+eval "$(lc completion zsh)" <1>
+eval "$(lc completion -a zsh)" <2>
 ----
+<1> This will enable tab completion for the 'lc' command in zsh
+<2> This will include the subcommand aliases as well
 
 === Commands
 
@@ -82,13 +88,16 @@ $ lc [COMMAND] [SUBCOMMAND] --help
 
 ==== Who Am I?
 
-You can use the 'w' alias for 'whoami'
+You can use the 'w' alias for 'whoami' (or whodat, for Saints fans)
 
 [source,sh]
 ----
 $ lc whoami
-$ lc w --teams
+$ lc whodat <1>
+$ lc w --teams <2>
 ----
+<1> Bayou style
+<2> Include the teams you are a member of
 
 ==== List Issues
 
@@ -125,6 +134,8 @@ $ lc i c -t "My new issue" -T CRY -l Improvement,Feature
 
 NOTE: If you don't provide a title, team, labels or description, you will be prompted to enter them.
 
+TIP: When creating an issue, you can use the --dev option to immediately start development on the issue.
+
 ==== Develop an issue
 
 This will switch to the branch for the issue, creating the branch if it doesn't exist.
@@ -136,7 +147,14 @@ This will switch to the branch for the issue, creating the branch if it doesn't 
 $ lc i dev CRY-1234
 ----
 
-TIP: You may pass the --dev option to the create subcommand to immediately develop the created issue.
+===== Create a Pull Request (Using the Semantic PR Title)
+
+Requires the `gh` cli to be installed and configured.
+
+[source,sh]
+----
+$ lc i pr CRY-1234
+----
 
 ==== Update an issue
 
@@ -148,12 +166,16 @@ at a time. You can also use the 'u' alias for 'update', and as always, the 'i' a
 [source,sh]
 ----
 $ lc issue update --comment "Here is a comment" CRY-1234 <1>
-$ lc issue update --comment - CRY-14 CRY-15 <2>
-$ lcomment CRY-1234 CRY-3 <3>
+$ lc issue u --close --reason "I do not like you" CRY-14 CRY-15 <2>
+$ lc i u --cancel --trash --reason "I have no idea why you are here" CRY-16 CRY-17 <3>
+$ lc i u --comment - CRY-14 CRY-15 <4>
+$ lcomment CRY-1234 CRY-3 <5>
 ----
-<1> This will use the provided comment
-<2> This will prompt for a comment (use '-' to prompt)
-<3> This will always prompt you for a comment ('lcomment' is an alias for 'lc issue update --comment -')
+<1> This will use the provided comment to comment on the issue
+<2> This will close multiple issues without prompting (reason is added as a comment)
+<3> This will cancel multiple issues without prompting, and move them to the trash (reason is added as a comment)
+<4> This will prompt for a comment (use '-' to prompt)
+<5> This will always prompt you for a comment ('lcomment' is an alias for 'lc issue update --comment -')
 
 ===== Close one or many issues
 
