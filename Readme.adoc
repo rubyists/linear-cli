@@ -23,7 +23,9 @@ $ docker run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli
 <1> Podman Usage
 <2> Docker Usage
 
-=== Gem (Most should use this)
+=== Gem install (Most should use this)
+
+Requires ruby 3.2 or later
 
 [source,sh]
 ----
@@ -92,7 +94,7 @@ $ lc w --teams
 
 `lcls` is a helper provided to list issues. It's an alias for `lc issues list`.
 
-image::listings.cinema.gif[]
+image::cinemas/listings.cinema.gif[]
 
 [source,sh]
 ----
