@@ -9,8 +9,14 @@ then
 fi
 if [[ "$*" =~ --help|-h ]]
 then
-    printf "Each subcommand has its own help, use 'lc <subcommand> --help' to see them\n" >&2
-    linear-cli "$@" 2>&1|sed 's/linear-cli/lc/g'
+    output="$(linear-cli "$@" 2>&1|sed 's/linear-cli/lc/g')"
+    if [[ "$output" =~ ^Command: ]]
+    then
+      printf "%s\n" "$output"
+    else
+      printf "Each subcommand has its own help, use 'lc <subcommand> --help' to see them\n" >&2
+      printf "%s\n" "$output"
+    fi
     exit 0
 fi
 linear-cli "$@"
