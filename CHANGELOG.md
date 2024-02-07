@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2024-02-06
+### Fixed
+- Fixed problem with setting verbosity (@bougyman)
+
 ## [0.8.0] - 2024-02-06
 ### Added
 - Added Containerfile to build oci image (@bougyman)
@@ -55,8 +59,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.8.0...HEAD
-[0.8.0]: https://github.com/rubyists/linear-cli/compare/v0.7.7...0.8.0
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.8.1...HEAD
+[0.8.1]: https://github.com/rubyists/linear-cli/compare/v0.8.0...0.8.1
+[0.8.0]: https://github.com/rubyists/linear-cli/compare/v0.7.7...v0.8.0
 [0.7.7]: https://github.com/rubyists/linear-cli/compare/v0.7.5...v0.7.7
 [0.7.5]: https://github.com/rubyists/linear-cli/compare/v0.7.3...v0.7.5
 [0.7.3]: https://github.com/rubyists/linear-cli/compare/v0.7.2...v0.7.3
