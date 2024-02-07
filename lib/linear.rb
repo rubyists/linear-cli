@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
 require 'pathname'
+require 'semantic_logger'
+SemanticLogger.default_level = :info
+SemanticLogger.add_appender(io: $stderr, formatter: :color)
 
 # Add the / operator for path separation
 class Pathname
@@ -40,16 +43,6 @@ module Rubyists
 
     def self.verbosity
       @verbosity ||= 0
-    end
-
-    def self.logger
-      return @logger if @logger
-
-      require 'semantic_logger'
-
-      SemanticLogger.default_level = :info
-      SemanticLogger.add_appender(io: $stderr, formatter: :color)
-      @logger = SemanticLogger['Rubyists::Linear']
     end
 
     def self.verbosity=(debug)

@@ -26,15 +26,18 @@ module Rubyists
               logger.trace "Calling #{self.class} with #{method_args}"
               super(**method_args)
             rescue SmellsBad => e
-              logger.error e.message
-              exit 1
+              TTY::Prompt.new.error e.message
+              TTY::Prompt.new.error '** This smells bad! Bailing. **'
+              exit 22
             rescue NotFoundError => e
-              logger.error e.message
+              TTY::Prompt.new.error e.message
+              TTY::Prompt.new.error '** Record not found, Cannot Continue **'
               exit 66
             rescue StandardError => e
-              logger.error e.message
-              logger.error e.backtrace.join("\n") if Rubyists::Linear.verbosity.positive?
-              exit 5
+              TTY::Prompt.new.error "What the heck is this? #{e}"
+              TTY::Prompt.new.error '** WTH? Cannot Continue **'
+              logger.error e.backtrace.join("\n") if debug.positive?
+              exit 88
             end
           end
         end
