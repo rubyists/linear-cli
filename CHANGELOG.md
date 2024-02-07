@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2024-02-06
+### Added
+- Added version. Ready for 0.9.0, now test-test-test-test before 1.0 (@bougyman)
+
 ## [0.8.6] - 2024-02-06
 ### Fixed
 - Fixed completion for lc alias (@bougyman)
@@ -67,8 +71,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.8.6...HEAD
-[0.8.6]: https://github.com/rubyists/linear-cli/compare/v0.8.4...0.8.6
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.0...HEAD
+[0.9.0]: https://github.com/rubyists/linear-cli/compare/v0.8.6...0.9.0
+[0.8.6]: https://github.com/rubyists/linear-cli/compare/v0.8.4...v0.8.6
 [0.8.4]: https://github.com/rubyists/linear-cli/compare/v0.8.1...v0.8.4
 [0.8.1]: https://github.com/rubyists/linear-cli/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/rubyists/linear-cli/compare/v0.7.7...v0.8.0
