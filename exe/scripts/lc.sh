@@ -24,8 +24,7 @@ result=$?
 if [ $result -eq 1 ]; then
     printf "\nlc: You may pass --help for further information on any subcommand\n" >&2
     exit 1
-fi
-if [ $result -gt 1 ]; then
+elif [ $result -gt 1 ]; then
     if [ $result -eq 130 ]; then
         printf "\n\nlc: linear-cli interrupted\n" >&2
         exit 130
