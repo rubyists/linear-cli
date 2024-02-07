@@ -21,7 +21,7 @@ RUN rm -rf node_modules tmp/cache app/assets vendor/assets spec
 
 ############### Build step done ###############
 FROM docker.io/ruby:3.3.0-alpine3.19
-ARG PACKAGES="bash ruby-dev build-base github-cli"
+ARG PACKAGES="bash sqlite sqlite-dev ruby-dev build-base github-cli"
 
 # install packages
 RUN apk --update --no-cache add $PACKAGES
