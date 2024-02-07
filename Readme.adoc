@@ -11,6 +11,18 @@ A command line interface to https://linear.app.
 
 == Installation
 
+=== I don't want to install
+
+You can use the OCI container image to run the CLI without installing it.
+
+[source,sh]
+----
+$ podman run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli:stable lcls <1>
+$ docker run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli:stable lcls <2>
+----
+<1> Podman Usage
+<2> Docker Usage
+
 === Gem (Most should use this)
 
 [source,sh]
