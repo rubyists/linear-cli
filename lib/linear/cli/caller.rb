@@ -26,7 +26,6 @@ module Rubyists
               logger.trace "Calling #{self.class} with #{method_args}"
               super(**method_args)
             rescue SmellsBad => e
-              require 'pry'; binding.pry
               logger.error e.message
               exit 1
             rescue NotFoundError => e
