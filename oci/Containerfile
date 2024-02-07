@@ -28,5 +28,5 @@ RUN apk --update --no-cache add $PACKAGES
 COPY --from=build-env /app/pkg /tmp
 RUN ls /tmp/*.gem && gem install /tmp/*.gem
 
-CMD %w[bundle exec lc]
+CMD ["bundle", "exec", "lc"]
 
