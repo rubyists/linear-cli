@@ -5,6 +5,7 @@ module Rubyists
     module CLI
       # This module is prepended to all commands to log their calls
       module Caller
+        include SemanticLogger::Loggable
         def self.prepended(mod) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
           # Global options for all commands
           mod.instance_eval do
@@ -25,6 +26,7 @@ module Rubyists
               logger.trace "Calling #{self.class} with #{method_args}"
               super(**method_args)
             rescue SmellsBad => e
+              require 'pry'; binding.pry
               logger.error e.message
               exit 1
             rescue NotFoundError => e

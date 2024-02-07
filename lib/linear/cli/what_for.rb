@@ -15,12 +15,7 @@ module Rubyists
         end
 
         def comment_for(issue, comment)
-          return comment unless comment.nil? || comment == '-'
-
-          comment = prompt.ask("Comment for #{issue.identifier} - #{issue.title} (- to open an editor)", default: '-')
-          return comment unless comment == '-'
-
-          editor_for %w[comment .md]
+          ask_or_edit comment, "Comment for #{issue.identifier} - #{issue.title}"
         end
 
         def team_for(key = nil)
@@ -30,13 +25,8 @@ module Rubyists
         end
 
         def reason_for(reason = nil, four: nil)
-          return reason if reason && reason != '-'
-
           question = four ? "Reason for #{TTY::Markdown.parse(four)}" : 'Reason'
-          answer = prompt.ask("#{question} (- to open an editor):", default: '-')
-          return answer unless answer == '-'
-
-          editor_for %w[reason .md]
+          ask_or_edit reason, question
         end
 
         def cancelled_state_for(thingy)
@@ -55,10 +45,20 @@ module Rubyists
           Rubyists::Linear::WorkflowState.find selection
         end
 
-        def description_for(description = nil)
-          return description if description
+        def ask_or_edit(thing, question)
+          return thing if thing && thing != '-'
 
-          prompt.multiline('Description:').map(&:chomp).join('\\n')
+          answer = prompt.ask("#{question}: ('-' to open an editor)", default: '-')
+          return answer unless answer == '-'
+
+          answer = editor_for [thing, '.md']
+          raise SmellsBad, "No content provided for #{question}" if answer.empty?
+
+          answer
+        end
+
+        def description_for(description = nil)
+          ask_or_edit description, 'Description'
         end
 
         def title_for(title = nil)

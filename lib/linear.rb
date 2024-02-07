@@ -59,6 +59,7 @@ module Rubyists
       @verbosity = debug
       level = @verbosity > (DEBUG_LEVELS.size - 1) ? :trace : DEBUG_LEVELS[@verbosity]
       SemanticLogger.default_level = level
+      @verbosity
     end
   end
 end
