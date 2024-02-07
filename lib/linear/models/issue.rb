@@ -16,7 +16,7 @@ module Rubyists
       many_to_one :team
       one_to_many :comments
 
-      BASIC_FILTER = { completedAt: { null: true } }.freeze
+      BASIC_FILTER = { completedAt: { null: true }, canceledAt: { null: true } }.freeze
 
       Base = fragment('BaseIssue', 'Issue') do
         id
