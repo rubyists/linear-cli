@@ -3,7 +3,7 @@
 module Rubyists
   # Namespace for Linear
   module Linear
-    M :user, :team
+    M :user, :team, :comment
     # The Issue class represents a Linear issue.
     class Issue
       # Class methods for Issue
@@ -21,6 +21,7 @@ module Rubyists
             ___ Base
             assignee { ___ User.full_fragment }
             team { ___ Team.full_fragment }
+            comments { nodes { ___ Comment.base_fragment } }
           end
         end
 

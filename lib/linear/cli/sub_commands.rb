@@ -46,6 +46,10 @@ module Rubyists
           git.current_branch
         end
 
+        def branch_for(branch_name)
+          git.branches.local.detect { |b| b.name == branch_name } || git.branch(branch_name)
+        end
+
         # Horrible way to do this, but it is working for now
         def pull_or_push_new_branch!(branch_name)
           git.pull

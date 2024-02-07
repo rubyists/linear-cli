@@ -51,7 +51,7 @@ module Rubyists
           answer = prompt.ask("#{question}: ('-' to open an editor)", default: '-')
           return answer unless answer == '-'
 
-          answer = editor_for [thing, '.md']
+          answer = editor_for [question.downcase, '.md']
           raise SmellsBad, "No content provided for #{question}" if answer.empty?
 
           answer
@@ -78,11 +78,11 @@ module Rubyists
           projects.select { |p| p.match_score?(search_term).positive? }.sort_by { |p| p.match_score?(search_term) }
         end
 
-        def project_for(team, project = nil)
+        def project_for(team, project = nil) # rubocop:disable Metrics/AbcSize
           projects = team.projects
           return nil if projects.empty?
 
-          possibles = project_scores(projects, project)
+          possibles = project ? project_scores(projects, project) : []
           return ask_for_projects(projects, search: project) if possibles.empty?
 
           first = possibles.first

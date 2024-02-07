@@ -13,7 +13,8 @@ module Rubyists
       include SemanticLogger::Loggable
       extend ClassMethods
       many_to_one :assignee, :User
-      many_to_one :team, :Team
+      many_to_one :team
+      one_to_many :comments
 
       BASIC_FILTER = { completedAt: { null: true } }.freeze
 
@@ -117,9 +118,17 @@ module Rubyists
         "Description was unparsable: #{description}\n"
       end
 
+      def display_comments
+        comments.map { |c| "--- #{c.createdAt} ---\n#{TTY::Markdown.parse(c.body)}" }.join("\n")
+      end
+
       def full
         sep = '-' * to_s.length
-        format("%<to_s>s\n%<sep>s\n%<description>s\n", sep:, to_s:, description: parsed_description)
+        format("%<to_s>s\n%<sep>s\n%<description>s\n%<comments>s",
+               sep:,
+               to_s:,
+               description: parsed_description,
+               comments: display_comments)
       end
 
       def display(options)
