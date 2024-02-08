@@ -6,6 +6,7 @@
 :tip-caption: 💡
 :note-caption: 📝
 :experimental:
+:plc-url: https://raw.githubusercontent.com/rubyists/linear-cli/main/oci/plc
 
 A command line interface to https://linear.app.
 
@@ -17,11 +18,21 @@ You can use the OCI container image to run the CLI without installing it.
 
 [source,sh]
 ----
-$ podman run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli:stable lcls <1>
+$ podman run -w /git -v .:/git -v ~/.ssh:/root/.ssh -it --rm -e GITHUB_TOKEN="$GITHUB_TOKEN" -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:stable lcls <1>
 $ docker run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli:stable lcls <2>
 ----
 <1> Podman Usage
-<2> Docker Usage
+<2> Docker Usage, without mounting your ssh keys and git dir. This will not be able to do git operations.
+
+There is a {plc-url}[helper script] available to wrap this up for you.
+
+[source,sh]
+----
+$ curl -sL {plc-url} | sudo tee /usr/local/bin/lc
+$ sudo chmod +x /usr/local/bin/lc
+----
+
+Then you can just run 'lc' to use the CLI.
 
 === Gem install (Most should use this)
 
