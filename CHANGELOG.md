@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.9.5] - 2024-02-08
+### Added
+- Added build_image to build/push container image (@bougyman)
+- Added user information to comment list in issue view (@bougyman)
+
 ## [0.9.4] - 2024-02-07
 ### Fixed
 - Fixed issue with canceled issues showing up in lcls (@bougyman)
@@ -83,8 +88,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.4...HEAD
-[0.9.4]: https://github.com/rubyists/linear-cli/compare/v0.9.3...0.9.4
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.5...HEAD
+[0.9.5]: https://github.com/rubyists/linear-cli/compare/v0.9.4...0.9.5
+[0.9.4]: https://github.com/rubyists/linear-cli/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/rubyists/linear-cli/compare/v0.9.1...v0.9.3
 [0.9.1]: https://github.com/rubyists/linear-cli/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/rubyists/linear-cli/compare/v0.8.6...v0.9.0
