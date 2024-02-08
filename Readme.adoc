@@ -26,6 +26,8 @@ $ docker run -it --rm -e LINEAR_API_KEY=your-api-key ghcr.io/rubyists/linear-cli
 
 There is a {plc-url}[helper script] available to wrap this up for you.
 
+NOTE: Git commands will require a passphrase for every operation if you are using an ssh key.
+
 [source,sh]
 ----
 $ curl -sL https://raw.githubusercontent.com/rubyists/linear-cli/main/oci/plc | sudo tee /usr/local/bin/lc
