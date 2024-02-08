@@ -28,7 +28,7 @@ There is a {plc-url}[helper script] available to wrap this up for you.
 
 [source,sh]
 ----
-$ curl -sL {plc-url} | sudo tee /usr/local/bin/lc
+$ curl -sL https://raw.githubusercontent.com/rubyists/linear-cli/main/oci/plc | sudo tee /usr/local/bin/lc
 $ sudo chmod +x /usr/local/bin/lc
 ----
 
