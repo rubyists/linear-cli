@@ -17,7 +17,7 @@ RUN gem i semantic_logger && bundle install && bundle exec rake build
 
 ############### Build step done ###############
 FROM docker.io/ruby:3.3.0-alpine3.19
-ARG PACKAGES="bash sqlite sqlite-dev ruby-dev build-base github-cli"
+ARG PACKAGES="bash sqlite sqlite-dev ruby-dev build-base github-cli openssh"
 ARG APP_VERSION
 
 # install packages

@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec podman run -v ~/.ssh:/root/.ssh -w /git -v .:/git -e GITHUB_TOKEN="$GITHUB_TOKEN" -e LINEAR_API_KEY="$LINEAR_API_KEY" --rm -it ghcr.io/rubyists/linear-cli:stable lc "$@"
