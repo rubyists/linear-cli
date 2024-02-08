@@ -39,7 +39,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'git', '~> 1.5'
   spec.add_dependency 'gqli', '~> 1.2'
   spec.add_dependency 'httpx', '~> 1.2'
-  spec.add_dependency 'octokit', '~> 5.0'
+  spec.add_dependency 'pry-byebug'
   spec.add_dependency 'semantic_logger', '~> 4.0'
   spec.add_dependency 'sequel', '~> 5.0'
   spec.add_dependency 'sqlite3', '~> 1.7'
