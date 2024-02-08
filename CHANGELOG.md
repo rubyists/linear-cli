@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.9.8] - 2024-02-08
+### Added
+- Added the console subcommand to get a pry console (@bougyman)
+
 ## [0.9.7] - 2024-02-08
 ### Added
 - Added the plc wrapper for container running, and ssh for git ops in the container (@bougyman)
@@ -92,8 +96,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.7...HEAD
-[0.9.7]: https://github.com/rubyists/linear-cli/compare/v0.9.5...0.9.7
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.8...HEAD
+[0.9.8]: https://github.com/rubyists/linear-cli/compare/v0.9.7...0.9.8
+[0.9.7]: https://github.com/rubyists/linear-cli/compare/v0.9.5...v0.9.7
 [0.9.5]: https://github.com/rubyists/linear-cli/compare/v0.9.4...v0.9.5
 [0.9.4]: https://github.com/rubyists/linear-cli/compare/v0.9.3...v0.9.4
 [0.9.3]: https://github.com/rubyists/linear-cli/compare/v0.9.1...v0.9.3
