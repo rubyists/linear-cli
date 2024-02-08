@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'git'
 # This is where all the _for methods live
 require_relative 'what_for'
 
@@ -62,7 +63,7 @@ module Rubyists
 
         def git
           @git ||= Git.open('.')
-        rescue Git::Repository::NoRepositoryError => e
+        rescue ArgumentError => e
           logger.error('Your current directory is not a git repository!', error: e)
           exit 121
         end
