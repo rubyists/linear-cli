@@ -206,5 +206,4 @@ Some command aliases are available to make things easier to type.
 $ lcls
 $ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
 $ lclose --reason "This issue sucks" CRY-1234 CRY-456
-$ lcancel --reason "These should never have been here" --trash CRY-1234 CRY-456
 ----
