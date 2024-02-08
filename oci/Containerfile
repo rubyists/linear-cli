@@ -3,6 +3,7 @@ FROM docker.io/ruby:3.3.0-alpine3.19 AS build-env
 
 # Setting env up
 ARG APP_ROOT=/app
+ARG APP_VERSION
 ENV LANG C.UTF-8
 ENV BUNDLE_SILENCE_ROOT_WARNING=1
 
@@ -14,19 +15,15 @@ WORKDIR $APP_ROOT
 COPY . $APP_ROOT
 RUN gem i semantic_logger && bundle install && bundle exec rake build
 
-CMD %w[bundle exec lc]
-
-# Remove folders not needed in resulting image
-RUN rm -rf node_modules tmp/cache app/assets vendor/assets spec
-
 ############### Build step done ###############
 FROM docker.io/ruby:3.3.0-alpine3.19
 ARG PACKAGES="bash sqlite sqlite-dev ruby-dev build-base github-cli"
+ARG APP_VERSION
 
 # install packages
 RUN apk --update --no-cache add $PACKAGES
 COPY --from=build-env /app/pkg /tmp
-RUN ls /tmp/*.gem && gem install /tmp/*.gem
+RUN gem install /tmp/linear-cli-${APP_VERSION}.gem
 
 CMD ["bundle", "exec", "lc"]
 

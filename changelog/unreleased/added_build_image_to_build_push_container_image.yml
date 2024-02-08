@@ -1,0 +1,4 @@
+type: Added
+title: >
+  Added build_image to build/push container image
+author: bougyman

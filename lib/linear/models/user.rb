@@ -48,7 +48,9 @@ module Rubyists
         query do
           user(id:) do
             assignedIssues(first:, filter: { completedAt: { null: true } }) do
-              nodes { ___ Issue.base_fragment }
+              nodes do
+                ___ Issue.base_fragment
+              end
             end
           end
         end

@@ -9,7 +9,7 @@ module Rubyists
     Issue = Class.new(BaseModel)
     M 'issue/class_methods'
     # The Issue class represents a Linear issue.
-    class Issue
+    class Issue # rubocop:disable Metrics/ClassLength
       include SemanticLogger::Loggable
       extend ClassMethods
       many_to_one :assignee, :User
@@ -119,7 +119,14 @@ module Rubyists
       end
 
       def display_comments
-        comments.map { |c| "--- #{c.createdAt} ---\n#{TTY::Markdown.parse(c.body)}" }.join("\n")
+        return '' unless comments.respond_to?(:map)
+
+        displays = comments&.map do |c|
+          user = c.user.name
+          date = DateTime.parse(c.createdAt).strftime('%Y-%m-%d at %H:%M')
+          "--- #{user} on #{date} ---\n#{TTY::Markdown.parse(c.body)}"
+        end
+        displays&.join("\n")
       end
 
       def full
