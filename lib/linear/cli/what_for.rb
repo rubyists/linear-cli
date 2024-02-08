@@ -4,7 +4,7 @@ module Rubyists
   module Linear
     module CLI
       # Module for the _for methods
-      module WhatFor
+      module WhatFor # rubocop:disable Metrics/ModuleLength
         # TODO: Make this configurable
         ALLOWED_PR_TYPES = 'bug|fix|sec(urity)|feat(ure)|chore|refactor|test|docs|style|ci|perf'
 
