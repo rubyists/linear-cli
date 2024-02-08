@@ -1,0 +1,4 @@
+type: Added
+title: >
+  Added the console subcommand to get a pry console
+author: bougyman
