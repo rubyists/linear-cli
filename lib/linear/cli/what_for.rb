@@ -5,6 +5,9 @@ module Rubyists
     module CLI
       # Module for the _for methods
       module WhatFor
+        # TODO: Make this configurable
+        ALLOWED_PR_TYPES = 'bug|fix|sec(urity)|feat(ure)|chore|refactor|test|docs|style|ci|perf'
+
         def editor_for(prefix)
           file = Tempfile.open(prefix, Rubyists::Linear.tmpdir)
           TTY::Editor.open(file.path)

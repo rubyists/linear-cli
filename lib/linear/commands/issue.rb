@@ -17,7 +17,6 @@ module Rubyists
         include CLI::SubCommands
 
         DESCRIPTION = 'Manage issues'
-        ALLOWED_PR_TYPES = 'bug|fix|sec(urity)|feat(ure)|chore|refactor|test|docs|style|ci|perf'
 
         # Aliases for Issue commands
         ALIASES = {
