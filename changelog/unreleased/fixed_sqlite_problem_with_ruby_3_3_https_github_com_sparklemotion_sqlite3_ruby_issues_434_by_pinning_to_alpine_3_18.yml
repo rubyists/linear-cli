@@ -1,0 +1,4 @@
+type: Fixed
+title: >
+  Fixed sqlite problem with ruby 3.3 (https://github.com/sparklemotion/sqlite3-ruby/issues/434) by pinning to alpine 3.18
+author: bougyman
