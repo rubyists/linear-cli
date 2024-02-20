@@ -33,6 +33,5 @@ COPY --from=build-env /usr/local/bundle /usr/local/bundle
 WORKDIR $APP_ROOT
 RUN bundle exec gem i /app/pkg/linear-cli-${APP_VERSION}.gem
 
-ENTRYPOINT ["bundle", "exec"]
 CMD ["lc"]
 
