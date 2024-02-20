@@ -1,0 +1,4 @@
+type: Changed
+title: >
+  Reduced the container image size by 60%
+author: bougyman
