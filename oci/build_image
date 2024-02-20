@@ -106,7 +106,8 @@ else
     die 6 "No container runtime found"
 fi
 
-$runtime build --build-arg "APP_VERSION=${tag}" -t "$IMAGE_NAME:$tag" -f "$containerfile" "$BUILD_CONTEXT" || die 7 "Failed to build image"
+app_version=$(bundle exec lc version)
+$runtime build --build-arg "APP_VERSION=${app_version}" -t "$IMAGE_NAME:$tag" -f "$containerfile" "$BUILD_CONTEXT" || die 7 "Failed to build image"
 
 set -x
 [ $push -eq 1 ] || exit 0
