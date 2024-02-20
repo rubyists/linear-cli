@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.9.11] - 2024-02-20
+### Changed
+- Reduced the container image size by 60% (@bougyman)
+
+### Fixed
+- Fixed sqlite problem with ruby 3.3 (https://github.com/sparklemotion/sqlite3-ruby/issues/434) by pinning to alpine 3.18 (@bougyman)
+
 ## [0.9.10] - 2024-02-08
 ### Fixed
 - Fixed rubocop offenses (@bougyman)
@@ -100,8 +107,9 @@
 ### Added
 - Added new changelog management system (changelog-rb) (@bougyman)
 
-[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.10...HEAD
-[0.9.10]: https://github.com/rubyists/linear-cli/compare/0.9.8...0.9.10
+[Unreleased]: https://github.com/rubyists/linear-cli/compare/0.9.11...HEAD
+[0.9.11]: https://github.com/rubyists/linear-cli/compare/v0.9.10...0.9.11
+[0.9.10]: https://github.com/rubyists/linear-cli/compare/0.9.8...v0.9.10
 [0.9.8]: https://github.com/rubyists/linear-cli/compare/v0.9.7...0.9.8
 [0.9.7]: https://github.com/rubyists/linear-cli/compare/v0.9.5...v0.9.7
 [0.9.5]: https://github.com/rubyists/linear-cli/compare/v0.9.4...v0.9.5
