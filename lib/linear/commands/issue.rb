@@ -61,7 +61,7 @@ module Rubyists
         def issue_pr(issue, **options)
           title = options[:title] || pr_title_for(issue)
           body = options[:description] || pr_description_for(issue)
-          create_pr!(title:, body:)
+          prompt.warn create_pr!(title:, body:)
         end
 
         def attach_project(issue, project_search)

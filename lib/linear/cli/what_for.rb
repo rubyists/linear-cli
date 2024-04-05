@@ -6,7 +6,24 @@ module Rubyists
       # Module for the _for methods
       module WhatFor # rubocop:disable Metrics/ModuleLength
         # TODO: Make this configurable
-        ALLOWED_PR_TYPES = 'bug|fix|sec(urity)|feat(ure)|chore|refactor|test|docs|style|ci|perf'
+        PR_TYPES = {
+          fix: 'Bug fixes',
+          feat: 'New feature work',
+          chore: 'Chores and maintenance',
+          eyes: 'Observability, metrics',
+          test: 'Testing code',
+          perf: 'Performance related work',
+          refactor: 'Code refactoring',
+          docs: 'Documentation Updates',
+          sec: 'Security-related, including dependency updates',
+          style: 'Style updates',
+          ci: 'Continuous integration related',
+          db: 'Database-Related (migrations, models, etc)'
+        }.freeze
+
+        PR_TYPE_SELECTIONS = PR_TYPES.invert
+
+        ALLOWED_PR_TYPES = /#{PR_TYPES.keys.join("|")}/
 
         def editor_for(prefix)
           file = Tempfile.open(prefix, Rubyists::Linear.tmpdir)
@@ -122,7 +139,7 @@ module Rubyists
           proposed_type = issue.title.match(/^(#{ALLOWED_PR_TYPES})/i)
           return proposed_type[1].downcase if proposed_type
 
-          prompt.select('What type of PR is this?', %w[fix feature chore refactor test docs style ci perf security])
+          prompt.select('What type of PR is this?', PR_TYPE_SELECTIONS)
         end
 
         def pr_scope_for(title)
