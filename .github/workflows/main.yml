@@ -24,7 +24,5 @@ jobs:
       with:
         ruby-version: ${{ matrix.ruby }}
         bundler-cache: true
-    - name: Install gemspec dependencies
-      run: bundle install
     - name: Run the default task
       run: bundle exec rake
