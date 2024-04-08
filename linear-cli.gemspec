@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'lib/linear'
+require_relative 'lib/linear/version'
 
 Gem::Specification.new do |spec|
   spec.name = 'linear-cli'
@@ -25,7 +25,8 @@ Gem::Specification.new do |spec|
   spec.files = Dir.chdir(__dir__) do
     `git ls-files -z`.split("\x0").reject do |f|
       (File.expand_path(f) == __FILE__) ||
-        f.start_with?(*%w[changelog/ pkg/ bin/ test/ spec/ features/ .git .github appveyor .rspec .rubocop cucumber.yml Gemfile])
+        f.start_with?(*%w[changelog/ pkg/ bin/ test/ spec/ features/ .git .github appveyor .rspec .rubocop cucumber.yml
+                          Gemfile])
     end
   end
   spec.bindir = 'exe'
