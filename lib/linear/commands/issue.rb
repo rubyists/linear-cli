@@ -53,7 +53,6 @@ module Rubyists
         end
 
         def create_pr!(title:, body:)
-          require 'pry-byebug'; binding.pry
           return `gh pr create -a @me --title "#{title}" --body-file "#{body.path}"` if body.respond_to?(:path)
 
           `gh pr create -a @me --title "#{title}" --body "#{body}"`
