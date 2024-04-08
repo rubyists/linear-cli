@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'semantic_logger'
+require_relative '../issue'
 
 module Rubyists
   # Namespace for Linear
