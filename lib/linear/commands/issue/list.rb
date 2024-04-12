@@ -40,7 +40,7 @@ module Rubyists
           def filters_for(options)
             filter = {}
             filter[:assignee] = { null: true } if options[:unassigned]
-            filter[:team] = { key: options[:team] } if options[:team]
+            filter[:team] = { key: { eq: options[:team] } } if options[:team]
             filter
           end
 
