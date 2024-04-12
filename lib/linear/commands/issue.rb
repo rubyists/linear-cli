@@ -36,7 +36,7 @@ module Rubyists
         def cancel_issue(issue, **options)
           reason = reason_for(options[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
           issue_comment issue, reason
-          cancel_state = cancel_state_for(issue)
+          cancel_state = cancelled_state_for(issue)
           issue.close! state: cancel_state, trash: options[:trash]
           prompt.ok "#{issue.identifier} was cancelled"
         end
@@ -70,9 +70,10 @@ module Rubyists
           prompt.ok "#{issue.identifier} was attached to #{project.name}"
         end
 
-        def update_issue(issue, **options)
+        def update_issue(issue, **options) # rubocop:disable Metrics/AbcSize
           issue_comment(issue, options[:comment]) if options[:comment]
           return close_issue(issue, **options) if options[:close]
+          return cancel_issue(issue, **options) if options[:cancel]
           return issue_pr(issue) if options[:pr]
           return attach_project(issue, options[:project]) if options[:project]
           return if options[:comment]

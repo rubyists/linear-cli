@@ -66,16 +66,22 @@ module Rubyists
       def close_mutation(close_state, trash: false)
         id_for_this = identifier
         input = { stateId: close_state.id }
-        input[:trash] = true if trash
+        input[:trashed] = true if trash
         mutation { issueUpdate(id: id_for_this, input:) { issue { ___ Issue.full_fragment } } }
       end
 
-      def close!(state: nil, trash: false)
+      def close!(state: nil, trash: false) # rubocop:disable Metrics/MethodLength
         logger.warn "Using first completed state found: #{completed_states.first}" if state.nil?
         state ||= completed_states.first
         query_data = Api.query close_mutation(state, trash:)
+        unless query_data.respond_to?(:dig)
+          raise SmellsBad, "Unknown response (#{query_data || "NULL"}) updating #{self} to #{state}, trash: #{trash}"
+        end
+
         updated = query_data.dig(:issueUpdate, :issue)
-        raise SmellsBad, "Unknown response for issue close: #{data} (should have :issueUpdate key)" if updated.nil?
+        if updated.nil?
+          raise SmellsBad, "Unknown response for issue close: #{query_data} (should have :issueUpdate key)"
+        end
 
         @data = @updated_data = updated
         self
