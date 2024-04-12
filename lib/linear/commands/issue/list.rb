@@ -27,6 +27,7 @@ module Rubyists
           argument :ids, type: :array, default: [], desc: 'Issue IDs to list'
           option :mine, type: :boolean, default: true, desc: 'Only show my issues'
           option :unassigned, aliases: ['-u'], type: :boolean, default: false, desc: 'Show unassigned issues only'
+          option :team, aliases: ['-t'], type: :string, desc: 'Show issues for only this team'
           option :full, type: :boolean, aliases: ['-f'], default: false, desc: 'Show full issue details'
 
           def call(ids:, **options)
@@ -36,13 +37,19 @@ module Rubyists
             display issues_for(options.merge(ids:)), options
           end
 
+          def filters_for(options)
+            filter = {}
+            filter[:assignee] = { null: true } if options[:unassigned]
+            filter[:team] = { key: options[:team] } if options[:team]
+            filter
+          end
+
           def issues_for(options)
             logger.debug('Fetching issues', options:)
             return options[:ids].map { |id| Rubyists::Linear::Issue.find(id.upcase) } if options[:ids]
-            return Rubyists::Linear::Issue.all(filter: { assignee: { null: true } }) if options[:unassigned]
             return Rubyists::Linear::User.me.issues if options[:mine]
 
-            Rubyists::Linear::Issue.all
+            Rubyists::Linear::Issue.all filter: filters_for(options)
           end
         end
       end
