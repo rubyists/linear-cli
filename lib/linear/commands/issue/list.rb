@@ -39,6 +39,7 @@ module Rubyists
 
           def filters_for(options)
             filter = {}
+            filter[:assignee] = { isMe: { eq: true } } if options[:mine]
             filter[:assignee] = { null: true } if options[:unassigned]
             filter[:team] = { key: { eq: options[:team] } } if options[:team]
             filter
@@ -47,7 +48,6 @@ module Rubyists
           def issues_for(options)
             logger.debug('Fetching issues', options:)
             return options[:ids].map { |id| Rubyists::Linear::Issue.find(id.upcase) } if options[:ids]
-            return Rubyists::Linear::User.me.issues if options[:mine]
 
             Rubyists::Linear::Issue.all filter: filters_for(options)
           end
