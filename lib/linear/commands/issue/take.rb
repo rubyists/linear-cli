@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'semantic_logger'
+require_relative '../issue'
 
 module Rubyists
   # Namespace for Linear
@@ -14,6 +15,7 @@ module Rubyists
         class Take
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
+          include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
           desc 'Assign one or more issues to yourself'
           argument :issue_ids, type: :array, required: true, desc: 'Issue Identifiers'
 
