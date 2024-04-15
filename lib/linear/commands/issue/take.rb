@@ -21,6 +21,7 @@ module Rubyists
 
           def call(issue_ids:, **options)
             updates = issue_ids.map do |issue_id|
+              Rubyists::Linear::Issue.find(issue_id)
               gimme_da_issue! issue_id # gimme_da_issue! is defined in Rubyists::Linear::CLI::Issue
             rescue NotFoundError => e
               logger.warn e.message

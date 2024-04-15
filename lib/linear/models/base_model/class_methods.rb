@@ -55,7 +55,7 @@ module Rubyists
           sym = camel_name.to_sym
           ff = full_fragment
           query_data = Api.query(query { __node(camel_name, id: id_val) { ___ ff } })
-          raise NotFoundError, "No #{just_name} found with id #{id_val}" if query_data[sym].nil?
+          raise NotFoundError, "No #{just_name} found with id #{id_val}" if query_data.nil? || query_data[sym].nil?
 
           new query_data[sym]
         end
