@@ -20,9 +20,8 @@ module Rubyists
           argument :issue_ids, type: :array, required: true, desc: 'Issue Identifiers'
 
           def call(issue_ids:, **options)
-            me = Rubyists::Linear::User.me
             updates = issue_ids.map do |issue_id|
-              gimme_da_issue! issue_id, me # gimme_da_issue! is defined in Rubyists::Linear::CLI::Issue
+              gimme_da_issue! issue_id # gimme_da_issue! is defined in Rubyists::Linear::CLI::Issue
             rescue NotFoundError => e
               logger.warn e.message
               next
