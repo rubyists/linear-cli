@@ -27,6 +27,9 @@ module Rubyists
       end
 
       def match_score?(string)
+        return 100 if string.casecmp?(id) # allow search by ID, gleaned from `-D 3`
+        return 100 if string.casecmp?(url) # allow searching via project URLs
+
         downed = string.downcase
         return 100 if downed.split.join('-') == slug || downed == name.downcase
         return 75 if name.include?(string) || slug.include?(downed)
