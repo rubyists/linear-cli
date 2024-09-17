@@ -17,8 +17,8 @@ module Rubyists
           projects.select { |p| p.match_score?(search_term).positive? }.sort_by { |p| p.match_score?(search_term) }
         end
 
-        def project_for(project = nil, projects: Project.all) # rubocop:disable Metrics/CyclomaticComplexity
-          return nil if projects&.empty?
+        def project_for(project = nil, projects: Project.all)
+          return nil if projects.empty?
 
           possibles = project ? project_scores(projects, project) : []
           return ask_for_projects(projects, search: project) if possibles.empty?
