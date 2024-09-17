@@ -4,7 +4,7 @@ module Rubyists
   module Linear
     module CLI
       # Module for the _for methods
-      module WhatFor # rubocop:disable Metrics/ModuleLength
+      module WhatFor
         include CLI::Projects # for methods called within #project_for
 
         # TODO: Make this configurable
