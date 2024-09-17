@@ -37,10 +37,8 @@ RSpec.describe 'Rubyists::Linear::Project' do
     end
 
     context 'when arg is part of project name' do
-      subject do
-        # Argument is project name with 5 characters removed
-        instance.match_score?(attributes.fetch(:name)[0..-5])
-      end
+      # Argument is project name with last 5 characters removed
+      subject { instance.match_score?(attributes.fetch(:name)[0..-5]) }
 
       it { is_expected.to eq(75) }
     end
