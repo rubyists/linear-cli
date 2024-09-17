@@ -15,7 +15,7 @@ module Rubyists
         class List
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
-          include Rubyists::Linear::CLI::Issue # for #project_for
+          include CLI::Projects # for methods called within #project_for
 
           desc 'List issues'
           example [
@@ -61,6 +61,20 @@ module Rubyists
             return options[:ids].map { |id| Rubyists::Linear::Issue.find(id.upcase) } if options[:ids]
 
             Rubyists::Linear::Issue.all filter: filters_for(options)
+          end
+
+          def project_for(project = nil) # rubocop:disable Metrics/AbcSize
+            projects = Project.all
+            return nil if projects.empty?
+
+            possibles = project ? project_scores(projects, project) : []
+            return ask_for_projects(projects, search: project) if possibles.empty?
+
+            first = possibles.first
+            return first if first.match_score?(project) == 100
+
+            selections = possibles + (projects - possibles)
+            prompt.select('Project:', selections.to_h { |p| [p.name, p] }) if possibles.size.positive?
           end
         end
       end
