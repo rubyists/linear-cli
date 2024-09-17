@@ -39,7 +39,7 @@ module Rubyists
 
       # Does :string _exactly_ match any of the attribute values in *attrs?
       def matches_attributes?(string, *attrs)
-        Array(attrs).any? { |attr| string.casecmp?(data[attr.to_sym]) }
+        Array(attrs).any? { |attr| string.casecmp?(data.fetch(attr.to_sym)) }
       end
 
       def to_s
