@@ -15,6 +15,7 @@ module Rubyists
         class List
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
+          include CLI::SubCommands # for #prompt within CLI::Projects
           include CLI::Projects # for methods called within #project_for
 
           desc 'List issues'
