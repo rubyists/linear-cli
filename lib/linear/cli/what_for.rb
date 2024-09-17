@@ -89,20 +89,6 @@ module Rubyists
           prompt.ask('Title:')
         end
 
-        def project_for(team, project = nil) # rubocop:disable Metrics/AbcSize
-          projects = team.projects
-          return nil if projects.empty?
-
-          possibles = project ? project_scores(projects, project) : []
-          return ask_for_projects(projects, search: project) if possibles.empty?
-
-          first = possibles.first
-          return first if first.match_score?(project) == 100
-
-          selections = possibles + (projects - possibles)
-          prompt.select('Project:', selections.to_h { |p| [p.name, p] }) if possibles.size.positive?
-        end
-
         def pr_title_for(issue)
           proposed = [pr_type_for(issue)]
           proposed_scope = pr_scope_for(issue.title)

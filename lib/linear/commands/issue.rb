@@ -65,7 +65,7 @@ module Rubyists
         end
 
         def attach_project(issue, project_search)
-          project = project_for(issue.team, project_search)
+          project = project_for(project_search, projects: issue.team.projects)
           issue.attach_to_project project
           prompt.ok "#{issue.identifier} was attached to #{project.name}"
         end
@@ -88,7 +88,7 @@ module Rubyists
           description = description_for(options[:description])
           team = team_for(options[:team])
           labels = labels_for(team, options[:labels])
-          project = project_for(team, options[:project])
+          project = project_for(options[:project], projects: team.projects)
           Rubyists::Linear::Issue.create(title:, description:, team:, labels:, project:)
         end
 
