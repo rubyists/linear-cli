@@ -39,7 +39,7 @@ module Rubyists
       end
 
       def initialize(data)
-        super(data)
+        super
         self.teams = data[:teams] if data.key? :teams
       end
 
