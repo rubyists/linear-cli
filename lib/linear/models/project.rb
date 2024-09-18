@@ -27,12 +27,19 @@ module Rubyists
       end
 
       def match_score?(string)
+        return 100 if matches_attributes?(string, :id, :url)
+
         downed = string.downcase
         return 100 if downed.split.join('-') == slug || downed == name.downcase
         return 75 if name.include?(string) || slug.include?(downed)
         return 50 if description.downcase.include?(downed)
 
         0
+      end
+
+      # Does :string _exactly_ match any of the attribute values in *attrs?
+      def matches_attributes?(string, *attrs)
+        Array(attrs).any? { |attr| string.casecmp?(data.fetch(attr.to_sym)) }
       end
 
       def to_s

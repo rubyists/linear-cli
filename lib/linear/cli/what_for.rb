@@ -4,7 +4,9 @@ module Rubyists
   module Linear
     module CLI
       # Module for the _for methods
-      module WhatFor # rubocop:disable Metrics/ModuleLength
+      module WhatFor
+        include CLI::Projects # for methods called within #project_for
+
         # TODO: Make this configurable
         PR_TYPES = {
           fix: 'Bug fixes',
@@ -85,31 +87,6 @@ module Rubyists
           return title if title
 
           prompt.ask('Title:')
-        end
-
-        def ask_for_projects(projects, search: true)
-          prompt.warn("No project found matching #{search}.") if search
-          return projects.first if projects.size == 1
-
-          prompt.select('Project:', projects.to_h { |p| [p.name, p] })
-        end
-
-        def project_scores(projects, search_term)
-          projects.select { |p| p.match_score?(search_term).positive? }.sort_by { |p| p.match_score?(search_term) }
-        end
-
-        def project_for(team, project = nil) # rubocop:disable Metrics/AbcSize
-          projects = team.projects
-          return nil if projects.empty?
-
-          possibles = project ? project_scores(projects, project) : []
-          return ask_for_projects(projects, search: project) if possibles.empty?
-
-          first = possibles.first
-          return first if first.match_score?(project) == 100
-
-          selections = possibles + (projects - possibles)
-          prompt.select('Project:', selections.to_h { |p| [p.name, p] }) if possibles.size.positive?
         end
 
         def pr_title_for(issue)
