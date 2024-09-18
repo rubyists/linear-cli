@@ -14,5 +14,6 @@
 # dotenv
 .envrc
 
-# built gems
+# Gem stuff/Gemfile.lock
 *.gem
+Gemfile.lock
