@@ -19,7 +19,7 @@ here=$(cd "$(dirname "$me")" && pwd)
 root=$(cd "$here/.." && pwd)
 just_me=$(basename "$me")
 
-: "${GEM_NAME:=leopard}"
+: "${GEM_NAME:=linear-cli}"
 : "${GIT_ORG:=rubyists}"
 
 GEM_HOST=$1
