@@ -15,6 +15,7 @@ module Rubyists
       include GQLi::DSL
       include SemanticLogger::Loggable
       extend ClassMethods
+
       attr_reader :data, :updated_data
 
       CANCELLED_STATES = %w[cancelled canceled].freeze

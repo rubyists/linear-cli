@@ -16,6 +16,7 @@ module Rubyists
   # Namespace for Linear classes
   module Linear
     include SemanticLogger::Loggable
+
     # rubocop:disable Layout/SpaceAroundOperators
     ROOT = (Pathname(__FILE__)/'../..').expand_path
     LIBROOT = ROOT/:lib/:linear
@@ -47,7 +48,7 @@ module Rubyists
     end
 
     def self.verbosity=(debug)
-      return verbosity unless debug
+      return unless debug
 
       logger.warn 'Debug level should be between 0 and 3' unless debug.between?(0, 3)
       @verbosity = debug

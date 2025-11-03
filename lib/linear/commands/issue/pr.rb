@@ -17,6 +17,7 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
+
           desc 'Create a PR for an issue and push it to the remote'
           argument :issue_id, required: true, desc: 'The Issue (i.e. CRY-1)'
           option :title, required: false, desc: 'The title of the PR'

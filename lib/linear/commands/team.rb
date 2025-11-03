@@ -7,6 +7,7 @@ module Rubyists
       # The Team module is the namespace for all team-related commands
       module Team
         include CLI::SubCommands
+
         # Aliases for Team commands.
         ALIASES = {
           list: %w[ls l],   # aliases for the list command

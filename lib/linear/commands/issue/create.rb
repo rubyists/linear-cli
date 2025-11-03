@@ -16,6 +16,7 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
+
           desc 'Create a new issue. If you do not pass any options, you will be prompted for the required information.'
           option :description, type: :string, aliases: ['-d'], desc: 'Issue Description'
           option :labels, type: :array, aliases: ['-l'], desc: 'Labels for the issue (Comma separated list)'

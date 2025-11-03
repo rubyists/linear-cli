@@ -12,6 +12,7 @@ module Rubyists
     class Issue # rubocop:disable Metrics/ClassLength
       include SemanticLogger::Loggable
       extend ClassMethods
+
       many_to_one :assignee, :User
       many_to_one :team
       one_to_many :comments

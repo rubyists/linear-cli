@@ -10,6 +10,7 @@ module Rubyists
     # The Issue class represents a Linear issue.
     class Team
       include SemanticLogger::Loggable
+
       one_to_many :projects
 
       # TODO: Make this configurable

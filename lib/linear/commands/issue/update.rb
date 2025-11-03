@@ -17,6 +17,7 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
+
           desc 'Update an issue'
           argument :issue_ids, type: :array, required: true, desc: 'Issue IDs (i.e. CRY-1)'
           option :comment, type: :string, aliases: ['-m'], desc: 'Comment to add to the issue. - open an editor'

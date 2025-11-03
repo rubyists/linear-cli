@@ -120,7 +120,7 @@ module Rubyists
         end
 
         def pr_scope_for(title)
-          proposed_scope = title.match(/^\w+\(([^\)]+)\)/)
+          proposed_scope = title.match(/^\w+\(([^)]+)\)/)
           return proposed_scope[1].downcase if proposed_scope
 
           scope = prompt.ask('What is the scope of this PR?', default: 'none')

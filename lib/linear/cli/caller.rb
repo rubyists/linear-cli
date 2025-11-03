@@ -6,6 +6,7 @@ module Rubyists
       # This module is prepended to all commands to log their calls
       module Caller
         include SemanticLogger::Loggable
+
         def self.prepended(mod) # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
           # Global options for all commands
           mod.instance_eval do
