@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.2](https://github.com/rubyists/linear-cli/compare/v2.0.1...v2.0.2) (2025-11-03)
+
+
+### Bug Fixes
+
+* Corrects publisher for gem ([#13](https://github.com/rubyists/linear-cli/issues/13)) ([61bf747](https://github.com/rubyists/linear-cli/commit/61bf74747cea8d2572ef9f553c5e56f4cc7788a8))
+
 ## [2.0.1](https://github.com/rubyists/linear-cli/compare/v2.0.0...v2.0.1) (2025-11-03)
 
 
