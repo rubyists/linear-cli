@@ -11,7 +11,7 @@ Gem::Specification.new do |spec|
   spec.summary = 'CLI for interacting with Linear.app.'
   spec.description = 'A CLI for interacting with Linear.app. Loosely based on the GitHub CLI'
   spec.homepage = 'https://github.com/rubyists/linear-cli'
-  spec.required_ruby_version = '>= 3.2.0'
+  spec.required_ruby_version = '>= 3.4.0'
 
   spec.license = 'MIT'
   spec.metadata['allowed_push_host'] = 'https://rubygems.org'
@@ -34,19 +34,20 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   # Uncomment to register a new dependency of your gem
-  spec.add_dependency 'base64', '~> 0.2'
-  spec.add_dependency 'dry-cli', '~> 1.0'
-  spec.add_dependency 'dry-cli-completion', '~> 1.0'
-  spec.add_dependency 'git', '~> 1.5'
-  spec.add_dependency 'gqli', '~> 1.2'
-  spec.add_dependency 'httpx', '~> 1.2'
+  spec.add_dependency 'base64'
+  spec.add_dependency 'dry-cli'
+  spec.add_dependency 'dry-cli-completion'
+  spec.add_dependency 'git'
+  spec.add_dependency 'gqli'
+  spec.add_dependency 'httpx'
   spec.add_dependency 'pry-byebug'
-  spec.add_dependency 'semantic_logger', '~> 4.0'
-  spec.add_dependency 'sequel', '~> 5.0'
-  spec.add_dependency 'sqlite3', '~> 1.7'
-  spec.add_dependency 'tty-editor', '~> 0.7'
-  spec.add_dependency 'tty-markdown', '~> 0.7'
-  spec.add_dependency 'tty-prompt', '~> 0.23'
+  spec.add_dependency 'reline'
+  spec.add_dependency 'semantic_logger'
+  spec.add_dependency 'sequel'
+  spec.add_dependency 'sqlite3'
+  spec.add_dependency 'tty-editor'
+  spec.add_dependency 'tty-markdown'
+  spec.add_dependency 'tty-prompt'
 
   # For more information and examples about making a new gem, check out our
   # guide at: https://bundler.io/guides/creating_gem.html
