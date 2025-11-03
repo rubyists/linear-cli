@@ -11,7 +11,7 @@ jobs:
     uses: ./.github/workflows/gem.yaml
     secrets: inherit
 
-#  containers:
-#    name: Build and publish OCI container images
-#    uses: ./.github/workflows/container.yaml
-#    secrets: inherit
+  containers:
+    name: Build and publish OCI container images
+    uses: ./.github/workflows/container.yaml
+    secrets: inherit
