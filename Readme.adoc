@@ -218,6 +218,13 @@ The project uses Minitest and RuboCop. Run tests with Rake:
 $ bundle exec rake
 ----
 
+=== Build the gem
+
+[source,bash]
+----
+$ bundle exec gem build
+----
+
 === Conventional Commits (semantic commit messages)
 
 This project follows the {conventional-commits} specification.
