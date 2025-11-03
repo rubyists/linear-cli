@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# x-release-please-start-version
 module Rubyists
   module Linear
+    # x-release-please-start-version
     VERSION = '2.0.1'
+    # x-release-please-end
   end
 end
-# x-release-please-end
