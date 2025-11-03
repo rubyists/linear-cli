@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.0.0](https://github.com/rubyists/linear-cli/compare/v1.0.0...v2.0.0) (2025-11-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **sqlite:** Updates dependencies, including painful sqlite ([#8](https://github.com/rubyists/linear-cli/issues/8))
+
+### Features
+
+* **release:** Adds release-please for release management ([#9](https://github.com/rubyists/linear-cli/issues/9)) ([a3ebfeb](https://github.com/rubyists/linear-cli/commit/a3ebfebe1ffb3519222dec440dfed757190c7a95))
+
+
+### Bug Fixes
+
+* **issue update:** CRY-28 - Implement the pr command ([#1](https://github.com/rubyists/linear-cli/issues/1)) ([832781a](https://github.com/rubyists/linear-cli/commit/832781a9375c0be7823c0c10695390c2f45d5c95))
+* **sqlite:** Updates dependencies, including painful sqlite ([#8](https://github.com/rubyists/linear-cli/issues/8)) ([be93723](https://github.com/rubyists/linear-cli/commit/be937232f7e05681fa84fc3017a33de0d3f16702))
+
 ## [Unreleased]
 
 ## [0.9.11] - 2024-02-20
