@@ -225,6 +225,13 @@ $ bundle exec rake
 $ bundle exec gem build
 ----
 
+=== Build the container
+
+[source,bash]
+----
+$ ./ci/build_image.sh <tag_name>
+----
+
 === Conventional Commits (semantic commit messages)
 
 This project follows the {conventional-commits} specification.
