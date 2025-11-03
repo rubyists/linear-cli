@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/rubyists/linear-cli/compare/v2.0.0...v2.0.1) (2025-11-03)
+
+
+### Bug Fixes
+
+* Remove unused ci/cd stuff ([#11](https://github.com/rubyists/linear-cli/issues/11)) ([8f070ba](https://github.com/rubyists/linear-cli/commit/8f070ba556873b97ee1d6d2723f82ab1227430b7))
+
 ## [2.0.0](https://github.com/rubyists/linear-cli/compare/v1.0.0...v2.0.0) (2025-11-03)
 
 
