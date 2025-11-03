@@ -15,7 +15,7 @@ A command line interface to https://linear.app.
 
 === I don't want to install
 
-You can use the OCI container image to run the CLI without installing it.
+If you do not want to install this, you can use the OCI container image to run the CLI without installing it.
 
 [source,sh]
 ----
