@@ -10,6 +10,7 @@ module Rubyists
     # The Comment class represents a Linear issue comment.
     class Comment
       include SemanticLogger::Loggable
+
       many_to_one :user
 
       Base = fragment('BaseComment', 'Comment') do

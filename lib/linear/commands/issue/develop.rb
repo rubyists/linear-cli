@@ -17,6 +17,7 @@ module Rubyists
           include SemanticLogger::Loggable
           include Rubyists::Linear::CLI::CommonOptions
           include Rubyists::Linear::CLI::Issue # for #gimme_da_issue! and other Issue methods
+
           desc 'Start or update development status of an issue'
           argument :issue_id, required: true, desc: 'The Issue (i.e. ISS-1)'
 

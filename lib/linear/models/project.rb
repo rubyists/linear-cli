@@ -26,7 +26,7 @@ module Rubyists
         File.basename(url).sub("-#{slugId}", '')
       end
 
-      def match_score?(string)
+      def match_score?(string) # rubocop:disable Naming/PredicateMethod
         return 100 if matches_attributes?(string, :id, :url)
 
         downed = string.downcase

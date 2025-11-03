@@ -8,6 +8,7 @@ module Rubyists
     # Responsible for making requests to the Linear API
     class GraphApi
       include SemanticLogger::Loggable
+
       BASE_URI = 'https://api.linear.app/graphql'
       RETRY_AFTER = lambda do |*|
         @retries ||= 0

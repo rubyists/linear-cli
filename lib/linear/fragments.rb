@@ -7,6 +7,7 @@ module Rubyists
     # Reusable fragments
     module Fragments
       extend GQLi::DSL
+
       PageInfo = fragment('PageInfo', 'PageInfo') do
         pageInfo do
           hasNextPage
