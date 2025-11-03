@@ -32,3 +32,5 @@ jobs:
           bundle install
           TRACE="$TRACE" GEM_TOKEN="$GEM_TOKEN" ./ci/publish-gem.sh "$REGISTRY"
         shell: bash
+        env:
+          GEM_NAME: linear-cli
