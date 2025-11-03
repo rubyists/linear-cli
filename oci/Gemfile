@@ -3,5 +3,5 @@
 source 'https://rubygems.org'
 
 # x-release-please-start-version
-gem 'linear-cli', '= 2.0.0'
+gem 'linear-cli', '= 2.0.1'
 # x-release-please-end
