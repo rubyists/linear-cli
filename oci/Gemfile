@@ -1,0 +1,7 @@
+# frozen_string_literal: true
+
+source 'https://rubygems.org'
+
+# x-release-please-start-version
+gem 'linear-cli', '= 1.0.0'
+# x-release-please-end

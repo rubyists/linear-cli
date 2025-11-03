@@ -2,6 +2,8 @@
 
 module Rubyists
   module Linear
-    VERSION = '0.9.20'
+    # x-release-please-start-version
+    VERSION = '1.0.0'
+    # x-release-please-end
   end
 end

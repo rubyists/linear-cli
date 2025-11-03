@@ -7,6 +7,7 @@
 :note-caption: 📝
 :experimental:
 :plc-url: https://raw.githubusercontent.com/rubyists/linear-cli/main/oci/plc
+:conventional-commits: https://www.conventionalcommits.org/en/v1.0.0/[Conventional Commits]
 
 A command line interface to https://linear.app.
 
@@ -207,3 +208,23 @@ $ lcls
 $ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
 $ lclose --reason "This issue sucks" CRY-1234 CRY-456
 ----
+
+== Development
+
+The project uses Minitest and RuboCop. Run tests with Rake:
+
+[source,bash]
+----
+$ bundle exec rake
+----
+
+=== Conventional Commits (semantic commit messages)
+
+This project follows the {conventional-commits} specification.
+
+To contribute, please follow that commit message format,
+or your pull request may be rejected.
+
+== License
+
+MIT

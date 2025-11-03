@@ -1,5 +1,4 @@
-FROM docker.io/ruby:3.3.0-alpine3.18 AS build-env
-
+FROM docker.io/ruby:3-alpine AS build-env
 
 # Setting env up
 ARG APP_ROOT=/app
@@ -14,6 +13,7 @@ RUN apk --update add bash ruby-dev build-base git sqlite-dev
 WORKDIR $APP_ROOT
 
 COPY . $APP_ROOT
+
 RUN gem i semantic_logger && \
     bundle config set build.nokogiri --use-system-libraries && \
     bundle config set without  'test assets' && \
@@ -21,7 +21,7 @@ RUN gem i semantic_logger && \
     bundle exec rake build
 
 ############### Build step done ###############
-FROM docker.io/ruby:3.3.0-alpine3.18
+FROM docker.io/ruby:3-alpine
 ARG PACKAGES="bash sqlite github-cli openssh"
 ARG APP_VERSION
 ARG APP_ROOT=/app
@@ -31,7 +31,7 @@ RUN apk --update --no-cache add $PACKAGES
 COPY --from=build-env /app /app
 COPY --from=build-env /usr/local/bundle /usr/local/bundle
 WORKDIR $APP_ROOT
-RUN bundle exec gem i /app/pkg/linear-cli-${APP_VERSION}.gem
+RUN echo "App version is ${APP_VERSION}" && bundle exec gem i /app/pkg/linear-cli-${APP_VERSION}.gem
 
 CMD ["lc"]
 
