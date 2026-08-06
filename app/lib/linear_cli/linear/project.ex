@@ -106,17 +106,24 @@ defmodule LinearCli.Linear.Project.Read.Mine do
 
   alias LinearCli.Linear.{Project, User}
 
-  # Ruby: Project.mine = User.me.teams.flat_map(&:projects)
-  # Sequential for now (parity with Ruby) - a Phase 5 concurrency target.
+  # Ruby: Project.mine = User.me.teams.flat_map(&:projects) - fully serial,
+  # one request per team. Each team's projects are an independent GraphQL
+  # call, so fan them out concurrently instead.
   def read(_query, _ecto_query, _opts, _context) do
     with {:ok, user} <- Ash.read_one(Ash.Query.for_read(User, :me)) do
-      projects =
-        user.teams
-        |> Enum.flat_map(fn team ->
-          Ash.read!(Ash.Query.for_read(Project, :by_team, %{team_id: team.id}))
-        end)
-
-      {:ok, projects}
+      user.teams
+      |> Task.async_stream(&fetch_team_projects/1, timeout: 30_000)
+      |> Enum.reduce_while({:ok, []}, fn
+        {:ok, {:ok, projects}}, {:ok, acc} -> {:cont, {:ok, acc ++ projects}}
+        {:ok, {:error, reason}}, {:ok, _acc} -> {:halt, {:error, reason}}
+        {:exit, reason}, {:ok, _acc} -> {:halt, {:error, {:task_exit, reason}}}
+      end)
     end
+  end
+
+  # Ash.read/1 (not read!/1) - a raise inside an async task would surface as
+  # an unhelpful {:exit, reason} to the caller instead of a clean error tuple.
+  defp fetch_team_projects(team) do
+    Ash.read(Ash.Query.for_read(Project, :by_team, %{team_id: team.id}))
   end
 end

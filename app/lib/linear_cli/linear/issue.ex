@@ -101,23 +101,29 @@ defmodule LinearCli.Linear.Issue.Read.List do
     """
   end
 
+  # Ruby: params[:ids].map { |id| Issue.find(id) } - fully serial. Each id is
+  # an independent GraphQL call, so fan them out concurrently instead. Capped
+  # at 20 in flight to avoid hammering the API on a very long id list; ordered
+  # so results come back in the same order as `ids`, matching Ruby's `.map`.
   defp find_by_ids(ids) do
-    result =
-      Enum.reduce_while(ids, {:ok, []}, fn id, {:ok, acc} ->
-        case Api.call(find_document(), %{"id" => String.upcase(id)}) do
-          {:ok, %{"issue" => issue_map}} when is_map(issue_map) ->
-            {:cont, {:ok, [Issue.from_map(issue_map) | acc]}}
+    ids
+    |> Task.async_stream(&fetch_one/1, max_concurrency: min(length(ids), 20), timeout: 30_000)
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, issue}}, {:ok, acc} -> {:cont, {:ok, [issue | acc]}}
+      {:ok, {:error, reason}}, {:ok, _acc} -> {:halt, {:error, reason}}
+      {:exit, reason}, {:ok, _acc} -> {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> case do
+      {:ok, issues} -> {:ok, Enum.reverse(issues)}
+      error -> error
+    end
+  end
 
-          {:ok, %{"issue" => nil}} ->
-            {:halt, {:error, {:not_found, id}}}
-
-          {:error, reason} ->
-            {:halt, {:error, reason}}
-        end
-      end)
-
-    with {:ok, issues} <- result do
-      {:ok, Enum.reverse(issues)}
+  defp fetch_one(id) do
+    case Api.call(find_document(), %{"id" => String.upcase(id)}) do
+      {:ok, %{"issue" => issue_map}} when is_map(issue_map) -> {:ok, Issue.from_map(issue_map)}
+      {:ok, %{"issue" => nil}} -> {:error, {:not_found, id}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
