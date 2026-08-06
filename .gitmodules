@@ -1,0 +1,3 @@
+[submodule "vendor/ash"]
+	path = vendor/ash
+	url = git@github.com:ash-project/ash
