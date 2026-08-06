@@ -9,8 +9,13 @@ defmodule LinearCli.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
-      usage_rules: usage_rules()
+      usage_rules: usage_rules(),
+      escript: escript()
     ]
+  end
+
+  defp escript do
+    [main_module: LinearCli.CLI]
   end
 
   defp usage_rules do

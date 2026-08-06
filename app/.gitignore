@@ -22,3 +22,7 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 app-*.tar
 
+# The escript built via "mix escript.build" (local dev convenience only -
+# the real distribution target is the Burrito release, see Phase 8).
+/linear_cli
+
