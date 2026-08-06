@@ -10,6 +10,16 @@ defmodule LinearCli.Linear.Label do
       argument :names, {:array, :string}, allow_nil?: false
       manual LinearCli.Linear.Label.Read.ByNames
     end
+
+    # Ruby: Team#labels, as called by WhatFor#labels_for(team, nil) for its
+    # interactive multi_select fallback. Not one of the two "already exist"
+    # interfaces this phase was told about (Team.mine / Label.find_all_by_name)
+    # - added here because that fallback has no other way to list a team's
+    # labels without it.
+    read :by_team do
+      argument :team_id, :string, allow_nil?: false
+      manual LinearCli.Linear.Label.Read.ByTeam
+    end
   end
 
   attributes do
@@ -56,6 +66,52 @@ defmodule LinearCli.Linear.Label.Read.ByNames do
     with {:ok, %{"issueLabels" => %{"edges" => edges}}} <-
            Api.call(@document, %{"names" => names}) do
       {:ok, Enum.map(edges, &Label.from_map(&1["node"]))}
+    end
+  end
+end
+
+defmodule LinearCli.Linear.Label.Read.ByTeam do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Label
+
+  # Ruby: Team#label_query / Team#labels - team(id:)'s labels, filtered down
+  # (server-side, same BaseFilter Ruby uses) to exclude release/platform
+  # labels, and (client-side, matching Ruby's `filter_map`) to exclude group
+  # labels and labels that belong to a group (have a parent) - Ruby's
+  # `next if label[:isGroup] || label[:parent]`.
+  @document """
+  query($teamId: String!) {
+    team(id: $teamId) {
+      labels(
+        first: 100
+        filter: {
+          and: [
+            { name: { notEndsWith: " Releases" } }
+            { name: { notEndsWith: "-ios" } }
+            { name: { notEndsWith: "-android" } }
+          ]
+        }
+      ) {
+        nodes { #{Label.base_fields()} parent { id } }
+      }
+    }
+  }
+  """
+
+  def read(query, _ecto_query, _opts, _context) do
+    team_id = query.arguments.team_id
+
+    with {:ok, %{"team" => %{"labels" => %{"nodes" => nodes}}}} <-
+           Api.call(@document, %{"teamId" => team_id}) do
+      labels =
+        nodes
+        |> Enum.reject(&(&1["isGroup"] || &1["parent"]))
+        |> Enum.map(&Label.from_map/1)
+
+      {:ok, labels}
     end
   end
 end

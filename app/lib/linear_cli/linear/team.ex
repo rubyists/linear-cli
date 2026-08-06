@@ -13,6 +13,20 @@ defmodule LinearCli.Linear.Team do
     read :mine do
       manual LinearCli.Linear.Team.Read.Mine
     end
+
+    # Ruby: BaseModel::ClassMethods#find, as called by WhatFor#team_for(key).
+    # Not one of the two "already exist" interfaces this phase was told about
+    # (Team.mine / Label.find_all_by_name) - added here because team_for's
+    # key-given branch has no other way to resolve an arbitrary team id/key
+    # to a Team without it. Follows the same single-node-by-id shape as
+    # LinearCli.Linear.Issue.Read.List's find_document, and the same
+    # `get?: true` + manual-read-returns-a-list convention already proven by
+    # LinearCli.Linear.User.Read.Me.
+    read :find do
+      argument :id, :string, allow_nil?: false
+      get? true
+      manual LinearCli.Linear.Team.Read.Find
+    end
   end
 
   attributes do
@@ -65,6 +79,34 @@ defmodule LinearCli.Linear.Team.Read.All do
       fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,
       &Team.from_map/1
     )
+  end
+end
+
+defmodule LinearCli.Linear.Team.Read.Find do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Team
+
+  # Ruby: BaseModel::ClassMethods#find - team(id: $id) node lookup,
+  # full_fragment (base fields plus projects).
+  def read(query, _ecto_query, _opts, _context) do
+    id = query.arguments.id
+
+    with {:ok, %{"team" => team_map}} <- Api.call(document(), %{"id" => id}) do
+      case team_map do
+        nil -> {:ok, []}
+        _ -> {:ok, [Team.from_map(team_map)]}
+      end
+    end
+  end
+
+  # A function, not a module attribute: Team.full_fields/0 reaches into
+  # Project (another file), so it must be evaluated at call time - see house
+  # rule on cross-file compile-time module attribute evaluation order.
+  defp document do
+    "query($id: String!) { team(id: $id) { #{Team.full_fields()} } }"
   end
 end
 

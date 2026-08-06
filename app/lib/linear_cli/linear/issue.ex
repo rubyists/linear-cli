@@ -15,6 +15,37 @@ defmodule LinearCli.Linear.Issue do
       argument :project_id, :string, allow_nil?: true
       manual LinearCli.Linear.Issue.Read.List
     end
+
+    # Ruby: Issue::ClassMethods#create(title:, description:, team:, project:, labels: [])
+    create :create do
+      argument :title, :string, allow_nil?: false
+      argument :description, :string, allow_nil?: true
+      argument :team_id, :string, allow_nil?: false
+      argument :project_id, :string, allow_nil?: true
+      argument :label_ids, {:array, :string}, default: []
+      manual LinearCli.Linear.Issue.Create
+    end
+
+    # Ruby: Issue#assign!(user)
+    update :assign do
+      argument :assignee_id, :string, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.Assign
+    end
+
+    # Ruby: Issue#attach_to_project(project)
+    update :attach_to_project do
+      argument :project_id, :string, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.AttachToProject
+    end
+
+    # Ruby: Issue#close! / #close_mutation. One action shape covers both a
+    # "close" and a "cancel" workflow transition - which workflow state gets
+    # passed in is a later phase's CLI-level concern, not this action's.
+    update :close do
+      argument :state_id, :string, allow_nil?: false
+      argument :trash, :boolean, default: false
+      manual LinearCli.Linear.Issue.Update.Close
+    end
   end
 
   attributes do
@@ -166,4 +197,119 @@ defmodule LinearCli.Linear.Issue.Read.List do
   end
 
   defp maybe_put_project_filter(filter, _args), do: filter
+end
+
+defmodule LinearCli.Linear.Issue.Create do
+  @moduledoc false
+  use Ash.Resource.ManualCreate
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Issue
+
+  # Ruby: Issue::ClassMethods#create - issueCreate mutation, returns the
+  # created issue via Issue.base_fragment (not full_fragment - Ruby doesn't
+  # refetch comments/full team detail for a just-created issue).
+  def create(changeset, _opts, _context) do
+    args = changeset.arguments
+
+    input =
+      %{"title" => args.title, "description" => args.description, "teamId" => args.team_id}
+      |> maybe_put_label_ids(args.label_ids)
+      |> maybe_put_project_id(Map.get(args, :project_id))
+
+    case Api.call(document(), %{"input" => input}) do
+      {:ok, %{"issueCreate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
+        {:ok, Issue.from_map(issue_map)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp maybe_put_label_ids(input, []), do: input
+  defp maybe_put_label_ids(input, label_ids), do: Map.put(input, "labelIds", label_ids)
+
+  defp maybe_put_project_id(input, nil), do: input
+  defp maybe_put_project_id(input, project_id), do: Map.put(input, "projectId", project_id)
+
+  # A function, not a module attribute: Issue.base_fields/0 reaches into
+  # User (another file), so it must be evaluated at call time - see house
+  # rule on cross-file compile-time module attribute evaluation order.
+  defp document do
+    "mutation($input: IssueCreateInput!) { issueCreate(input: $input) { issue { #{Issue.base_fields()} } } }"
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update do
+  @moduledoc false
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Issue
+
+  # Ruby: Issue#update!(input) - the shared issueUpdate mutation that
+  # assign!/attach_to_project!/close! all delegate to, refetching the
+  # updated issue via Issue.full_fragment.
+  def run(identifier, input) do
+    case Api.call(document(), %{"id" => identifier, "input" => input}) do
+      {:ok, %{"issueUpdate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
+        {:ok, Issue.from_map(issue_map)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # A function, not a module attribute: Issue.full_fields/0 reaches into
+  # User/Team/Comment (other files), so it must be evaluated at call time.
+  defp document do
+    "mutation($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { issue { #{Issue.full_fields()} } } }"
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.Assign do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "assigneeId" => changeset.arguments.assignee_id
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.AttachToProject do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "projectId" => changeset.arguments.project_id
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.Close do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    args = changeset.arguments
+
+    Issue.Update.run(changeset.data.identifier, %{
+      "stateId" => args.state_id,
+      "trashed" => args.trash
+    })
+  end
 end

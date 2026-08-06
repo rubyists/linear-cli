@@ -45,6 +45,69 @@ defmodule LinearCli.Linear.Project do
       url: map["url"]
     )
   end
+
+  @doc """
+  Ported from Ruby's `Project#slug`: the URL's basename with the trailing
+  `-slugId` suffix stripped (first occurrence only, matching Ruby's `sub`).
+  """
+  def slug(%__MODULE__{url: url, slug_id: slug_id}) do
+    url
+    |> to_string()
+    |> Path.basename()
+    |> String.replace("-#{slug_id}", "", global: false)
+  end
+
+  @doc """
+  Ported from Ruby's `Project#match_score?`. Scores how well `string`
+  matches this project:
+
+    * `100` - `string` exactly (case-insensitively) equals the project's
+      `id` or `url`, or its slugified form equals `slug/1`, or it
+      case-insensitively equals the project's `name`
+    * `75` - the project's `name` contains `string` (case-sensitive, as in
+      Ruby), or `slug/1` contains the downcased `string`
+    * `50` - the project's `description` contains the downcased `string`
+      (case-insensitive)
+    * `0` - otherwise
+  """
+  def match_score?(%__MODULE__{} = project, string) when is_binary(string) do
+    cond do
+      matches_attributes?(project, string, [:id, :url]) -> 100
+      exact_name_or_slug_match?(project, string) -> 100
+      name_or_slug_contains?(project, string) -> 75
+      description_contains?(project, string) -> 50
+      true -> 0
+    end
+  end
+
+  @doc """
+  Ported from Ruby's `Project#matches_attributes?`. Does `string`
+  case-insensitively equal any of the project's `attrs` field values?
+  """
+  def matches_attributes?(%__MODULE__{} = project, string, attrs) do
+    Enum.any?(attrs, fn attr ->
+      case Map.get(project, attr) do
+        value when is_binary(value) -> String.downcase(value) == String.downcase(string)
+        _ -> false
+      end
+    end)
+  end
+
+  defp exact_name_or_slug_match?(project, string) do
+    downed = String.downcase(string)
+    slugified = downed |> String.split() |> Enum.join("-")
+
+    slugified == slug(project) or downed == String.downcase(project.name || "")
+  end
+
+  defp name_or_slug_contains?(project, string) do
+    String.contains?(project.name || "", string) or
+      String.contains?(slug(project), String.downcase(string))
+  end
+
+  defp description_contains?(project, string) do
+    String.contains?(String.downcase(project.description || ""), String.downcase(string))
+  end
 end
 
 defmodule LinearCli.Linear.Project.Read.All do

@@ -1,0 +1,378 @@
+defmodule LinearCli.CLI.IssueCommandsTest do
+  use ExUnit.Case, async: true
+  import ExUnit.CaptureIO
+
+  alias LinearCli.CLI.Commands
+  alias LinearCli.Linear.User
+
+  # Dispatches to one of `pairs` ({substring, response_map}) based on which
+  # substring appears in the outgoing GraphQL document - see
+  # `LinearCli.CLI.IssueHelpersTest`'s own `stub_responses/1` for why one
+  # stub per test is enough to drive an entire multi-call flow.
+  defp stub_responses(pairs) do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query} = Jason.decode!(body)
+
+      case Enum.find(pairs, fn {match, _resp} -> String.contains?(query, match) end) do
+        {_match, response} -> Req.Test.json(conn, response)
+        nil -> raise "no stub matched query: #{query}"
+      end
+    end)
+  end
+
+  defp team_map, do: %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+
+  defp me_map(overrides \\ %{}) do
+    Map.merge(
+      %{"id" => "u1", "name" => "Ada", "email" => "ada@x.com", "teams" => %{"nodes" => []}},
+      overrides
+    )
+  end
+
+  defp label_response(names) do
+    %{
+      "data" => %{
+        "issueLabels" => %{
+          "edges" =>
+            Enum.map(names, fn name ->
+              %{
+                "node" => %{
+                  "id" => "l-#{name}",
+                  "name" => name,
+                  "description" => nil,
+                  "isGroup" => false
+                }
+              }
+            end)
+        }
+      }
+    }
+  end
+
+  defp project_map(id, name) do
+    %{
+      "id" => id,
+      "name" => name,
+      "content" => nil,
+      "slugId" => "abc",
+      "description" => nil,
+      "url" => "https://linear.app/x/project/#{id}"
+    }
+  end
+
+  defp team_projects(projects),
+    do: %{"data" => %{"team" => %{"projects" => %{"nodes" => projects}}}}
+
+  defp issue_map(overrides \\ %{}) do
+    Map.merge(
+      %{
+        "id" => "i1",
+        "identifier" => "CRY-1",
+        "title" => "Fix the thing",
+        "branchName" => "cry-1-fix-the-thing",
+        "description" => "It is broken",
+        "assignee" => nil,
+        "team" => team_map(),
+        "comments" => %{"nodes" => []}
+      },
+      overrides
+    )
+  end
+
+  defp issue_updated(overrides \\ %{}) do
+    %{"data" => %{"issueUpdate" => %{"issue" => issue_map(overrides)}}}
+  end
+
+  defp comment_created do
+    %{
+      "data" => %{"commentCreate" => %{"comment" => %{"id" => "c1", "body" => "x", "url" => "u"}}}
+    }
+  end
+
+  defp workflow_states(states) do
+    %{"data" => %{"team" => %{"states" => %{"nodes" => states}}}}
+  end
+
+  # Every git-touching test gets a fresh local repo (one commit on "main",
+  # already pushed to/tracking a fresh bare "origin") under
+  # `System.tmp_dir!()` - never the real project working directory. See house
+  # rule 6 and `LinearCli.GitTest`'s own identical setup.
+  defp git_repo! do
+    origin_path = tmp_path("origin")
+    File.mkdir_p!(origin_path)
+    {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
+
+    repo_path = tmp_path("repo")
+    File.mkdir_p!(repo_path)
+    {_output, 0} = System.cmd("git", ["init", "-q"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["config", "user.name", "Test User"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo_path)
+    File.write!(Path.join(repo_path, "README.md"), "hello")
+    {_output, 0} = System.cmd("git", ["add", "README.md"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["commit", "-q", "-m", "init"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["branch", "-M", "main"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["remote", "add", "origin", origin_path], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["push", "-q", "-u", "origin", "main"], cd: repo_path)
+
+    on_exit(fn ->
+      File.rm_rf!(origin_path)
+      File.rm_rf!(repo_path)
+    end)
+
+    repo_path
+  end
+
+  defp tmp_path(prefix) do
+    Path.join(
+      System.tmp_dir!(),
+      "linear_cli_issue_commands_test_#{prefix}_#{System.unique_integer([:positive, :monotonic])}"
+    )
+  end
+
+  describe "issue create (Ruby: commands/issue/create.rb)" do
+    test "resolves every field, declines to take it, and displays the created issue" do
+      stub_responses([
+        {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
+        {"issueLabels", label_response(["urgent"])},
+        {"projects(first: 100)", team_projects([project_map("p1", "Manhattan Rollout")])},
+        {"issueCreate",
+         %{
+           "data" => %{
+             "issueCreate" => %{
+               "issue" =>
+                 issue_map(%{
+                   "id" => "i2",
+                   "identifier" => "CRY-2",
+                   "title" => "New thing",
+                   "branchName" => "cry-2-new-thing",
+                   "description" => "Some description"
+                 })
+             }
+           }
+         }}
+      ])
+
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "create",
+                     "--title",
+                     "New thing",
+                     "--description",
+                     "Some description",
+                     "--team",
+                     "ENG",
+                     "-l",
+                     "urgent",
+                     "--project",
+                     "Manhattan Rollout"
+                   ])
+        end)
+
+      assert output =~ "Do you want to take this issue?"
+      assert output =~ "CRY-2"
+      assert output =~ "New thing"
+    end
+
+    test "--dev still checks out and pushes the new issue's branch after declining to take it" do
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      created_issue =
+        issue_map(%{
+          "id" => "i2",
+          "identifier" => "CRY-2",
+          "title" => "New thing",
+          "branchName" => "cry-2-new-thing",
+          "description" => "Some description",
+          "assignee" => me_map()
+        })
+
+      stub_responses([
+        {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
+        {"issueLabels", label_response(["urgent"])},
+        {"projects(first: 100)", team_projects([project_map("p1", "Manhattan Rollout")])},
+        {"issueCreate", %{"data" => %{"issueCreate" => %{"issue" => created_issue}}}},
+        {"issue(id: $id)", %{"data" => %{"issue" => created_issue}}}
+      ])
+
+      result = %{
+        options: %{
+          title: "New thing",
+          description: "Some description",
+          team: "ENG",
+          labels: ["urgent"],
+          project: "Manhattan Rollout",
+          output: "text"
+        },
+        flags: %{develop: true}
+      }
+
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok = Commands.issue_create(result, cwd: repo, me: me)
+        end)
+
+      assert output =~ "Checked out branch cry-2-new-thing"
+      assert output =~ "Upstream branch not found, pushing local cry-2-new-thing to origin"
+      assert output =~ "Set upstream to origin/cry-2-new-thing"
+      assert output =~ "Ready to develop!"
+    end
+  end
+
+  describe "issue develop (Ruby: commands/issue/develop.rb)" do
+    test "resolves/self-assigns the issue, checks out its branch, and pulls" do
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      stub_responses([
+        {"issue(id: $id)",
+         %{"data" => %{"issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})}}}
+      ])
+
+      result = %{args: %{issue_id: "CRY-1"}}
+
+      output =
+        capture_io(fn ->
+          assert :ok = Commands.issue_develop(result, cwd: repo, me: me)
+        end)
+
+      assert output =~ "You are already assigned CRY-1"
+      assert output =~ "Checked out branch main"
+      assert output =~ "Ready to develop!"
+      refute output =~ "Upstream branch not found"
+    end
+
+    test "pushes a new branch and sets its upstream when the branch has no tracking branch yet" do
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      stub_responses([
+        {"issue(id: $id)",
+         %{
+           "data" => %{
+             "issue" =>
+               issue_map(%{"branchName" => "cry-1-fix-the-thing", "assignee" => me_map()})
+           }
+         }}
+      ])
+
+      result = %{args: %{issue_id: "CRY-1"}}
+
+      output =
+        capture_io(fn ->
+          assert :ok = Commands.issue_develop(result, cwd: repo, me: me)
+        end)
+
+      assert output =~ "Checked out branch cry-1-fix-the-thing"
+      assert output =~ "Upstream branch not found, pushing local cry-1-fix-the-thing to origin"
+      assert output =~ "Set upstream to origin/cry-1-fix-the-thing"
+      assert output =~ "Ready to develop!"
+    end
+  end
+
+  describe "issue pr (Ruby: commands/issue/pr.rb)" do
+    test "checks out the issue's branch (no pull/push) and opens a PR via the injectable runner" do
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      stub_responses([
+        {"issue(id: $id)",
+         %{"data" => %{"issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})}}}
+      ])
+
+      result = %{
+        args: %{issue_id: "CRY-1"},
+        options: %{title: "fix: CRY-1 - Fix the thing", description: "body"}
+      }
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_pr(result,
+                     cwd: repo,
+                     me: me,
+                     runner: fn title, body -> "gh said: #{title} (#{body})" end
+                   )
+        end)
+
+      assert output =~ "Checked out branch main"
+      assert output =~ "gh said: fix: CRY-1 - Fix the thing (body)"
+      refute output =~ "Ready to develop!"
+    end
+  end
+
+  describe "issue take (Ruby: commands/issue/take.rb)" do
+    test "self-assigns unassigned issues and warns, but doesn't abort, on an unknown id" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+        variables = decoded["variables"] || %{}
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => me_map()}})
+
+          query =~ "issue(id: $id)" and variables["id"] == "CRY-1" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map(%{"assignee" => nil})}})
+
+          query =~ "issue(id: $id)" and variables["id"] == "NOPE" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => nil}})
+
+          query =~ "issueUpdate" ->
+            Req.Test.json(conn, issue_updated(%{"assignee" => me_map()}))
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "take", "CRY-1", "nope"])
+        end)
+
+      assert output =~ "Assigning issue CRY-1 to ya"
+      assert output =~ "No issue found with id nope"
+      assert output =~ "CRY-1"
+    end
+  end
+
+  describe "issue update (Ruby: commands/issue/update.rb)" do
+    test "--close comments with the given reason, then closes the issue" do
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}},
+        {"commentCreate", comment_created()},
+        {"states {",
+         workflow_states([
+           %{"id" => "s1", "name" => "Done", "position" => 1.0, "type" => "completed"}
+         ])},
+        {"issueUpdate", issue_updated()}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "update", "--close", "--reason", "Done", "CRY-1"])
+        end)
+
+      assert output =~ "Comment added to CRY-1"
+      assert output =~ "CRY-1 was closed"
+    end
+
+    test "with no issue ids, exits 22 (Ruby: raise SmellsBad -> exit 22)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "update"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No issue IDs provided!"
+      assert output =~ "This smells bad! Bailing."
+    end
+  end
+end

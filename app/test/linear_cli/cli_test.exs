@@ -148,4 +148,47 @@ defmodule LinearCli.CLITest do
     version = to_string(Application.spec(:linear_cli, :vsn))
     assert capture_io(fn -> LinearCli.CLI.main(["version"]) end) =~ version
   end
+
+  test "--develop and --butwhy are rewritten to their canonical --dev/--reason spellings" do
+    # Ruby's create.rb declares `--dev` with alias `--develop`, and update.rb's
+    # `--reason` has alias `--butwhy` - both real, user-facing spellings.
+    # Optimus flags/options support exactly one `long:` name each (no alias
+    # mechanism), so LinearCli.CLI rewrites the secondary spelling itself
+    # before Optimus ever parses it. Testing the rewrite directly (rather
+    # than driving a full `issue create`/`issue update` flow through
+    # main/1) avoids having to stub an entire interactive prompt chain just
+    # to prove an argv token got renamed.
+    assert LinearCli.CLI.normalize_aliases(["issue", "create", "--develop"]) ==
+             ["issue", "create", "--dev"]
+
+    assert LinearCli.CLI.normalize_aliases(["issue", "update", "CRY-1", "--butwhy", "x"]) ==
+             ["issue", "update", "CRY-1", "--reason", "x"]
+
+    assert LinearCli.CLI.normalize_aliases(["whoami"]) == ["whoami"]
+  end
+
+  test "a catch-all error halts with exit code 88" do
+    # A malformed API response (neither "data" nor "errors") makes
+    # LinearCli.Api return {:error, {:unexpected_response, body}}, which Ash
+    # wraps into a generic %Ash.Error.Unknown{} matching neither the
+    # not-found nor smells_bad handle_error/3 clauses - it should fall
+    # through to the catch-all. This module is async: true, so (unlike an
+    # env-var-based approach, which would race with every other
+    # concurrently-running test file that needs LINEAR_API_KEY present -
+    # exactly the class of bug this codebase already hit and fixed once)
+    # a stubbed response is the safe way to trigger this path.
+    Req.Test.stub(LinearCli.Api, fn conn -> Req.Test.json(conn, %{"wat" => true}) end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output =
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(["whoami"], halt)
+      end)
+
+    assert_received {:halted, 88}
+    assert output =~ "What the heck is this?"
+    assert output =~ "** WTH? Cannot Continue **"
+  end
 end

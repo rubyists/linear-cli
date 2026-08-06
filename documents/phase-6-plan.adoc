@@ -1,0 +1,68 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 07, 2026
+:my-title: Phase 6 plan: write/mutation commands
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Correction to the initial plan
+
+documents/initial-plan.adoc's Command Inventory table lists `project add`
+and `project update` as real Ruby commands. They aren't — the actual
+`vendor/ruby-linear-cli/lib/linear/commands/project/` directory only
+contains `list.rb`. `initial-plan.adoc` is treated as a historical snapshot
+and isn't edited after the fact; this document is where that correction and
+the real Phase 6 scope live instead.
+
+== Actual Phase 6 scope
+
+Verified directly against `vendor/ruby-linear-cli/lib/linear/commands/issue/`
+(and `lib/linear/commands/issue.rb`'s shared `CLI::Issue` helpers,
+`lib/linear/cli/what_for.rb`, `lib/linear/cli/projects.rb`,
+`lib/linear/cli/sub_commands.rb`). Five commands, no project write commands
+exist to port:
+
+[cols="1,3", options="header"]
+|===
+| Command | Ruby behavior
+| `issue create` | Prompts for title/description/team/labels/project (whichever weren't passed as flags), creates the issue, optionally self-assigns (`prompt.yes?`) and runs `develop`
+| `issue develop <id>` | Self-assigns if unassigned, `git checkout` the issue's branch, push/set-upstream if new
+| `issue pr <id>` | Self-assigns if unassigned, checks out the branch, shells to `gh pr create`
+| `issue take <id...>` | Self-assigns one or more issues, skipping (with a warning) any not found
+| `issue update <id...>` | Dispatches per issue on flags: `-m` comment, `--close`/`--cancel` (with `--reason`/`--trash`), `-p` move to project; warns "no action taken" if nothing matched
+|===
+
+== Building blocks needed (none exist yet)
+
+* *Git wrapper* — `System.cmd("git", ...)`, replacing the `git` gem calls in
+  `sub_commands.rb` (`current_branch`, `branch_for`, `pull_or_push_new_branch!`,
+  `default_branch`).
+* *Owl-based prompt module* — replacing `TTY::Prompt` (`ok`/`warn`/`say`/`ask`/
+  `yes?`/`select`/`multi_select`) and `TTY::Editor` (`Owl.IO.open_in_editor/1,2`,
+  already verified in Phase 0/2's usage-rules work).
+* *Issue mutations* — `issueCreate`, `issueUpdate` (covers close/cancel/assign/
+  attach-project - Ruby reuses one mutation with different `input` shapes),
+  `commentCreate`. None of these exist on `LinearCli.Linear.Issue` yet; Phase 2
+  only built read actions.
+* *Project fuzzy matching* — Ruby's `Project#match_score?`/`#slug` and
+  `CLI::Projects#project_for` (exact match wins outright, otherwise prompts a
+  select list scored by relevance). Needed by both `issue create -p` and
+  `issue update -p`.
+* *`WhatFor` port* — `title_for`/`description_for`/`team_for`/`labels_for`/
+  `reason_for`/`comment_for`/`pr_title_for`/`pr_description_for`/`pr_type_for`/
+  `pr_scope_for` as plain functions over the new prompt module.
+
+== Sequencing
+
+Build the blocks above first (each is reusable across all five commands),
+then wire the five commands against them, starting with `issue take` (no
+prompting, smallest surface) to validate the git-free path before touching
+anything interactive.

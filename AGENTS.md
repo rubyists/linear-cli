@@ -5,7 +5,10 @@ and best practices for agents to follow.
 
 ## The Plan
 
-- Initial Plan: documents/initial-plan.adoc
+- Initial Plan: documents/initial-plan.adoc (historical snapshot - not
+  edited after the fact; corrections and later-phase plans live in their
+  own documents instead)
+- Phase 6 Plan: documents/phase-6-plan.adoc
 
 ## Standards
 

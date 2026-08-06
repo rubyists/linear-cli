@@ -4,8 +4,8 @@ defmodule LinearCli.CLI.Commands do
   result. Ported from vendor/ruby-linear-cli/lib/linear/commands/**.
   """
 
-  alias LinearCli.CLI.Display
-  alias LinearCli.Linear
+  alias LinearCli.CLI.{Display, IssueHelpers, Prompt}
+  alias LinearCli.{Git, Linear}
 
   @doc "Ported from commands/whoami.rb."
   def whoami(%{flags: flags, options: options}) do
@@ -61,4 +61,211 @@ defmodule LinearCli.CLI.Commands do
       :ok
     end
   end
+
+  @doc """
+  Ported from commands/issue/create.rb: resolves every field
+  (`LinearCli.CLI.IssueHelpers.make_da_issue!/1`), optionally self-assigns it
+  (`prompt.yes?('Do you want to take this issue?')`), displays it, then, if
+  `--dev` was given, chains straight into the same flow as `issue_develop/2`
+  (Ruby: `Rubyists::Linear::CLI::Issue::Develop.new.call(issue_id: issue.id,
+  **options)`).
+
+  `opts` isn't part of Ruby's `call(**options)` arity - it exists purely to
+  inject test doubles into whatever this command chains into: `:me`
+  (`gimme_da_issue!/2`, both for the self-assign prompt and, if `--dev`
+  fires, `run_develop/2`'s own re-fetch), `:cwd`
+  (`LinearCli.Git.checkout_branch/2`/`pull_or_push_new_branch!/2`, only
+  reached with `--dev`). Real callers (`LinearCli.CLI.main/2`) omit it.
+  """
+  @spec issue_create(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_create(result, opts \\ [])
+
+  def issue_create(%{options: options, flags: flags}, opts) do
+    create_opts = [
+      title: options.title,
+      description: options.description,
+      team: options.team,
+      labels: options.labels,
+      project: options.project
+    ]
+
+    with {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
+         :ok <- maybe_take(issue, opts) do
+      Display.show(issue, %{output: options.output})
+      if flags.develop, do: run_develop(issue.id, opts), else: :ok
+    end
+  end
+
+  defp maybe_take(issue, opts) do
+    if Prompt.yes?("Do you want to take this issue?") do
+      case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+        {:ok, _updated} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Ported from commands/issue/develop.rb: resolves/self-assigns `issue_id`
+  (`LinearCli.CLI.IssueHelpers.gimme_da_issue!/2`), checks out its
+  `branch_name` (creating it first if it doesn't exist locally yet), then
+  pulls it (or, if there's no upstream tracking branch yet, pushes it to
+  `origin` and sets one up).
+
+  `opts` (this port's addition, not part of Ruby's `call(issue_id:,
+  **options)`) forwards to `LinearCli.Git.checkout_branch/2`/
+  `pull_or_push_new_branch!/2` (`:cwd`) and
+  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`) - pass overrides in
+  tests so this never shells out to real git or hits a real `viewer` query;
+  real callers omit it.
+  """
+  @spec issue_develop(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_develop(result, opts \\ [])
+  def issue_develop(%{args: %{issue_id: issue_id}}, opts), do: run_develop(issue_id, opts)
+
+  defp run_develop(issue_id, opts) do
+    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+         {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
+      Prompt.ok("Checked out branch #{issue.branch_name}")
+      finish_pull_or_push(issue.branch_name, opts)
+    end
+  end
+
+  # Ported from `SubCommands#pull_or_push_new_branch!`'s own prompt calls
+  # (`prompt.warn`/`prompt.ok`, printed around the push+set-upstream fallback
+  # only) plus `Issue::Develop#call`'s trailing `prompt.ok 'Ready to
+  # develop!'` (printed unconditionally, after either branch).
+  defp finish_pull_or_push(branch_name, opts) do
+    case Git.pull_or_push_new_branch!(branch_name, opts) do
+      {:ok, {:pulled, _output}} ->
+        Prompt.ok("Ready to develop!")
+        :ok
+
+      {:ok, {:pushed_new_branch, _branch_name}} ->
+        Prompt.warn("Upstream branch not found, pushing local #{branch_name} to origin")
+        Prompt.ok("Set upstream to origin/#{branch_name}")
+        Prompt.ok("Ready to develop!")
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
+  Ported from commands/issue/pr.rb: resolves/self-assigns `issue_id`, checks
+  out its branch (creating it first if needed - no pull/push here, unlike
+  `issue_develop/2`), then opens a PR via
+  `LinearCli.CLI.IssueHelpers.issue_pr/2`.
+
+  `opts` (this port's addition): `:cwd` (forwarded to
+  `LinearCli.Git.checkout_branch/2`), `:me` (forwarded to
+  `gimme_da_issue!/2`), `:runner` (forwarded to `issue_pr/2`, so this never
+  shells out to a real `gh` in tests). Real callers omit it.
+  """
+  @spec issue_pr(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_pr(result, opts \\ [])
+
+  def issue_pr(%{args: %{issue_id: issue_id}, options: options}, opts) do
+    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+         {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
+      Prompt.ok("Checked out branch #{issue.branch_name}")
+
+      pr_opts =
+        [title: options.title, description: options.description]
+        |> maybe_put(:runner, opts[:runner])
+
+      IssueHelpers.issue_pr(issue, pr_opts)
+    end
+  end
+
+  defp maybe_put(list, _key, nil), do: list
+  defp maybe_put(list, key, value), do: Keyword.put(list, key, value)
+
+  @doc """
+  Ported from commands/issue/take.rb: self-assigns every issue id in
+  `unknown` (Ruby's `issue_ids:`, a variadic positional argument - Optimus
+  has no declared-arity equivalent to `type: :array` positional args, so,
+  like `issue_list/1`'s own `ids`, it's captured via the subcommand's
+  `allow_unknown_args: true` + the parse result's `unknown` list), skipping
+  (and warning about) any id that doesn't exist rather than aborting the
+  whole batch - matching Ruby's `rescue NotFoundError => e ... next` inside
+  its `filter_map`.
+
+  `opts` (this port's addition) forwards to
+  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`); real callers omit
+  it.
+  """
+  @spec issue_take(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_take(result, opts \\ [])
+
+  def issue_take(%{unknown: issue_ids, options: options}, opts) do
+    with {:ok, updates} <- take_issues(issue_ids, opts) do
+      Display.show(updates, %{output: options.output})
+      :ok
+    end
+  end
+
+  defp take_issues(issue_ids, opts) do
+    issue_ids
+    |> Enum.reduce_while({:ok, []}, fn issue_id, {:ok, acc} ->
+      case IssueHelpers.gimme_da_issue!(issue_id, opts) do
+        {:ok, issue} ->
+          {:cont, {:ok, [issue | acc]}}
+
+        {:error, %Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}} ->
+          Prompt.warn("No issue found with id #{id}")
+          {:cont, {:ok, acc}}
+
+        {:error, reason} ->
+          {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, acc} -> {:ok, Enum.reverse(acc)}
+      error -> error
+    end
+  end
+
+  @doc """
+  Ported from commands/issue/update.rb: looks up every issue id in `unknown`
+  (see `issue_take/2`'s doc for why this is a variadic positional captured
+  via `unknown` rather than a declared Optimus arg) and dispatches
+  `LinearCli.CLI.IssueHelpers.update_issue/2` against each, per whichever
+  flags/options were given.
+
+  Ports `raise SmellsBad, 'No issue IDs provided!' if issue_ids.empty?` as
+  `{:error, {:smells_bad, "No issue IDs provided!"}}` (mapped to exit 22 by
+  `LinearCli.CLI.handle_error/3`). Ruby's second guard - `raise SmellsBad,
+  '...' if options[:pr] && issue_ids.size > 1` - has no equivalent here:
+  the real `update.rb` never actually registers a `--pr` option/flag
+  (`options[:pr]` can never be truthy there either), so it's dead code in
+  the original and isn't ported.
+  """
+  @spec issue_update(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_update(%{unknown: issue_ids, options: options, flags: flags}) do
+    with :ok <- validate_issue_ids(issue_ids),
+         {:ok, issues} <- Linear.issues(%{ids: issue_ids}) do
+      update_opts = [
+        comment: options.comment,
+        project: options.project,
+        cancel: flags.cancel,
+        close: flags.close,
+        reason: options.reason,
+        trash: flags.trash
+      ]
+
+      Enum.reduce_while(issues, :ok, fn issue, :ok ->
+        case IssueHelpers.update_issue(issue, update_opts) do
+          :ok -> {:cont, :ok}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
+  end
+
+  defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
+  defp validate_issue_ids(_issue_ids), do: :ok
 end

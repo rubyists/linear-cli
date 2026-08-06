@@ -52,4 +52,35 @@ defmodule LinearCli.Linear.TeamTest do
 
     assert {:ok, [%Linear.Team{id: "t1"}, %Linear.Team{id: "t2"}]} = Linear.teams()
   end
+
+  test "find_team/1 looks up a single team by id (Ruby: BaseModel::ClassMethods#find)" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query, "variables" => %{"id" => id}} = Jason.decode!(body)
+
+      assert id == "ENG"
+      assert query =~ "team(id: $id)"
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "team" => %{
+            "id" => "t1",
+            "key" => "ENG",
+            "name" => "Engineering",
+            "description" => nil
+          }
+        }
+      })
+    end)
+
+    assert {:ok, %Linear.Team{id: "t1", key: "ENG"}} = Linear.find_team("ENG")
+  end
+
+  test "find_team/1 surfaces a not-found error when the API returns a nil team" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"team" => nil}})
+    end)
+
+    assert {:error, _not_found} = Linear.find_team("nope")
+  end
 end
