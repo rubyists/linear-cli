@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enforces Conventional Commits on the commit subject line.
+# See app/usage-rules.md for the rule. Activate with:
+#   git config core.hooksPath githooks
+
+repo_top=$(git rev-parse --show-toplevel) || exit 1
+exec "$repo_top/ci/validate_conventional_commit.sh" "$1"

@@ -1,0 +1,335 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 07, 2026
+:my-title: Initial Plan for porting linear-cli to elixir
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goals
+
+* Port `linear-cli` (Ruby, `dry-cli` + `httpx`/`gqli` + `Trailblazer::Operation`) to Elixir.
+* Use the port as a vehicle for learning Elixir/OTP in depth, not just a mechanical
+  transliteration.
+* Use Elixir's concurrency primitives to speed up the parts of the tool that are
+  currently serial for no good reason: fan-out fetches (find-by-ids), and N+1
+  relation hydration (e.g. `issue.team.workflow_states`, `team.labels`, `team.projects`
+  across a list of results).
+* Grow the tool into something that can run small recurring business processes
+  against Linear on our behalf (e.g. monthly project rollover), not just serve
+  as an interactive CLI.
+
+== Non-Goals (for now)
+
+* Full feature parity on day one. Read-only commands land before write/mutation
+  commands, which land before scheduled/recurring workflows.
+* Shell completion parity with `dry-cli-completion`.
+* A TUI. `drafter` (vendored, see below) makes this realistic later, but it's
+  not part of this port.
+
+== Source Repository Reference
+
+The Ruby original is vendored as a git submodule at `vendor/ruby-linear-cli`
+(`rubyists/linear-cli`), alongside the framework submodules described below.
+Key files referenced throughout this plan:
+
+[cols="1,2", options="header"]
+|===
+| Ruby file (relative to `vendor/ruby-linear-cli/`) | Responsibility
+| `lib/linear/api.rb` | GraphQL POST + retry, `LINEAR_API_KEY` handling
+| `lib/linear/models/base_model.rb` + `base_model/class_methods.rb` | Metaprogrammed relations (`many_to_one`/`one_to_many`), cursor pagination (`.all`)
+| `lib/linear/fragments.rb`, per-model `Base` fragments | GraphQL fragment definitions via the `gqli` DSL
+| `lib/linear/cli.rb`, `cli/sub_commands.rb`, `cli/caller.rb`, `cli/watcher.rb` | `dry-cli` registry, directory-glob subcommand loading, centralized error-to-exit-code handling
+| `lib/linear/cli/what_for.rb` | Interactive prompt helper methods (`*_for`)
+| `lib/linear/commands/**` | One file per (sub)command
+| `lib/linear/operations/**` | `Trailblazer::Operation` business logic steps
+|===
+
+== Architecture Decisions
+
+This project vendors reference copies of its key dependencies (and the Ruby
+original) as git submodules under `vendor/`. These are *not* what
+`app/mix.exs` depends on — actual builds pull ordinary versioned releases
+from Hex, generally tracking latest. The submodules exist purely so source
+and docs can be read locally instead of fetched from the web, keeping agent
+context/token usage down. The dependency direction is Hex → vendor, not the
+other way: a `mix vendor.sync` task (see Phase 0) checks each submodule out
+to the tag matching what `mix.lock` actually resolved, so the reference
+copies track our real dependencies instead of the plan being pinned to
+whatever a submodule happened to be at when we last read it:
+
+[cols="1,1,2", options="header"]
+|===
+| Submodule | Upstream | Role in this project
+| `vendor/ash` | `ash-project/ash` (v3.31.x) | Local reference copy for docs/source lookup; Hex `ash` is the real dependency
+| `vendor/oban` | `oban-bg/oban` (v2.23.x) | Local reference copy for docs/source lookup; Hex `oban` is the real dependency
+| `vendor/usage_rules` | `ash-project/usage_rules` (v1.2.x) | Local reference copy for docs/source lookup; Hex `usage_rules` is the real dependency
+| `vendor/Continuum` | `Yyeger/Continuum` (v0.7.1) | Local reference copy; *not* in scope yet (see below)
+| `vendor/optimus` | `savonarola/optimus` (v0.6.0) | Local reference copy for docs/source lookup; Hex `optimus` is the real dependency
+| `vendor/owl` | `fuelen/owl` (v0.13.1) | Local reference copy for docs/source lookup; Hex `owl` is the real dependency
+| `vendor/marcli` | `Oeditus/marcli` (v0.3.1) | Local reference copy for docs/source lookup; Hex `marcli` is the real dependency
+| `vendor/drafter` | `jaman/drafter` (v0.3.2) | Local reference copy; not used in this port, kept for a possible future TUI (see below)
+| `vendor/ruby-linear-cli` | `rubyists/linear-cli` | The Ruby original being ported — source of truth for behavior parity, referenced directly rather than fetched
+|===
+
+=== Domain layer: Ash
+
+Ash resources and custom actions replace `BaseModel` + `Trailblazer::Operation`.
+There is no real data layer here in the Ash sense — Linear's GraphQL API *is*
+the backing store, so each resource's actions are implemented to call the
+Linear API directly (comparable to using `Ash.DataLayer.Simple` with manual
+action implementations) rather than backing onto Ecto/Postgres.
+
+Rough resource list, mirroring the Ruby models: `Issue`, `Project`, `Team`,
+`User`, `Label`, `Comment`, `WorkflowState`.
+
+=== Concurrency: Reactor
+
+`Ash` depends on `reactor` (`~> 1.0`) already, which gives us `Ash.Reactor`
+for free. This is the mechanism for the concurrency goal stated above, used
+*within a single CLI invocation*:
+
+* `issue list CRY-1 CRY-2 ...` — the Ruby version does
+  `params[:ids].map { |id| Issue.find(id) }` serially. Fan this out as
+  concurrent Reactor steps (or a plain `Task.async_stream` if a full Reactor
+  is overkill for a given command).
+* Relation hydration that's currently N+1 in Ruby (`issue.team.workflow_states`,
+  `team.labels`, `team.projects` across a result set) — batch these
+  concurrently instead of one-at-a-time.
+* Multi-resource lookups in write commands (e.g. `project add` resolving
+  team + labels + project independently) — fire concurrently, join results.
+
+NOTE: Cursor-based pagination (Ruby's `ClassMethods#all`) is *not* a
+concurrency target — each page's `after` cursor depends on the previous
+page's response, so that loop stays sequential per resource.
+
+=== Scheduled/recurring work: Oban + `Oban.Plugins.Cron`
+
+The original motivating example: automatically move every open issue from
+one monthly project to the next (e.g. `PAYMENTS SWAT August 2026` →
+`PAYMENTS SWAT September 2026`).
+
+`Oban.Plugins.Cron` provides the recurring trigger (crontab syntax). Each
+cron-triggered job is a plain `Oban.Worker` whose `perform/1` calls into an
+Ash action — which may itself use Reactor internally to move N issues
+concurrently.
+
+Oban supports `Oban.Engines.Lite` (SQLite3-backed), so this does not require
+standing up a Postgres server the way a naive Oban setup or Continuum would —
+a real advantage for a tool that's primarily a local CLI. Oban's own
+job-persistence and retry semantics are sufficient durability for a batch job
+that completes in seconds to minutes; we do not need saga-style compensation
+for this use case.
+
+=== Durable sagas: Continuum — deferred
+
+`Continuum` (OTP-native, Postgres-backed durable execution engine, sagas with
+`compensate`/`compensate_all`, crash-resistant replay) was evaluated and is
+vendored for reference, but is **out of scope for now**:
+
+* It requires its own Ecto repo + Postgres + a long-running supervision tree
+  (`Continuum.children()`) — a real infrastructure commitment versus the
+  stateless, run-and-exit nature of the CLI today.
+* As of v0.7.1, `Continuum.schedule_at/4` is one-shot only; recurring/calendar
+  schedules are explicitly called out in its own docs as "a later API slice."
+  Oban's cron plugin already covers the recurring case we actually need.
+* No framework-level integration exists between Ash and Continuum (verified
+  in `vendor/Continuum`'s `mix.exs` and guides — no Ash dependency, no
+  mention of Ash anywhere in the docs). Combining them would mean hand-writing
+  the glue (a `Continuum.Activity` whose `run/1` calls an Ash action) for no
+  immediate benefit.
+
+Revisit if we outgrow Oban — e.g. a workflow that needs to wait on a human
+signal over multiple days, or true multi-step rollback semantics.
+
+=== Agent tooling: `usage_rules`
+
+`vendor/usage_rules` (from the Ash project) manages `AGENTS.md` by pulling in
+`usage-rules.md`/`usage-rules/` content from our dependencies, and can
+generate Claude Code skills from the same source. Once `app/mix.exs` exists:
+
+* Add `{:usage_rules, "~> 1.2", only: [:dev]}` and `{:igniter, "~> 0.6", only: [:dev]}`.
+* Configure the `:usage_rules` project key to pull in rules for `:ash`,
+  `~r/^ash_/`, and `:oban` into `AGENTS.md`.
+* Run `mix usage_rules.sync` as part of onboarding any new Ash/Oban extension,
+  so agent guidance stays current with the actual vendored dependency
+  versions instead of going stale.
+
+=== CLI arg parsing: `Optimus`
+
+`Optimus` (verified in `vendor/optimus`) replaces `dry-cli` for argument
+parsing and subcommand dispatch. Its `subcommands:` key is recursive —
+`Optimus.Builder.build_subcommands/2` builds each subcommand as a full spec
+that can itself declare `subcommands:` — so it supports the two-level
+`issue list` / `project add` structure the Ruby CLI uses. Global flags
+(`--output`, `--debug`) map to Optimus's `global: true` option, matching how
+`Caller` currently injects them onto every command.
+
+=== Interactive prompts & editor: `Owl`
+
+`Owl` (verified in `vendor/owl`) replaces both `tty-prompt` and `tty-editor`
+in one dependency: `Owl.IO.select/2` and `Owl.IO.multiselect/2` cover the
+Ruby `prompt.select`/`prompt.multi_select` calls in `WhatFor`,
+`Owl.IO.input/1`/`Owl.IO.confirm/1` cover `prompt.ask`, and
+`Owl.IO.open_in_editor/1,2` (uses `ELIXIR_EDITOR`, same `__FILE__` convention
+as `IEx.Helpers.open/1`) replaces the `TTY::Editor.open` calls in
+`editor_for`/`pr_description_for`. No custom `Prompt` module needed.
+
+=== Terminal markdown rendering: `marcli`
+
+`marcli` (verified in `vendor/marcli`) parses CommonMark via `MDEx` and
+renders it straight to ANSI-escaped terminal output: headings, bold/italic/
+strikethrough/inline code, bullet and ordered lists, code blocks (with
+syntax highlighting when a `makeup_<lang>` lexer is loaded), block quotes,
+thematic breaks, links, images, and task-list items. That covers everything
+Ruby's `Issue#parsed_description`/`#display_comments` needed from
+`tty-markdown` directly — this is a like-for-like replacement, not a gap.
+
+=== Future TUI option: `drafter`
+
+`drafter` (verified in `vendor/drafter`) is a LiveView-inspired TUI framework
+(30+ widgets, declarative render/`handle_event` model, headless testing,
+optional remote/SSH serving). Not used in this port — every command here is
+a run-and-exit CLI invocation — but it's a credible option later for a richer
+interactive mode (e.g. a live-updating issue browser) without reaching for an
+external tool. Note it requires Elixir ~> 1.18 and OTP 28+, which would raise
+the floor `mise.toml` pins today (`elixir = "latest"`, no explicit OTP
+constraint) if adopted.
+
+== Ruby → Elixir Mapping
+
+[cols="1,2,2", options="header"]
+|===
+| Concern | Ruby | Elixir
+| HTTP + retry | `httpx` + custom `RETRY_AFTER` lambda | `Req` (Finch-backed, built-in `:retry` with backoff)
+| GraphQL query building | `gqli` DSL + `Fragments` module | Plain heredoc query strings as module attributes, GraphQL `$variables` (not string interpolation — closes the injection risk present in Ruby's `Issue#add_comment`)
+| JSON | stdlib `JSON` | `Jason`
+| Models/relations | `BaseModel` + `many_to_one`/`one_to_many` macros | Ash resources + actions
+| Business logic | `Trailblazer::Operation` steps | Ash actions, with `Ash.Reactor`/`Reactor` for concurrent fan-out
+| CLI dispatch | `dry-cli` registry + directory globbing | `Optimus` (verified in `vendor/optimus`: subcommands nest recursively — `build_subcommands/2` builds each subcommand as a full spec with its own `subcommands:` — matching the `issue list`/`project add` two-level structure)
+| Prompts/select | `tty-prompt` (vim-style j/k) | `Owl.IO.select/2`, `Owl.IO.multiselect/2`, `Owl.IO.input/1`, `Owl.IO.confirm/1`
+| Editor launch | `tty-editor` | `Owl.IO.open_in_editor/1,2` (uses `ELIXIR_EDITOR`, same `__FILE__` convention as `IEx.Helpers.open/1`)
+| Markdown render | `tty-markdown` | `marcli` (CommonMark → ANSI, syntax-highlighted code blocks via `makeup_*`)
+| Git ops | `git` gem | `System.cmd("git", args)` wrapper
+| Logging | `semantic_logger` | Stdlib `Logger` + custom formatter, driven by the same `--debug` levels
+| Errors → exit codes | `SmellsBad`/`NotFoundError`/`NoKeyError` rescued in `Caller` | Custom exceptions or tagged tuples, rescued once at the CLI entry point, same exit-code contract (22/66/88)
+| Console/REPL | `lc console` (mktmpdir + pry) | Dropped — `iex -S mix` already gives this for free
+| Recurring jobs | (none) | `Oban` + `Oban.Plugins.Cron` (`Oban.Engines.Lite`)
+| Distribution | Rubygem, `exe/lc` | `Burrito` release → standalone per-OS binary
+|===
+
+== Command Inventory
+
+[cols="1,2,1", options="header"]
+|===
+| Command | Ruby source (relative to `vendor/ruby-linear-cli/`) | Notes
+| `issue list` | `commands/issue/list.rb`, `operations/issue/list.rb` | Read-only; first target
+| `issue create` | `commands/issue/create.rb` | Needs `Owl` prompts + `Owl.IO.open_in_editor/1,2`
+| `issue develop` | `commands/issue/develop.rb` | Needs git shim
+| `issue take` | `commands/issue/take.rb` | Needs `Owl` prompts
+| `issue update` | `commands/issue/update.rb` | Covers close/cancel/comment/attach-project/pr via `update_issue`
+| `issue pr` | `commands/issue/pr.rb` | Shells to `gh pr create`
+| `project list` | `commands/project/list.rb` | Read-only; first target
+| `project add` | `commands/project/add.rb` | Needs `Owl` prompts
+| `project update` | `commands/project/update.rb` | Needs `Owl` prompts
+| `team list` | `commands/team/list.rb` | Read-only; first target
+| `whoami` | `commands/whoami.rb` | Read-only; first target
+| `version` | `commands/version.rb` | Trivial
+| `console` | `commands/console.rb` | Dropped — use `iex -S mix`
+|===
+
+== Repository Layout
+
+* `app/` — the Mix project root (not yet scaffolded).
+* `vendor/` — git submodules holding local reference copies of `ash`, `oban`,
+  `usage_rules`, `optimus`, `owl`, `marcli`, `Continuum` and `drafter` (the
+  latter two currently unused), and `ruby-linear-cli` (the original Ruby
+  source of truth). These exist purely to avoid fetching docs/source from
+  the web; `app/mix.exs` depends on ordinary Hex releases, not these
+  submodules.
+* `documents/` — planning docs (this file).
+* `AGENTS.md` — index for agent-facing docs; points here, and will grow a
+  `usage_rules`-synced dependency section once Phase 0 lands.
+
+== Phased Roadmap
+
+=== Phase 0 — Scaffold
+
+`mix new app` (or equivalent), add ordinary Hex deps for `ash`, `oban`,
+`usage_rules`, `optimus`, `owl`, and `marcli` — normal version constraints,
+generally tracking latest, *not* pinned to whatever happens to be checked
+out in `vendor/`. Also write a small `mix vendor.sync` task that reads the
+resolved versions from `mix.lock`/`mix.exs` and checks each `vendor/<dep>`
+submodule out to the matching tag, so the reference copies stay aligned with
+whatever we actually depend on instead of drifting. Add `Req`/`Jason`,
+configure `usage_rules`, and run `mix usage_rules.sync`. `LINEAR_API_KEY`
+read from env, same variable name as the Ruby tool for parity.
+
+=== Phase 1 — API client core
+
+`LinearCli.Api`: POST to `\https://api.linear.app/graphql` via `Req`, retry/backoff
+via `Req`'s built-in `:retry` option, `{:ok, data} | {:error, reason}` result
+contract. Port `SmellsBad`/`NotFoundError` equivalents as exceptions or
+tagged-tuple reasons.
+
+=== Phase 2 — Domain resources
+
+`Issue`, `Project`, `Team`, `User`, `Label`, `Comment`, `WorkflowState` as
+Ash resources with actions that call Phase 1's API client, plus the GraphQL
+fragment strings (`Base` fragment per type, `PageInfo` fragment). Nested
+relations decode straight from the already-fetched GraphQL payload, same as
+Ruby — no lazy per-relation fetch needed for data that's already in the
+response.
+
+=== Phase 3 — Read commands
+
+`whoami`, `team list`, `project list`, `issue list`. No prompt/editor/git
+needed yet — fastest path to validating Phases 1–2 end to end. Port cursor
+pagination here (sequential, per the concurrency note above).
+
+=== Phase 4 — CLI dispatch framework
+
+Subcommand tree (`issue`, `project`, `team`, `version`, `whoami`) built with
+`Optimus`'s nested `subcommands:`, global `--output`/`--debug` options
+mirroring `Caller` (declared as Optimus `global: true` flags), wired to a
+real entry point. Central rescue → exit-code mapping.
+
+=== Phase 5 — Concurrency layer
+
+The actual payoff: fan out find-by-ids and N+1 relation hydration via
+Reactor/`Task.async_stream`, per the Architecture Decisions section above.
+Benchmark against the Ruby tool's serial behavior to confirm the win is real
+before calling this phase done.
+
+=== Phase 6 — Write/mutation commands
+
+`issue create/update/take/pr/develop`, `project add/update`. Needs the git
+wrapper module built first (`Owl` already covers prompts/editor). Port
+`WhatFor`'s `*_for` helpers as plain functions.
+
+=== Phase 7 — Scheduled workflows
+
+Oban + `Oban.Plugins.Cron` wiring, starting with the PAYMENTS SWAT-style
+monthly project rollover as the first real recurring job.
+
+=== Phase 8 — Packaging
+
+`Burrito` release config, CI build matrix per target OS.
+
+=== Phase 9 — Tests
+
+ExUnit + `Req.Test`/`Bypass` for stubbing the Linear API.
+
+== Open Questions
+
+None currently — the CLI arg-parsing, prompt/editor, and markdown-rendering
+questions raised in earlier drafts of this plan are resolved (`Optimus`,
+`Owl`, `marcli`, respectively). Revisit this section as new phases surface
+unknowns.
