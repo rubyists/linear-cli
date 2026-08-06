@@ -1,10 +1,8 @@
 defmodule LinearCli.ApiTest do
-  use ExUnit.Case, async: true
-
-  setup do
-    System.put_env("LINEAR_API_KEY", "test-key")
-    on_exit(fn -> System.delete_env("LINEAR_API_KEY") end)
-  end
+  # async: false - the missing-key test below unsets the real (VM-global,
+  # not per-process) LINEAR_API_KEY env var. test_helper.exs sets a default
+  # for the rest of the suite; running this module concurrently with it would race.
+  use ExUnit.Case, async: false
 
   test "returns {:ok, data} on a successful response" do
     Req.Test.stub(LinearCli.Api, fn conn ->
@@ -44,7 +42,10 @@ defmodule LinearCli.ApiTest do
   end
 
   test "returns {:error, :missing_api_key} when LINEAR_API_KEY is unset" do
+    previous = System.get_env("LINEAR_API_KEY")
     System.delete_env("LINEAR_API_KEY")
+    on_exit(fn -> previous && System.put_env("LINEAR_API_KEY", previous) end)
+
     assert LinearCli.Api.call("{ viewer { id } }") == {:error, :missing_api_key}
   end
 
