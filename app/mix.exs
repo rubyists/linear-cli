@@ -3,7 +3,7 @@ defmodule LinearCli.MixProject do
 
   def project do
     [
-      app: :app,
+      app: :linear_cli,
       version: "0.1.0",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
@@ -34,6 +34,9 @@ defmodule LinearCli.MixProject do
       {:marcli, "~> 0.3"},
       {:owl, "~> 0.13"},
       {:optimus, "~> 0.6"},
+      {:req, "~> 0.7"},
+      {:jason, "~> 1.4"},
+      {:plug, "~> 1.0", only: :test},
       {:usage_rules, "~> 1.2", only: [:dev]},
       {:oban, "~> 2.23"},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
