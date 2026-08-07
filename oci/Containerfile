@@ -1,0 +1,23 @@
+# Wraps the already-built Linux x86_64 Burrito binary (see
+# documents/phase-8-plan.adoc) rather than a separate Elixir build stage -
+# one build artifact, reused for both the CLI distribution and this image.
+# Build with ci/build_image.sh (which finds this via its
+# Dockerfile/Containerfile/oci/Containerfile search order - build context
+# is still the repo root, so the COPY path below is unaffected by this
+# file's own location) after app/burrito_out/linear_cli_linux_x86_64
+# already exists (`MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release
+# linear_cli`).
+FROM alpine:3.22
+
+ARG APP_VERSION
+LABEL org.opencontainers.image.version="${APP_VERSION}"
+
+# ca-certificates: Linear's API is HTTPS-only, and Alpine's base image
+# doesn't bundle a CA trust store.
+RUN apk add --no-cache ca-certificates
+
+COPY app/burrito_out/linear_cli_linux_x86_64 /linear_cli
+RUN chmod +x /linear_cli
+
+ENV LINEAR_CLI_DAEMON=true
+ENTRYPOINT ["/linear_cli"]
