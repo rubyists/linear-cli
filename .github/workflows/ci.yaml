@@ -44,6 +44,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # pull_request's default ref is the synthetic refs/pull/N/merge test-merge
+          # commit (subject "Merge <sha> into <sha>"), not the PR branch tip - check
+          # out the real head SHA instead so that commit is never in the validated
+          # range. Falls back to github.sha for non-PR triggers (workflow_dispatch/
+          # workflow_call), where github.event.pull_request is unset.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
         env:
           FETCH_BASE_REF: "true"
