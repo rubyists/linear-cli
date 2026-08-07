@@ -1,0 +1,42 @@
+---
+name: Release
+
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Validations
+    uses: ./.github/workflows/ci.yaml
+
+  release:
+    needs: [validate]
+    name: Create a release
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      -
+        uses: actions/checkout@v7
+        with:
+          fetch-tags: true
+      -
+        uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+  publish:
+    if: needs.release.outputs.release_created == 'true'
+    needs: release
+    name: Build and publish release artifacts
+    uses: ./.github/workflows/burrito-release.yaml
+    with:
+      tag_name: ${{ needs.release.outputs.tag_name }}
+    secrets: inherit
