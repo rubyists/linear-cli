@@ -10,6 +10,7 @@ and best practices for agents to follow.
   own documents instead)
 - Phase 6 Plan: documents/phase-6-plan.adoc
 - Phase 7 Plan: documents/phase-7-plan.adoc
+- Phase 8 Plan: documents/phase-8-plan.adoc
 
 ## Standards
 
