@@ -68,6 +68,13 @@ jobs:
           otp-version: "29.0.3"
           elixir-version: "1.20.3"
       -
+        # Same Burrito build as the `burrito` job above, so it needs the same
+        # pinned Zig (see that job's comment) - missing here would fail this
+        # job's build at `mix release` time even though `burrito` succeeds.
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      -
         run: mix deps.get
         working-directory: app
       -
