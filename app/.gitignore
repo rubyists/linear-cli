@@ -26,3 +26,6 @@ app-*.tar
 # the real distribution target is the Burrito release, see Phase 8).
 /linear_cli
 
+# Local dev SQLite db for Oban (daemon run mode only).
+/oban_dev.db*
+

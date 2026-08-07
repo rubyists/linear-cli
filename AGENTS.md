@@ -9,6 +9,7 @@ and best practices for agents to follow.
   edited after the fact; corrections and later-phase plans live in their
   own documents instead)
 - Phase 6 Plan: documents/phase-6-plan.adoc
+- Phase 7 Plan: documents/phase-7-plan.adoc
 
 ## Standards
 

@@ -1,0 +1,181 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 07, 2026
+:my-title: Phase 7 plan: scheduled workflows (Oban + monthly project rollover)
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+From `documents/initial-plan.adoc`'s original motivating example: automatically
+move every open issue from one monthly project to the next (e.g.
+`PAYMENTS SWAT August 2026` -> `PAYMENTS SWAT September 2026`) on a schedule,
+with no manual intervention. This is the first genuinely new feature in this
+port - Ruby never had scheduled jobs, so there's no source to port from; the
+design decisions below were reached through direct discussion, not derived
+from `vendor/ruby-linear-cli`.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *Source/target project matching*: a configurable prefix (e.g.
+   `"PAYMENTS SWAT"`) plus a computed month/year - the job works out
+   `"<prefix> <last month> <year>"` -> `"<prefix> <this month> <year>"`
+   itself each run. Not hardcoded to one team's naming convention.
+2. *Auto-create the target project* if it doesn't exist yet, rather than
+   requiring it to be created manually ahead of time. Needs a new
+   `LinearCli.Linear.Project` `:create` action - verified against the real
+   schema below, since Ruby never had this either.
+3. *"Open issues"* - already have this for free: `Issue.list`'s existing
+   filter with `mine: false` (bypasses the assignee filter entirely, per
+   `maybe_put_assignee_filter/2`'s fallback clause) and no `unassigned`
+   override. No new query logic needed.
+4. *Moving each issue* - already have this too: reuses
+   `LinearCli.Linear.attach_issue_to_project/2` from Phase 6. Naturally
+   idempotent (setting a project id twice is harmless), so a job re-run
+   after a crash isn't a correctness problem.
+5. *Concurrency* - move issues via `Task.async_stream`, consistent with
+   Phase 5's pattern; this is the phase the original plan explicitly named
+   as motivating the concurrency work in the first place.
+
+== Verified: Linear's `projectCreate` mutation
+
+Checked against `schema/LinearAPI.graphql` (the current schema, added
+specifically so this phase doesn't have to guess):
+
+[source,graphql]
+----
+projectCreate(input: ProjectCreateInput!): ProjectPayload!
+
+input ProjectCreateInput {
+  name: String!       # required
+  teamIds: [String!]! # required - at least the source project's team
+  # ... many other optional fields (color, description, leadId, etc.) -
+  # not needed for this use case
+}
+
+type ProjectPayload {
+  project: Project
+  success: Boolean!
+  lastSyncId: Float!
+}
+----
+
+Mirrors the shape of `issueCreate`/`issueUpdate` already built in Phase 6 -
+same manual-create-action pattern, same `Issue.base_fields`-style re-fetch
+of the created record via `Project.base_fields/0`.
+
+== Verified: the escript boots the *entire* OTP application
+
+Confirmed empirically (not assumed): added a temporary `IO.puts` to
+`LinearCli.Application.start/2`, rebuilt the escript, ran `./linear_cli
+version`, and the print fired. `mix escript.build` starts the full
+`:linear_cli` application (and its dependency tree) before calling
+`LinearCli.CLI.main/1`, for *every* invocation - there is no cheap
+"skip the supervision tree" path by default.
+
+This matters a lot for this phase specifically: naively adding `LinearCli.Repo`
+and `Oban` as children of `LinearCli.Application` would mean every single
+interactive command (`lc whoami`, `lc version`, everything) also opens a
+SQLite connection and boots Oban's full supervision tree (dispatcher, queues,
+the Cron plugin checking for due jobs) - real overhead, and a new failure
+mode where an unrelated command breaks if the SQLite file can't be opened.
+
+=== Architecture: two run modes, one codebase
+
+* *Interactive CLI* (today's escript, eventually Burrito per Phase 8) - stays
+  exactly as it is. `LinearCli.Repo`/`Oban` are *not* started. Zero added
+  overhead, zero new failure modes, for every command that isn't the
+  rollover itself.
+* *Daemon* (`mix release`, using the `start`/`daemon` commands its launcher
+  script already provides - confirmed working via `bin/linear_cli eval` in
+  this same conversation) - a long-lived process that *does* start
+  `LinearCli.Repo` and `Oban`, hosting the `Oban.Plugins.Cron` scheduler
+  persistently. This is the actual point of `mix release` in this project;
+  it was never meant to replace the escript for interactive use.
+* *Gate*: `LinearCli.Application.start/2` checks a plain OS env var
+  (`LINEAR_CLI_DAEMON=true`) to decide whether to include
+  `LinearCli.Repo`/`Oban` in its children list. No config-file layering,
+  no separate release definitions needed - the escript/Burrito binary never
+  sets it, so it keeps today's empty-children behavior; the daemon's startup
+  script sets it before booting.
+
+== Oban setup (verified against `vendor/oban`'s own guides)
+
+* *New deps*: `ecto_sqlite3` (not yet a dependency - currently only
+  optional/transitive via `oban`'s own `mix.lock` entry, never resolved
+  since nothing in *our* deps list requires it yet). `ecto_sql` is already
+  resolved transitively (`oban` requires it directly, non-optional).
+* *Engine*: `Oban.Engines.Lite` (SQLite3) - matches the plan's original
+  reasoning for avoiding Postgres for a primarily-local tool.
+* *Repo*: new `LinearCli.Repo` module
+  (`use Ecto.Repo, otp_app: :linear_cli, adapter: Ecto.Adapters.SQLite3`).
+  Database file location needs a real decision at implementation time - this
+  needs to be a stable, writable path on whatever machine the daemon runs on
+  (not project-relative, since the shipped binary won't have `app/` around
+  it), likely an XDG-style config dir (`~/.local/share/linear_cli/` on
+  Linux, `~/Library/Application Support/linear_cli/` on macOS, or just
+  `~/.linear_cli/` for simplicity - pick one during implementation, it
+  doesn't need pre-deciding here).
+* *Migration*: `mix ecto.gen.migration add_oban_jobs_table`, then
+  `Oban.Migration.up(version: 14)` / `Oban.Migration.down(version: 1)` in the
+  generated file (per `vendor/oban/guides/introduction/installation.md`) -
+  idempotent, versioned, not something we hand-write ourselves.
+* *Config*: `config :linear_cli, Oban, engine: Oban.Engines.Lite, repo:
+  LinearCli.Repo, plugins: [{Oban.Plugins.Cron, crontab: [{"@monthly",
+  LinearCli.Rollover.Worker}]}]` - `@monthly` per
+  `vendor/oban/guides/learning/periodic_jobs.md`'s documented cron aliases
+  (`0 0 1 * *`, midnight on the 1st).
+* *Testing*: `Oban.Testing.perform_job/3` runs a worker's `perform/1`
+  in-process, without touching the database at all (per
+  `vendor/oban/guides/testing/testing_workers.md`) - the rollover logic
+  itself is testable with our existing `Req.Test` stubbing, same as
+  everything else in this codebase. A real SQLite-backed integration test
+  (actually inserting/running a job through Oban) is a separate, lower-
+  priority concern from testing the business logic.
+
+== New building blocks needed
+
+* `LinearCli.Linear.Project` `:create` action (manual create, mirrors
+  `Issue.Create`'s pattern) - `name`, `team_id` (single) -> `teamIds: [team_id]`
+  in the mutation input. Domain interface: `LinearCli.Linear.create_project/2`
+  (or similar - exact naming at implementation time).
+* `LinearCli.Rollover` - plain module, pure/testable logic, no `Oban.Worker`
+  behaviour: given a prefix and "today", compute last month's and this
+  month's project names, find (or auto-create) each, list open issues in
+  the source project, move them concurrently to the target. Kept separate
+  from the worker so it's callable directly (e.g. a future manual `lc
+  project rollover` command, or just easier testing) - same "thin OTP
+  boundary, pure logic underneath" principle already used for
+  `LinearCli.Git`/`LinearCli.CLI.IssueHelpers`.
+* `LinearCli.Rollover.Worker` - thin `Oban.Worker` (`use Oban.Worker`,
+  `perform/1`) delegating straight to `LinearCli.Rollover`.
+* `LinearCli.Repo`, migration, `config/config.exs` Oban block, the
+  `LINEAR_CLI_DAEMON` gate in `LinearCli.Application.start/2`.
+* Month-shift helper: Elixir's `Date` module has no built-in "add N months"
+  (only `Date.add/2`, which shifts by days) - needs a small, explicit
+  `shift_month(date, offset)` handling year rollover (December -> January
+  going forward, and the reverse going back a month).
+* Configuration for the prefix itself (`config :linear_cli, :rollover,
+  prefix: "PAYMENTS SWAT"` or similar) - not hardcoded into the worker.
+
+== Sequencing
+
+1. Oban/Ecto/SQLite plumbing first (deps, `Repo`, migration, config, the
+   `LINEAR_CLI_DAEMON` gate) - verify the daemon boots Oban and the
+   interactive escript still doesn't, before writing any rollover logic.
+2. `Project.create` action + domain interface, tested via `Req.Test` like
+   every other mutation in this codebase.
+3. `LinearCli.Rollover` (pure logic) + tests via `Oban.Testing.perform_job/3`
+   plus `Req.Test` - no real database needed for these.
+4. `LinearCli.Rollover.Worker` (thin wrapper) + cron config wiring.
+5. Manual end-to-end verification: build the daemon release, confirm it
+   boots Oban with the Cron plugin active, confirm the interactive escript
+   still starts with zero added overhead.

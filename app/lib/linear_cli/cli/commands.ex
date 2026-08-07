@@ -33,13 +33,20 @@ defmodule LinearCli.CLI.Commands do
 
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
-    result = if flags.mine, do: Linear.my_projects(), else: Linear.projects()
-
-    with {:ok, projects} <- result do
+    with {:ok, projects} <- projects_for(flags, options) do
       Display.show(projects, %{output: options.output})
       :ok
     end
   end
+
+  defp projects_for(_flags, %{team: team_key}) when is_binary(team_key) do
+    with {:ok, team} <- Linear.find_team(team_key) do
+      Linear.projects_by_team(team.id)
+    end
+  end
+
+  defp projects_for(%{mine: true}, _options), do: Linear.my_projects()
+  defp projects_for(_flags, _options), do: Linear.projects()
 
   @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.

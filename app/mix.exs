@@ -44,6 +44,8 @@ defmodule LinearCli.MixProject do
       {:plug, "~> 1.0", only: :test},
       {:usage_rules, "~> 1.2", only: [:dev]},
       {:oban, "~> 2.23"},
+      {:ecto_sqlite3, "~> 0.9"},
+      {:postgrex, "~> 0.22"},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]}

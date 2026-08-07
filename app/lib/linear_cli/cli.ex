@@ -12,7 +12,24 @@ defmodule LinearCli.CLI do
   def main(argv, halt \\ &System.halt/1) do
     argv = argv |> normalize_aliases() |> normalize_help()
     {subcommand_path, parse_result} = Optimus.parse!(spec(), argv, halt)
-    dispatch(subcommand_path, parse_result, halt)
+
+    try do
+      dispatch(subcommand_path, parse_result, halt)
+    rescue
+      # Ported from CLI::Caller#call's catch-all `rescue StandardError`
+      # clause - Ruby's rescue catches any unexpected raised exception, not
+      # just a returned error value. `run/3`'s own `handle_error/3` call
+      # only ever sees `{:error, reason}` *returned* from a command
+      # function; it can't help with a genuine bug (e.g. a missing
+      # `dispatch/3` clause for a valid-but-incomplete subcommand path, or
+      # any other unhandled crash) that raises instead. This is that same
+      # safety net at the top level, so a real bug degrades to a clean
+      # message + exit 88 instead of a raw stack trace reaching the user.
+      # `parse_result` is bound above, outside this try, specifically so
+      # it's still in scope here (bindings from inside a `do` block aren't
+      # visible in that same try's `rescue`, but outer-scope bindings are).
+      exception -> handle_error(exception, parse_result.options[:debug], halt)
+    end
   end
 
   # Optimus flags/options support exactly one `long:` name each (verified in
@@ -55,6 +72,26 @@ defmodule LinearCli.CLI do
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
 
+  # A valid subcommand path that stops short of a leaf (e.g. `lc project`
+  # with nothing after it) - Optimus itself doesn't require reaching a leaf,
+  # it just returns an empty ParseResult, so without this clause it would
+  # raise a bare FunctionClauseError. Show that path's own help instead,
+  # exactly as `lc help project` would, and exit 1 (a usage error, not a
+  # program bug - distinct from the crash-safety-net catch-all in main/1).
+  defp dispatch(subcommand_path, _result, halt) do
+    spec() |> Optimus.Help.help(subcommand_path, columns()) |> Enum.each(&IO.puts/1)
+    halt.(1)
+  end
+
+  # Mirrors Optimus's own private columns/0 (vendor/optimus/lib/optimus.ex) -
+  # not exported, so duplicated here rather than guessed at differently.
+  defp columns do
+    case Optimus.Term.width() do
+      {:ok, width} -> width
+      _ -> 80
+    end
+  end
+
   defp run(fun, result, halt) do
     case fun.(result) do
       :ok -> :ok
@@ -65,6 +102,25 @@ defmodule LinearCli.CLI do
   # Ported from CLI::Caller#call's `rescue NotFoundError` clause.
   defp handle_error(%Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}, debug, halt) do
     IO.puts(:stderr, "No issue found with id #{id}")
+    IO.puts(:stderr, "** Record not found, Cannot Continue **")
+    maybe_print_backtrace(debug)
+    halt.(66)
+  end
+
+  # Same NotFoundError intent as the clause above, but for Ash's own built-in
+  # "get?: true action returned zero results" signal (e.g. Team.find/1 given
+  # an unknown key) - a different shape than Issue's {:not_found, id} tuple
+  # convention (verified: %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}),
+  # since it comes from Ash itself rather than one of our own manual actions.
+  # Generic over `resource` so any future get?: true lookup gets the same
+  # graceful message, not just Team.
+  defp handle_error(
+         %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{resource: resource} | _]},
+         debug,
+         halt
+       ) do
+    name = resource |> Module.split() |> List.last() |> String.downcase()
+    IO.puts(:stderr, "No such #{name} found")
     IO.puts(:stderr, "** Record not found, Cannot Continue **")
     maybe_print_backtrace(debug)
     halt.(66)
@@ -157,6 +213,9 @@ defmodule LinearCli.CLI do
               about: "List projects",
               flags: [
                 mine: [short: "-m", long: "--mine", help: "Only show my projects"]
+              ],
+              options: [
+                team: [short: "-t", long: "--team", help: "Show projects for only this team"]
               ]
             ]
           ]

@@ -2,6 +2,41 @@ import Config
 
 config :linear_cli, :ash_domains, [LinearCli.Linear]
 
+# Which repo `mix ecto.*` tasks target locally - a dev/ops convenience
+# selector only. Distinct from LinearCli.ObanRepo's *runtime* dispatch
+# (see its moduledoc) that the shipped app itself actually uses - this one
+# only affects mix task invocations, never the running app.
+config :linear_cli,
+  ecto_repos: [
+    case System.get_env("LINEAR_CLI_DB_ADAPTER", "sqlite") do
+      "sqlite" ->
+        LinearCli.ObanRepo.Sqlite
+
+      "postgres" ->
+        LinearCli.ObanRepo.Postgres
+
+      other ->
+        raise "LINEAR_CLI_DB_ADAPTER must be \"sqlite\" or \"postgres\", got: #{inspect(other)}"
+    end
+  ]
+
+# Only started in daemon run mode (see LinearCli.Application's
+# LINEAR_CLI_DAEMON gate) - the interactive CLI never boots this. @monthly
+# is midnight on the 1st (Oban.Plugins.Cron's documented alias). `notifier:
+# Oban.Notifiers.PG` works against any backing store (it relays over
+# distributed Erlang process groups, never touching the database), so it
+# doesn't need to switch with the engine/adapter the way they do. No
+# `repo:`/`engine:` here - LinearCli.Application merges those in at boot,
+# from LinearCli.ObanRepo's runtime pick.
+config :linear_cli, Oban,
+  notifier: Oban.Notifiers.PG,
+  queues: [default: 10],
+  plugins: [{Oban.Plugins.Cron, crontab: [{"@monthly", LinearCli.Rollover.Worker}]}]
+
+# The prefix used to name each month's rollover project, e.g. "PAYMENTS
+# SWAT" -> "PAYMENTS SWAT August 2026". See LinearCli.Rollover.
+config :linear_cli, :rollover, prefix: "PAYMENTS SWAT"
+
 # These enable behaviors that will become the default in the next major
 # version of Ash. Setting them now opts your application into the new
 # behavior and ensures a seamless upgrade. See the backwards compatibility

@@ -18,6 +18,23 @@ defmodule LinearCli.Linear.Project do
       argument :team_id, :string, allow_nil?: false
       manual LinearCli.Linear.Project.Read.ByTeam
     end
+
+    # New in Phase 7 - Ruby has no equivalent. Backs the monthly rollover's
+    # auto-create-target-project behavior.
+    create :create do
+      argument :name, :string, allow_nil?: false
+      argument :team_id, :string, allow_nil?: false
+      manual LinearCli.Linear.Project.Create
+    end
+
+    # New in Phase 7 - Ruby has no equivalent. Finds a project by exact
+    # name, fetching its teams too so the rollover can create next month's
+    # project on the same team without a separate lookup.
+    read :by_name do
+      argument :name, :string, allow_nil?: false
+      get? true
+      manual LinearCli.Linear.Project.Read.ByName
+    end
   end
 
   attributes do
@@ -27,12 +44,18 @@ defmodule LinearCli.Linear.Project do
     attribute :slug_id, :string, public?: true
     attribute :description, :string, public?: true
     attribute :url, :string, public?: true
+    attribute :teams, {:array, :term}, public?: true, default: []
   end
 
   @base_fields "id name content slugId description url createdAt updatedAt"
 
   @doc "GraphQL field selection for a project's own fields (Ruby: Project::Base)."
   def base_fields, do: @base_fields
+
+  @doc "GraphQL field selection including the project's teams. New in Phase 7."
+  def fields_with_teams do
+    "#{@base_fields} teams { nodes { #{LinearCli.Linear.Team.base_fields()} } }"
+  end
 
   @doc false
   def from_map(map) do
@@ -42,7 +65,8 @@ defmodule LinearCli.Linear.Project do
       content: map["content"],
       slug_id: map["slugId"],
       description: map["description"],
-      url: map["url"]
+      url: map["url"],
+      teams: Enum.map(get_in(map, ["teams", "nodes"]) || [], &LinearCli.Linear.Team.from_map/1)
     )
   end
 
@@ -160,6 +184,65 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
            Api.call(@document, %{"teamId" => team_id}) do
       {:ok, Enum.map(nodes, &Project.from_map/1)}
     end
+  end
+end
+
+defmodule LinearCli.Linear.Project.Read.ByName do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Project
+
+  def read(query, _ecto_query, _opts, _context) do
+    name = query.arguments.name
+
+    with {:ok, %{"projects" => %{"nodes" => nodes}}} <-
+           Api.call(document(), %{"name" => name}) do
+      {:ok, Enum.map(nodes, &Project.from_map/1)}
+    end
+  end
+
+  # A function, not a module attribute: Project.fields_with_teams/0 reaches
+  # into Team (another file), so it must be evaluated at call time.
+  defp document do
+    """
+    query($name: String!) {
+      projects(filter: {name: {eq: $name}}, first: 1) {
+        nodes { #{Project.fields_with_teams()} }
+      }
+    }
+    """
+  end
+end
+
+defmodule LinearCli.Linear.Project.Create do
+  @moduledoc false
+  use Ash.Resource.ManualCreate
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Project
+
+  # projectCreate mutation. `teamIds` is a list per the schema, even though
+  # this action only ever supplies one - see schema/LinearAPI.graphql.
+  def create(changeset, _opts, _context) do
+    args = changeset.arguments
+    input = %{"name" => args.name, "teamIds" => [args.team_id]}
+
+    case Api.call(document(), %{"input" => input}) do
+      {:ok, %{"projectCreate" => %{"project" => project_map}}} when is_map(project_map) ->
+        {:ok, Project.from_map(project_map)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp document do
+    "mutation($input: ProjectCreateInput!) { projectCreate(input: $input) { project { #{Project.base_fields()} } } }"
   end
 end
 

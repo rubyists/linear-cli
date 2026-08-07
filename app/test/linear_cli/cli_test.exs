@@ -191,4 +191,94 @@ defmodule LinearCli.CLITest do
     assert output =~ "What the heck is this?"
     assert output =~ "** WTH? Cannot Continue **"
   end
+
+  test "a bare parent command (no leaf subcommand) shows that path's help and exits 1" do
+    # `lc project` with nothing after it is a valid Optimus subcommand path
+    # (Optimus doesn't require reaching a leaf) but dispatch/3 previously had
+    # no clause for it at all, raising a bare FunctionClauseError instead of
+    # showing help - a real crash a user could easily trigger by just
+    # forgetting the subcommand.
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(fn -> LinearCli.CLI.main(["project"], halt) end)
+
+    assert_received {:halted, 1}
+    assert output =~ "Manage projects"
+    assert output =~ "list        List projects"
+  end
+
+  test "an unexpected raise (not a returned error) still degrades to exit 88, not a raw crash" do
+    # A malformed API response (no "viewer" key at all) makes the manual
+    # read return {:ok, %{}} instead of {:ok, [records]}, which Ash's own
+    # manual-action-return validation *raises* on - a genuine exception, not
+    # a {:error, reason} tuple. run/3's handle_error/3 only ever sees
+    # returned values; this proves the main/1-level rescue (Ruby's
+    # Caller#call had a blanket `rescue StandardError` - ours previously
+    # only caught returned errors, not actual crashes) catches real bugs
+    # too, not just this one known case.
+    Req.Test.stub(LinearCli.Api, fn conn -> Req.Test.json(conn, %{"data" => %{}}) end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(:stderr, fn -> LinearCli.CLI.main(["whoami"], halt) end)
+
+    assert_received {:halted, 88}
+    assert output =~ "What the heck is this?"
+  end
+
+  test "project list --team fetches a team's projects directly" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query, "variables" => variables} = Jason.decode!(body)
+
+      cond do
+        query =~ "team(id: $id)" ->
+          assert variables == %{"id" => "ENG"}
+
+          Req.Test.json(conn, %{
+            "data" => %{"team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}}
+          })
+
+        query =~ "team(id: $teamId)" ->
+          assert variables == %{"teamId" => "t1"}
+
+          Req.Test.json(conn, %{
+            "data" => %{
+              "team" => %{
+                "projects" => %{
+                  "nodes" => [%{"id" => "p2", "name" => "Roadmap", "url" => "https://x/p2"}]
+                }
+              }
+            }
+          })
+      end
+    end)
+
+    assert capture_io(fn -> LinearCli.CLI.main(["project", "list", "--team", "ENG"]) end) =~
+             "Roadmap"
+  end
+
+  test "project list --team with an unknown team key gives a clear not-found message, not WTH" do
+    # find_team/1's get?: true action returns Ash's own built-in
+    # %Ash.Error.Query.NotFound{} when the API responds with a nil team - a
+    # different shape than Issue's {:not_found, id} tuple convention, so it
+    # needs its own handle_error/3 clause (generic over `resource`, not
+    # hardcoded to Team) rather than falling through to the "What the heck
+    # is this?" catch-all.
+    Req.Test.stub(LinearCli.Api, fn conn -> Req.Test.json(conn, %{"data" => %{"team" => nil}}) end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output =
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(["project", "list", "--team", "NOPE"], halt)
+      end)
+
+    assert_received {:halted, 66}
+    assert output =~ "No such team found"
+    refute output =~ "What the heck is this?"
+  end
 end

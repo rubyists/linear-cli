@@ -75,6 +75,80 @@ defmodule LinearCli.Linear.ProjectTest do
     assert {:ok, [%Linear.Project{id: "p1", name: "Manhattan"}]} = Linear.my_projects()
   end
 
+  describe "create_project/2+ (new in Phase 7 - no Ruby equivalent)" do
+    test "sends name/teamIds and returns the created project via base_fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+
+        assert input == %{"name" => "August 2026", "teamIds" => ["t1"]}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projectCreate" => %{
+              "project" => %{
+                "id" => "p9",
+                "name" => "August 2026",
+                "content" => nil,
+                "slugId" => "abc123",
+                "description" => "",
+                "url" => "https://linear.app/x/project/august-2026-abc123"
+              },
+              "success" => true,
+              "lastSyncId" => 1.0
+            }
+          }
+        })
+      end)
+
+      assert {:ok, project} = Linear.create_project("August 2026", "t1")
+      assert project.id == "p9"
+      assert project.name == "August 2026"
+    end
+  end
+
+  describe "find_project_by_name/1 (new in Phase 7 - no Ruby equivalent)" do
+    test "returns the matching project with its teams" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"name" => "PAYMENTS SWAT August 2026"}} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "nodes" => [
+                %{
+                  "id" => "p1",
+                  "name" => "PAYMENTS SWAT August 2026",
+                  "content" => nil,
+                  "slugId" => "abc123",
+                  "description" => "",
+                  "url" => "https://linear.app/x/project/aug26-abc123",
+                  "teams" => %{
+                    "nodes" => [%{"id" => "t1", "key" => "ENG", "name" => "Engineering"}]
+                  }
+                }
+              ]
+            }
+          }
+        })
+      end)
+
+      assert {:ok, project} = Linear.find_project_by_name("PAYMENTS SWAT August 2026")
+      assert project.id == "p1"
+      assert [%Linear.Team{id: "t1"}] = project.teams
+    end
+
+    test "returns a not-found error when no project matches" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"data" => %{"projects" => %{"nodes" => []}}})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{}]}} =
+               Linear.find_project_by_name("nope")
+    end
+  end
+
   describe "slug/1 (Ruby: Project#slug)" do
     test "strips the trailing -slugId suffix from the URL's basename" do
       project = %Linear.Project{
