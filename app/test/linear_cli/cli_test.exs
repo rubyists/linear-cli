@@ -131,6 +131,27 @@ defmodule LinearCli.CLITest do
     refute output =~ "CRY-1"
   end
 
+  test "issue list --mine gives a clear error instead of being treated as an issue id (#2)" do
+    # `--mine` isn't (and won't be - `--no-mine` already covers it, `--mine`
+    # is the implied default) a declared flag on `issue list`. Since this
+    # subcommand allows unknown args (for bare issue ids), an unrecognized
+    # `-`-prefixed token used to silently fall into that same bucket and get
+    # looked up as a literal issue id "--mine" instead of erroring - crashing
+    # with a raw %Ash.Error.Unknown{} dump. No Req.Test stub needed: the fix
+    # rejects this before any API call happens.
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output =
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(["issue", "list", "--mine"], halt)
+      end)
+
+    assert_received {:halted, 22}
+    assert output =~ "unrecognized option(s): --mine"
+    assert output =~ "This smells bad! Bailing."
+  end
+
   test "an unknown issue id halts with exit code 66" do
     test_pid = self()
     halt = fn code -> send(test_pid, {:halted, code}) end

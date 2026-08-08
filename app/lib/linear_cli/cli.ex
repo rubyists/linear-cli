@@ -93,9 +93,37 @@ defmodule LinearCli.CLI do
   end
 
   defp run(fun, result, halt) do
-    case fun.(result) do
-      :ok -> :ok
-      {:error, error} -> handle_error(error, result.options[:debug], halt)
+    case reject_unknown_flags(result.unknown) do
+      :ok ->
+        case fun.(result) do
+          :ok -> :ok
+          {:error, error} -> handle_error(error, result.options[:debug], halt)
+        end
+
+      {:error, error} ->
+        handle_error(error, result.options[:debug], halt)
+    end
+  end
+
+  # `issue list`/`take`/`update` all set `allow_unknown_args: true` so bare
+  # tokens (e.g. `CRY-1`) can be captured as issue ids via `result.unknown`
+  # rather than a declared positional arg (Optimus has no `type: :array`
+  # equivalent - see their subcommand specs below). That same bucket also
+  # silently swallows any *unrecognized flag* (e.g. a typo, or a real flag
+  # this subcommand just doesn't have, like `--mine` on `issue list` - #2),
+  # which then gets treated as an issue id to look up instead of erroring
+  # clearly. Every other subcommand has `allow_unknown_args: false` (the
+  # default), where Optimus itself already rejects unknown args before we
+  # ever see a parse_result - so `result.unknown` is only ever non-empty here
+  # for those three subcommands, and only ever contains genuine bare ids
+  # once this filters out anything flag-shaped.
+  defp reject_unknown_flags(unknown_tokens) do
+    case Enum.filter(unknown_tokens, &String.starts_with?(&1, "-")) do
+      [] ->
+        :ok
+
+      bad_flags ->
+        {:error, {:smells_bad, "unrecognized option(s): #{Enum.join(bad_flags, ", ")}"}}
     end
   end
 
