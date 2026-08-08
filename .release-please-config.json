@@ -1,0 +1,24 @@
+{
+  "packages": {
+    ".": {
+      "changelog-path": "CHANGELOG.md",
+      "release-type": "simple",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true,
+      "draft": false,
+      "prerelease": false,
+      "version-file": ".version.txt",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "app/mix.exs"
+        }
+      ],
+      "exclude-paths": [
+        ".release-please-manifest.json",
+        ".version.txt"
+      ]
+    }
+  },
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+}

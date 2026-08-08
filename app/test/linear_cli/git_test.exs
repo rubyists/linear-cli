@@ -12,6 +12,17 @@ defmodule LinearCli.GitTest do
     File.mkdir_p!(origin_path)
     {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
 
+    # `git init --bare`'s HEAD symref follows the runner's ambient
+    # init.defaultBranch config (falling back to git's legacy "master" if
+    # unset) - since this repo only ever gets a "main" branch pushed to it,
+    # that can leave HEAD dangling at a "master" that never exists, and
+    # `git ls-remote --symref` then reports nothing for it. Set it explicitly
+    # (the same thing a real git host does when you configure a repo's
+    # default branch) so this doesn't depend on the runner's global config -
+    # this is what made `default_branch/0`'s test pass locally but fail in CI.
+    {_output, 0} =
+      System.cmd("git", ["symbolic-ref", "HEAD", "refs/heads/main"], cd: origin_path)
+
     repo_path = tmp_path("repo")
     File.mkdir_p!(repo_path)
     init_repo!(repo_path)

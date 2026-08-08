@@ -4,18 +4,42 @@ defmodule LinearCli.MixProject do
   def project do
     [
       app: :linear_cli,
+      # x-release-please-start-version
       version: "0.1.0",
+      # x-release-please-end
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
-      escript: escript()
+      escript: escript(),
+      releases: releases()
     ]
   end
 
   defp escript do
     [main_module: LinearCli.CLI]
+  end
+
+  # Burrito-wrapped release, both the interactive CLI and (with
+  # LINEAR_CLI_DAEMON=true) the daemon - one binary, not two build
+  # artifacts. Targets and their host-compatibility verified against
+  # Burrito's own docs/source, and exqlite's NIF cross-compilation verified
+  # empirically (built+ran the linux_x86_64 target under podman/QEMU) - see
+  # documents/phase-8-plan.adoc. macOS Intel intentionally not targeted.
+  defp releases do
+    [
+      linear_cli: [
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            macos_aarch64: [os: :darwin, cpu: :aarch64],
+            linux_x86_64: [os: :linux, cpu: :x86_64],
+            windows_x86_64: [os: :windows, cpu: :x86_64]
+          ]
+        ]
+      ]
+    ]
   end
 
   defp usage_rules do
@@ -46,6 +70,7 @@ defmodule LinearCli.MixProject do
       {:oban, "~> 2.23"},
       {:ecto_sqlite3, "~> 0.9"},
       {:postgrex, "~> 0.22"},
+      {:burrito, "~> 1.6"},
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]}

@@ -1,0 +1,56 @@
+---
+name: CI
+
+on:  # yamllint disable-line rule:truthy
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      -
+        uses: actions/checkout@v7
+      -
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
+      -
+        name: Cache deps/build
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/deps
+            app/_build
+          key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
+      -
+        run: mix deps.get
+      -
+        run: mix format --check-formatted
+      -
+        run: mix test
+
+  conventional_commits:
+    name: Validate Commit Subjects
+    runs-on: ubuntu-latest
+    steps:
+      -
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # pull_request's default ref is the synthetic refs/pull/N/merge test-merge
+          # commit (subject "Merge <sha> into <sha>"), not the PR branch tip - check
+          # out the real head SHA instead so that commit is never in the validated
+          # range. Falls back to github.sha for non-PR triggers (workflow_dispatch/
+          # workflow_call), where github.event.pull_request is unset.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      -
+        env:
+          FETCH_BASE_REF: "true"
+        run: ./ci/conventional_commits.sh

@@ -1,0 +1,133 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 07, 2026
+:my-title: Phase 8 plan: packaging, releasing, and CI
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Make this thing actually releasable: cross-platform standalone binaries via
+`Burrito`, a container image for the daemon, and `release-please`-driven
+versioning - matching the conventions already used by `linear-cli` (the
+Ruby sibling) and the user's other FOSS projects.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *Burrito wraps the whole app* - one binary is both the interactive CLI
+   and (with `LINEAR_CLI_DAEMON=true`) the daemon. Not two separate build
+   artifacts.
+2. *Targets*: macOS Apple Silicon (`aarch64-darwin`), Linux x86_64, Windows
+   x86_64. No macOS Intel.
+3. *CI build shape*: a single `ubuntu-latest` job cross-compiles all three
+   targets via Zig - not a matrix of per-OS runners. Burrito's own docs
+   confirm a Linux host can target all three; a matrix would just add CI
+   minutes with no benefit here.
+4. *Versioning*: `release-please`, mirroring `linear-cli`'s own setup -
+   `release-type: simple`, `.version.txt` as the tracked version file,
+   `app/mix.exs`'s `version:` field updated via a `generic` extra-file with
+   `x-release-please-start-version`/`x-release-please-end` markers,
+   `CHANGELOG.md` auto-maintained (fresh - no history to backfill).
+5. *Container image*: also in scope. The daemon's container just wraps the
+   already-built Linux x86_64 Burrito binary (`FROM alpine`, `COPY` the
+   binary, `ENV LINEAR_CLI_DAEMON=true`, `ENTRYPOINT`) rather than a
+   separate Elixir build stage - one build artifact, reused. Published to
+   `ghcr.io` via the existing (currently unwired) `ci/build_image.sh` /
+   `ci/publish.sh` scripts from the initial scaffold.
+6. *CI gate before release*: add `.github/workflows/ci.yaml` now (`mix
+   test`, `mix format --check-formatted`, `ci/conventional_commits.sh`) -
+   not deferred to Phase 9. A release pipeline with no test gate in front
+   of it is a real gap.
+7. *Workflow shape* (mirrors `linear-cli`): `ci.yaml` (validate) ->
+   `release.yaml` (on push to main, runs `release-please-action`; if
+   `release_created`, calls `burrito-release.yaml`) -> `burrito-release.yaml`
+   (build all 3 targets + the container image, attach binaries to the GH
+   release via `gh release upload`, push the container to `ghcr.io`).
+8. *`RELEASE_PLEASE_TOKEN` secret*: must exist in the repo's GitHub
+   settings (a PAT, not the default `GITHUB_TOKEN` - which can't trigger
+   other workflows from its own commits/PRs). This is a one-time manual
+   setup step on GitHub.com the user needs to do themselves; not something
+   scriptable from here.
+
+== Verified: Burrito + `exqlite`'s NIF survives cross-compilation
+
+This was the one real open question, and it was checked empirically, not
+assumed:
+
+* Burrito's own docs only describe automatic per-target NIF recompilation
+  for `elixir_make`-based NIFs. `exqlite` (via `ecto_sqlite3`) was a
+  question mark - would its NIF get built for the *build host* instead of
+  the *target*, crashing the app at boot on other platforms?
+* Built a real Burrito release targeting `linux_x86_64` from this macOS
+  arm64 host. The build log showed Burrito explicitly detecting and cross-
+  compiling it: `--> Going to recompile NIF for cross-build: exqlite ->
+  x86_64-linux` ... `--> Successfully re-built exqlite for x86_64-linux!`
+  (a real `CC`/`LD` invocation, not a precompiled-binary fetch).
+* Ran the produced binary inside a `podman` container (`--platform
+  linux/amd64`, QEMU-emulated) with `LINEAR_CLI_DAEMON=true`. It booted,
+  stayed alive, and - crucially - actually created
+  `~/.linear_cli/oban.db` on disk, proving the NIF loaded and SQLite
+  connections genuinely worked on the cross-compiled target. (It later hit
+  Oban's well-known "database is locked" contention from booting a 10-
+  connection pool against an unmigrated file - the same benign transient
+  seen during Phase 7's native testing, unrelated to Burrito.)
+* Along the way: Burrito 1.6.0 actually requires Zig `0.16.0`, not the
+  `0.15.2` its own README states (verified by hitting the version-check
+  error directly) - `mlugg/setup-zig@v2.2.1` with `version: '0.16.0'` in CI.
+* Also: `custom_erts:` (used briefly to route around a not-yet-catalogued
+  local OTP patch version) silently skips Burrito's musl-runtime-embedding
+  step for Linux targets (verified by reading
+  `deps/burrito/lib/steps/fetch/fetch_musl.ex` - it pattern-matches on
+  `erts_source: {:precompiled, _}` specifically). Not a concern for the
+  real pipeline, which pins a specific, catalogued OTP version and never
+  needs the override - but worth remembering if it ever comes up again.
+
+== New building blocks needed
+
+* `app/mix.exs`: add `{:burrito, "~> 1.6"}`, a real `releases/0` (not the
+  throwaway exploratory one used for verification) with the 3 real
+  targets, wrap the `version:` field in generic extra-file markers. Keep
+  `escript()` too, as the fast local-dev build path - Burrito is for
+  distribution, escript is for iterating.
+* `.version.txt`, `.release-please-manifest.json`,
+  `.release-please-config.json` at repo root, matching `linear-cli`'s
+  shape. (`ci/build_image.sh` already expects `.version.txt` to exist at
+  this exact path - confirmed by reading its `APP_VERSION` default.)
+* `Containerfile` at repo root (`ci/build_image.sh` searches
+  `Dockerfile`/`Containerfile`/`oci/Containerfile`, build context = repo
+  root) - wraps the Linux Burrito binary, `alpine` base for CA certs
+  (Linear's API is HTTPS) rather than `scratch`.
+* `.github/workflows/ci.yaml`: `mix test`, `mix format
+  --check-formatted`, `ci/conventional_commits.sh` (already written,
+  unwired).
+* `.github/workflows/release.yaml`: `release-please-action@v5`, gated on
+  `ci.yaml` passing, calls `burrito-release.yaml` on `release_created`.
+* `.github/workflows/burrito-release.yaml`: `erlef/setup-beam@v1` (OTP
+  29.0.3, Elixir 1.20.3 - the exact combo verified above; Burrito's
+  precompiled-ERTS catalog lags bleeding-edge patches, so pin to one it
+  actually has), `mlugg/setup-zig@v2.2.1`, build all 3 targets, `gh
+  release upload` the binaries, build+push the container via the existing
+  `ci/build_image.sh` / `ci/publish.sh`.
+
+== Sequencing
+
+1. `.version.txt` + release-please config/manifest + `mix.exs` version
+   markers - no behavior change, just wiring, verify `mix compile` still
+   works.
+2. Real Burrito `releases/0` in `mix.exs` (the 3 real targets) - verify
+   locally by rebuilding at least the Linux target again.
+3. `Containerfile` - verify locally with `ci/build_image.sh` (podman).
+4. `.github/workflows/ci.yaml` - can dry-run the shell scripts locally
+   even without a real GH Actions run.
+5. `.github/workflows/release.yaml` + `burrito-release.yaml` - reviewed
+   for correctness against verified action versions/inputs, but the actual
+   release-please PR / GH release flow can only be truly verified by an
+   real push to `main` on GitHub, after `RELEASE_PLEASE_TOKEN` is set up.
