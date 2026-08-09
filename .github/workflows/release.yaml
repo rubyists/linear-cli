@@ -2,41 +2,169 @@
 name: Release
 
 on:  # yamllint disable-line rule:truthy
-  push:
-    branches:
-      - main
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
 
-jobs:
-  validate:
-    name: Validations
-    uses: ./.github/workflows/ci.yaml
+permissions:
+  contents: write
+  packages: write
 
-  release:
-    needs: [validate]
-    name: Create a release
+jobs:
+  burrito:
+    # Only when release-please's own release PR (always from this exact
+    # branch, see release-pr.yaml) actually merges - "approving the
+    # release PR" is the trigger for building, not every push to main.
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release-please--branches--main')
+    name: Build Burrito binaries and create the release
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    defaults:
+      run:
+        working-directory: app
     steps:
       -
         uses: actions/checkout@v7
-        with:
-          fetch-tags: true
       -
-        uses: googleapis/release-please-action@v5
-        id: release
+        uses: erlef/setup-beam@v1
         with:
-          config-file: .release-please-config.json
-          manifest-file: .release-please-manifest.json
-          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
+          # Without this, setup-beam's problem matchers promote every
+          # compiler warning from deps (e.g. postgrex/rewrite's deprecated
+          # `xref: [exclude: ...]`, yamerl's deprecated `catch ...` syntax -
+          # both already at their latest published Hex versions, so not
+          # fixable from here) into noisy GH Actions annotations. See #9.
+          disable_problem_matchers: true
+      -
+        # Version pinned to what Burrito 1.6.0 actually requires - its own
+        # README says 0.15.2, but the version check enforces 0.16.0. See
+        # documents/phase-8-plan.adoc.
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      -
+        name: Install p7zip (Burrito needs 7z for Windows targets)
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+      -
+        run: mix deps.get
+      -
+        name: Build all Burrito targets
+        run: MIX_ENV=prod mix release lc
+      -
+        # `mix release lc`'s exit code alone doesn't guarantee every target
+        # actually produced a binary - Burrito builds each target
+        # independently, so one target failing partway through wouldn't
+        # necessarily fail the whole `mix release` invocation. Not everyone
+        # installing this uses Homebrew (no tap exists yet anyway - see
+        # #14/CRY-37), so these binaries are the primary install path for
+        # a lot of users; silently shipping a release missing one of them
+        # is worse than failing loudly here.
+        name: Verify the required targets actually built
+        run: |
+          missing=0
+          for target in lc_linux_x86_64 lc_macos_aarch64
+          do
+              if [ ! -f "burrito_out/$target" ]
+              then
+                  printf '::error::missing required release artifact: %s\n' "$target"
+                  missing=1
+              fi
+          done
+          [ "$missing" -eq 0 ]
+      -
+        # A bare `lc_macos_aarch64` binary download doesn't get you
+        # lcreate/lcls/lclose/lcomment/lproj - only install.sh and the
+        # container image ever pulled those, straight from the repo
+        # checkout, never from a release asset. Package each target
+        # together with the wrapper scripts so a release download is
+        # actually installable on its own, matching what install.sh gives
+        # you.
+        name: Package each target into a per-platform tarball with the wrapper scripts
+        run: |
+          for artifact in lc_*
+          do
+              case "$artifact" in
+                  lc_windows_x86_64.exe)
+                      target=lc_windows_x86_64
+                      binary_name=lc.exe
+                      ;;
+                  *)
+                      target=$artifact
+                      binary_name=lc
+                      ;;
+              esac
 
-  publish:
-    if: needs.release.outputs.release_created == 'true'
-    needs: release
-    name: Build and publish release artifacts
-    uses: ./.github/workflows/burrito-release.yaml
-    with:
-      tag_name: ${{ needs.release.outputs.tag_name }}
-    secrets: inherit
+              stage=$(mktemp -d)
+              cp "$artifact" "$stage/$binary_name"
+              cp ../../bin/lcreate ../../bin/lcls ../../bin/lclose ../../bin/lcomment ../../bin/lproj "$stage/"
+              chmod +x "$stage"/*
+              tar -czf "${target}.tar.gz" -C "$stage" .
+              rm -rf "$stage" "$artifact"
+          done
+        working-directory: app/burrito_out
+      -
+        name: Generate checksums for every built artifact
+        run: sha256sum * > SHA256SUMS
+        working-directory: app/burrito_out
+      -
+        # release-pr.yaml already bumped .release-please-manifest.json on
+        # main as part of the PR this job's trigger just merged - read the
+        # version straight from it rather than asking release-please again.
+        name: Read the version release-please just bumped to
+        id: version
+        run: |
+          version=$(ruby -rjson -e "print JSON.parse(File.read('../.release-please-manifest.json'))['.']")
+          printf 'tag_name=v%s\n' "$version" >> "$GITHUB_OUTPUT"
+      -
+        # One atomic command creates the tag, the release, and uploads
+        # every asset together - no separate release object sits around
+        # empty/unlocked waiting for a later upload, so GitHub's Immutable
+        # Releases (GA since Oct 2025) never gets a chance to lock us out
+        # (that's exactly what broke v0.2.0 permanently - see #18).
+        name: Create the release with every asset attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS --generate-notes
+        working-directory: app
+
+  container:
+    needs: [burrito]
+    name: Build and publish container image
+    runs-on: ubuntu-latest
+    steps:
+      -
+        uses: actions/checkout@v7
+      -
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
+          disable_problem_matchers: true
+      -
+        # Same Burrito build as the `burrito` job above, so it needs the same
+        # pinned Zig (see that job's comment) - missing here would fail this
+        # job's build at `mix release` time even though `burrito` succeeds.
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      -
+        run: mix deps.get
+        working-directory: app
+      -
+        name: Build the linux_x86_64 target (container's payload)
+        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
+        working-directory: app
+      -
+        name: Build the image
+        env:
+          APP_VERSION: ${{ needs.burrito.outputs.tag_name }}
+        run: ./ci/build_image.sh "${{ needs.burrito.outputs.tag_name }}"
+      -
+        name: Publish the image
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: ./ci/publish.sh "${{ needs.burrito.outputs.tag_name }}"
