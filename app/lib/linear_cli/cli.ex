@@ -10,8 +10,21 @@ defmodule LinearCli.CLI do
   alias LinearCli.CLI.Commands
 
   def main(argv, halt \\ &System.halt/1) do
-    argv = argv |> normalize_aliases() |> normalize_help()
-    {subcommand_path, parse_result} = Optimus.parse!(spec(), argv, halt)
+    argv = argv |> normalize_aliases() |> normalize_help() |> default_to_issue_list()
+
+    # Optimus.parse!/3 returns *either* {subcommand_path, parse_result}
+    # (a subcommand matched) *or* a bare %Optimus.ParseResult{} (nothing
+    # did - e.g. only global options were given, no subcommand token at
+    # all). Assuming the tupled shape unconditionally crashed on that
+    # second case with a bare MatchError. Normalize both to a uniform
+    # {subcommand_path, parse_result} pair - an empty path hits dispatch/3's
+    # existing "incomplete path" fallback (prints top-level help, exit 1),
+    # exactly as it already does for e.g. `lc project` alone.
+    {subcommand_path, parse_result} =
+      case Optimus.parse!(spec(), argv, halt) do
+        {path, result} -> {path, result}
+        %Optimus.ParseResult{} = result -> {[], result}
+      end
 
     try do
       dispatch(subcommand_path, parse_result, halt)
@@ -45,16 +58,41 @@ defmodule LinearCli.CLI do
     Enum.map(argv, &Map.get(@flag_aliases, &1, &1))
   end
 
+  # Ported from exe/scripts/lc.sh's own `[ "$#" -eq 0 ]` branch exactly
+  # (including its stderr text) - a bare `lc` invocation defaults to
+  # `issue list` rather than dumping top-level help.
+  @doc false
+  def default_to_issue_list([]) do
+    IO.puts(:stderr, "No subcommand provided, defaulting to 'lc issue list'")
+    IO.puts(:stderr, "lc --help to see subcommands")
+    ["issue", "list"]
+  end
+
+  def default_to_issue_list(argv), do: argv
+
   # Optimus only special-cases bare top-level `--help` and the `help <path...>`
   # form - `issue list --help` isn't recognized, and since `issue list` allows
   # unknown args (for bare issue ids), `--help` would silently be treated as an
   # issue id to look up instead of showing help. Rewrite `<path...> --help ...`
   # into `help <path...>` ourselves so `--help`/`-h` works at every subcommand
   # level, the way most CLIs expect.
+  #
+  # `help <path>` only accepts bare subcommand names, not flags/values mixed
+  # in - `lc issue update --close --help` (real usage, see bin/lclose) has
+  # `--close` between the path and `--help`. Take only the leading run of
+  # tokens that don't look like a flag/value (subcommand names never start
+  # with "-" in this spec) rather than everything before `--help` verbatim,
+  # so those extra tokens get dropped instead of breaking `help`'s own parse.
   defp normalize_help(argv) do
     case Enum.split_while(argv, &(&1 not in ["--help", "-h"])) do
-      {before, [_ | _]} when before != [] -> ["help" | before]
-      _ -> argv
+      {before, [_ | _]} ->
+        case Enum.take_while(before, &(not String.starts_with?(&1, "-"))) do
+          [] -> argv
+          path -> ["help" | path]
+        end
+
+      _ ->
+        argv
     end
   end
 

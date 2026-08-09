@@ -114,16 +114,17 @@ defmodule LinearCli.CLITest do
     # --help makes Optimus print help and halt (its own internal halt call,
     # now wired to ours) - inject a no-op halt so this doesn't kill the test
     # VM. Optimus.parse!/3 assumes halt never returns; with a fake one it
-    # returns :ok instead of {subcommand_path, parse_result}, which blows up
-    # our pattern match in main/1. Real usage never hits that MatchError
-    # (real halt terminates the process) - it's only an artifact of faking
-    # halt here, so rescue it rather than treat it as a failure.
+    # returns :ok instead of {subcommand_path, parse_result} (or a bare
+    # %Optimus.ParseResult{}), which blows up main/1's own case statement -
+    # a CaseClauseError. Real usage never hits that (real halt terminates
+    # the process) - it's only an artifact of faking halt here, so rescue it
+    # rather than treat it as a failure.
     output =
       capture_io(fn ->
         try do
           LinearCli.CLI.main(["issue", "list", "--help"], fn _code -> :ok end)
         rescue
-          MatchError -> :ok
+          CaseClauseError -> :ok
         end
       end)
 
