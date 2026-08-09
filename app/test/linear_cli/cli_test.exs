@@ -189,6 +189,54 @@ defmodule LinearCli.CLITest do
     assert LinearCli.CLI.normalize_aliases(["whoami"]) == ["whoami"]
   end
 
+  test "subcommand aliases (#14) rewrite to their canonical top-level/subcommand names" do
+    # Sourced from Ruby's own ALIASES constants (cli.rb/commands/*.rb), not
+    # the Readme's prose list. Direct unit tests on the pure rewrite, same
+    # rationale as the flag-alias test above.
+    assert LinearCli.CLI.normalize_subcommand_aliases(["i", "dev", "CRY-37"]) ==
+             ["issue", "develop", "CRY-37"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issues", "l"]) == ["issue", "list"]
+    assert LinearCli.CLI.normalize_subcommand_aliases(["t", "ls"]) == ["team", "list"]
+    assert LinearCli.CLI.normalize_subcommand_aliases(["p", "l"]) == ["project", "list"]
+    assert LinearCli.CLI.normalize_subcommand_aliases(["w", "-t"]) == ["whoami", "-t"]
+    assert LinearCli.CLI.normalize_subcommand_aliases(["v"]) == ["version"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["i", "pull-request", "CRY-1"]) ==
+             ["issue", "pr", "CRY-1"]
+
+    # `take` has no alias in Ruby either - unaliased subcommands pass through.
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "take", "CRY-1"]) ==
+             ["issue", "take", "CRY-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases([]) == []
+  end
+
+  test "aliased subcommands actually dispatch end to end" do
+    assert capture_io(fn -> LinearCli.CLI.main(["w"]) end) =~ "Ada"
+    assert capture_io(fn -> LinearCli.CLI.main(["i", "ls"]) end) =~ "CRY-1"
+    assert capture_io(fn -> LinearCli.CLI.main(["t", "l"]) end) =~ "Engineering"
+    assert capture_io(fn -> LinearCli.CLI.main(["p", "ls"]) end) =~ "Manhattan"
+  end
+
+  test "an aliased subcommand composes correctly with --help" do
+    # normalize_subcommand_aliases/1 has to run before normalize_help/1 -
+    # Optimus's `help <path>` only recognizes canonical subcommand names,
+    # not aliases, so "i dev --help" must become "help issue develop", not
+    # a broken "help i dev". Same fake-halt/CaseClauseError artifact as the
+    # "issue list --help" test above.
+    output =
+      capture_io(fn ->
+        try do
+          LinearCli.CLI.main(["i", "dev", "--help"], fn _code -> :ok end)
+        rescue
+          CaseClauseError -> :ok
+        end
+      end)
+
+    assert output =~ "Start or update development status of an issue"
+  end
+
   test "a catch-all error halts with exit code 88" do
     # A malformed API response (neither "data" nor "errors") makes
     # LinearCli.Api return {:error, {:unexpected_response, body}}, which Ash

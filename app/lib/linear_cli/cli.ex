@@ -10,7 +10,12 @@ defmodule LinearCli.CLI do
   alias LinearCli.CLI.Commands
 
   def main(argv, halt \\ &System.halt/1) do
-    argv = argv |> normalize_aliases() |> normalize_help() |> default_to_issue_list()
+    argv =
+      argv
+      |> normalize_aliases()
+      |> normalize_subcommand_aliases()
+      |> normalize_help()
+      |> default_to_issue_list()
 
     # Optimus.parse!/3 returns *either* {subcommand_path, parse_result}
     # (a subcommand matched) *or* a bare %Optimus.ParseResult{} (nothing
@@ -57,6 +62,63 @@ defmodule LinearCli.CLI do
   def normalize_aliases(argv) do
     Enum.map(argv, &Map.get(@flag_aliases, &1, &1))
   end
+
+  # Optimus's subcommand spec has no alias mechanism either (verified:
+  # vendor/optimus/lib/optimus/subcommand.ex), but Ruby registers every one
+  # of these via each command module's `ALIASES` constant (cli.rb's
+  # `register`/`register_sub!`) - real, user-facing shortcuts people type
+  # (`lc i dev CRY-37`). Sourced from those constants directly, not the
+  # Readme's prose list, which was missing several (`new`/`add`/`me`/`who`/
+  # `teams`/`projects`/`issues`/`t`/`p`/`v`). `completion` (dry-cli-specific)
+  # and `console`/`pry` (Ruby dev tooling) have no equivalent here, so
+  # they're intentionally not included.
+  @command_aliases %{
+    "me" => "whoami",
+    "w" => "whoami",
+    "who" => "whoami",
+    "whodat" => "whoami",
+    "v" => "version",
+    "i" => "issue",
+    "issues" => "issue",
+    "t" => "team",
+    "teams" => "team",
+    "p" => "project",
+    "projects" => "project"
+  }
+
+  # `take` has no alias in Ruby either - every issue subcommand not listed
+  # here (just `take`) is only ever reachable by its canonical name there
+  # too, so this port doesn't need to invent one.
+  @subcommand_aliases %{
+    "issue" => %{
+      "c" => "create",
+      "new" => "create",
+      "add" => "create",
+      "d" => "develop",
+      "dev" => "develop",
+      "l" => "list",
+      "ls" => "list",
+      "u" => "update",
+      "pull-request" => "pr"
+    },
+    "team" => %{"l" => "list", "ls" => "list"},
+    "project" => %{"l" => "list", "ls" => "list"}
+  }
+
+  @doc false
+  def normalize_subcommand_aliases([first | rest]) do
+    canonical_first = Map.get(@command_aliases, first, first)
+
+    case {Map.fetch(@subcommand_aliases, canonical_first), rest} do
+      {{:ok, sub_aliases}, [second | more]} ->
+        [canonical_first, Map.get(sub_aliases, second, second) | more]
+
+      _ ->
+        [canonical_first | rest]
+    end
+  end
+
+  def normalize_subcommand_aliases(argv), do: argv
 
   # Ported from exe/scripts/lc.sh's own `[ "$#" -eq 0 ]` branch exactly
   # (including its stderr text) - a bare `lc` invocation defaults to
