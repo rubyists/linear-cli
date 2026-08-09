@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/rubyists/linear-cli-ex/compare/v0.1.2...v0.2.0) (2026-08-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* add Readme/LICENSE, feat: wire up the issue list --project picker ([#12](https://github.com/rubyists/linear-cli-ex/issues/12))
+
+### Documentation
+
+* add Readme/LICENSE, feat: wire up the issue list --project picker ([#12](https://github.com/rubyists/linear-cli-ex/issues/12)) ([eb42c69](https://github.com/rubyists/linear-cli-ex/commit/eb42c69112fe39d855559c78cb79982e0b9e8307))
+
 ## [0.1.2](https://github.com/rubyists/linear-cli-ex/compare/v0.1.1...v0.1.2) (2026-08-09)
 
 
