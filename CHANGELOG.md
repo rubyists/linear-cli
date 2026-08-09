@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.2](https://github.com/rubyists/linear-cli-ex/compare/v0.7.1...v0.7.2) (2026-08-09)
+
+
+### Features
+
+* **cli:** make version respect --output json ([#33](https://github.com/rubyists/linear-cli-ex/issues/33)) ([b160aad](https://github.com/rubyists/linear-cli-ex/commit/b160aadf663c861ffab53f1fcc351d83a767f6ec))
+
+
+### Bug Fixes
+
+* **ci:** relabel the release PR as tagged after we tag it ourselves ([ab1408e](https://github.com/rubyists/linear-cli-ex/commit/ab1408e3df9137477bb535412763960e37e7fac1))
+
 ## [0.7.1](https://github.com/rubyists/linear-cli-ex/compare/v0.7.0...v0.7.1) (2026-08-09)
 
 
