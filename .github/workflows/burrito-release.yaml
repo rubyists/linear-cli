@@ -48,7 +48,7 @@ jobs:
         run: mix deps.get
       -
         name: Build all Burrito targets
-        run: MIX_ENV=prod mix release linear_cli
+        run: MIX_ENV=prod mix release lc
       -
         name: Upload binaries to the GitHub release
         env:
@@ -79,7 +79,7 @@ jobs:
         working-directory: app
       -
         name: Build the linux_x86_64 target (container's payload)
-        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release linear_cli
+        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
         working-directory: app
       -
         name: Build the image

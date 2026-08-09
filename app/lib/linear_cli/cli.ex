@@ -218,7 +218,7 @@ defmodule LinearCli.CLI do
 
   def spec do
     Optimus.new!(
-      name: "linear-cli",
+      name: "lc",
       description: "CLI for interacting with Linear.app.",
       version: to_string(Application.spec(:linear_cli, :vsn) || "0.1.0"),
       about: "A CLI for interacting with Linear.app. Loosely based on the GitHub CLI",

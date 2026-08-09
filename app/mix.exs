@@ -18,7 +18,7 @@ defmodule LinearCli.MixProject do
   end
 
   defp escript do
-    [main_module: LinearCli.CLI]
+    [main_module: LinearCli.CLI, name: "lc"]
   end
 
   # Burrito-wrapped release, both the interactive CLI and (with
@@ -29,7 +29,7 @@ defmodule LinearCli.MixProject do
   # documents/phase-8-plan.adoc. macOS Intel intentionally not targeted.
   defp releases do
     [
-      linear_cli: [
+      lc: [
         steps: [:assemble, &Burrito.wrap/1],
         burrito: [
           targets: [

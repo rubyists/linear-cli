@@ -24,7 +24,7 @@ app-*.tar
 
 # The escript built via "mix escript.build" (local dev convenience only -
 # the real distribution target is the Burrito release, see Phase 8).
-/linear_cli
+/lc
 
 # Burrito's per-target output binaries (mix release, see documents/phase-8-plan.adoc).
 /burrito_out/
