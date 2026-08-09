@@ -21,6 +21,12 @@ jobs:
         with:
           otp-version: "29.0.3"
           elixir-version: "1.20.3"
+          # Without this, setup-beam's problem matchers promote every
+          # compiler warning from deps (e.g. postgrex/rewrite's deprecated
+          # `xref: [exclude: ...]`, yamerl's deprecated `catch ...` syntax -
+          # both already at their latest published Hex versions, so not
+          # fixable from here) into noisy GH Actions annotations. See #9.
+          disable_problem_matchers: true
       -
         name: Cache deps/build
         uses: actions/cache@v6
