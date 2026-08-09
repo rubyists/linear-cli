@@ -56,7 +56,32 @@ jobs:
         name: Build all Burrito targets
         run: MIX_ENV=prod mix release lc
       -
-        name: Upload binaries to the GitHub release
+        # `mix release lc`'s exit code alone doesn't guarantee every target
+        # actually produced a binary - Burrito builds each target
+        # independently, so one target failing partway through wouldn't
+        # necessarily fail the whole `mix release` invocation. Not everyone
+        # installing this uses Homebrew (no tap exists yet anyway - see
+        # #14/CRY-37), so these binaries are the primary install path for
+        # a lot of users; silently shipping a release missing one of them
+        # is worse than failing loudly here.
+        name: Verify the required targets actually built
+        run: |
+          missing=0
+          for target in lc_linux_x86_64 lc_macos_aarch64
+          do
+              if [ ! -f "burrito_out/$target" ]
+              then
+                  printf '::error::missing required release artifact: %s\n' "$target"
+                  missing=1
+              fi
+          done
+          [ "$missing" -eq 0 ]
+      -
+        name: Generate checksums for every built artifact
+        run: sha256sum * > SHA256SUMS
+        working-directory: app/burrito_out
+      -
+        name: Upload binaries and checksums to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag_name }}" app/burrito_out/* --clobber
