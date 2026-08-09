@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/rubyists/linear-cli-ex/compare/v0.2.0...v0.2.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **ci:** create releases as drafts so assets survive Immutable Releases ([#19](https://github.com/rubyists/linear-cli-ex/issues/19)) ([8572623](https://github.com/rubyists/linear-cli-ex/commit/8572623eb515f2066aeade9b61d96929cee543fb))
+
 ## [0.2.0](https://github.com/rubyists/linear-cli-ex/compare/v0.1.2...v0.2.0) (2026-08-09)
 
 
