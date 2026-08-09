@@ -1,0 +1,236 @@
+= Linear Command line interface (Elixir)
+:toc: right
+:toclevels: 3
+:sectanchors:
+:icons: font
+:tip-caption: 💡
+:note-caption: 📝
+:experimental:
+:conventional-commits: https://www.conventionalcommits.org/en/v1.0.0/[Conventional Commits]
+
+A command line interface to https://linear.app.
+
+This is an Elixir/OTP port of https://github.com/rubyists/linear-cli[linear-cli] (the
+original Ruby CLI) - same commands, same wrapper scripts, but a single standalone
+binary (via https://github.com/burrito-elixir/burrito[Burrito]) instead of a Ruby
+gem/runtime, and concurrent fan-out (via `Task.async_stream`) for the operations
+that fetch or update several issues at once.
+
+== Installation
+
+=== I don't want to install
+
+You can run the CLI from the container image without installing anything.
+
+[source,sh]
+----
+$ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli-ex:v0 lcls <1>
+$ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli-ex:v0 lcls <2>
+----
+<1> Podman usage
+<2> Docker usage - `:v0` tracks the latest 0.x release; pin `:v0.1.2` (or whichever version) for a fixed image
+
+IMPORTANT: The image sets `LINEAR_CLI_DAEMON=true` by default so its own
+entrypoint can also run as the long-lived Oban scheduling daemon. Override it
+to an empty value (as above) for one-off interactive CLI usage - otherwise
+`lc`/the wrapper scripts never see your command at all.
+
+=== Download a release binary (Most should use this)
+
+Grab the binary for your platform from the
+https://github.com/rubyists/linear-cli-ex/releases[latest release] - macOS
+(Apple Silicon), Linux (x86_64), and Windows (x86_64) are all built as
+standalone executables with no Erlang/Elixir install required.
+
+[source,sh]
+----
+$ curl -sLo lc https://github.com/rubyists/linear-cli-ex/releases/latest/download/lc_macos_aarch64
+$ chmod +x lc
+$ sudo mv lc /usr/local/bin/lc
+----
+
+NOTE: A Homebrew tap is planned but not yet available.
+
+=== install.sh (builds from source, for machines without Homebrew)
+
+[source,sh]
+----
+$ git clone https://github.com/rubyists/linear-cli-ex.git
+$ cd linear-cli-ex
+$ ./install.sh
+----
+
+Builds a native release via https://mise.jdx.dev[mise] and installs `lc` plus
+the `bin/` wrapper scripts onto a directory already on your `$PATH`. Run
+`./uninstall.sh` to remove exactly what it installed.
+
+=== From Source (You are obviously a developer)
+
+[source,sh]
+----
+$ git clone https://github.com/rubyists/linear-cli-ex.git
+$ cd linear-cli-ex/app
+$ mise install
+$ mise exec -- mix deps.get
+$ mise exec -- env MIX_ENV=prod mix release lc
+$ ./burrito_out/lc_<target> --version
+----
+
+== Usage
+
+=== Configuration
+
+You must set the `LINEAR_API_KEY` environment variable to your Linear API key.
+You can find your API key in your https://linear.app/settings/api[Linear Settings].
+
+=== Commands
+
+==== Help
+
+You can get help/usage for any command or subcommand by using the `--help` flag.
+
+[source,sh]
+----
+$ lc --help
+$ lc [COMMAND] --help
+$ lc [COMMAND] [SUBCOMMAND] --help
+----
+
+==== Who Am I?
+
+[source,sh]
+----
+$ lc whoami
+$ lc whoami --teams <1>
+----
+<1> Include the teams you are a member of
+
+==== List Issues
+
+`lcls` is a wrapper script provided to list issues. It's an alias for `lc issue list`.
+
+[source,sh]
+----
+$ lcls
+$ lcls --full
+$ lcls -f CRY-1
+----
+
+==== Assign one or more issues to yourself (take em!)
+
+[source,sh]
+----
+$ lc issue take CRY-1234
+$ lc issue take CRY-456 CRY-789
+----
+
+==== Create an issue
+
+[source,sh]
+----
+$ lc issue create --title "My new issue" --description "This is a new issue" --labels Bug,Feature --team CRY
+$ lc issue create -t "My new issue" -T CRY -l Improvement,Feature
+----
+
+NOTE: If you don't provide a title, team, labels, or description, you will be prompted to enter them.
+
+TIP: When creating an issue, you can use the `--dev` (or `--develop`) option to immediately start development on the issue.
+
+==== Develop an issue
+
+Switches to the branch for the issue, creating the branch if it doesn't exist.
+
+[source,sh]
+----
+$ lc issue develop CRY-1234
+----
+
+===== Create a Pull Request (using the semantic PR title)
+
+Requires the `gh` CLI to be installed and configured.
+
+[source,sh]
+----
+$ lc issue pr CRY-1234
+----
+
+==== Update an issue
+
+All of the update options can work on multiple issues at a time.
+
+===== Add a comment to one or more issues
+
+[source,sh]
+----
+$ lc issue update --comment "Here is a comment" CRY-1234 <1>
+$ lc issue update --close --reason "I do not like you" CRY-14 CRY-15 <2>
+$ lc issue update --cancel --trash --reason "I have no idea why you are here" CRY-16 CRY-17 <3>
+$ lc issue update --comment - CRY-14 CRY-15 <4>
+$ lcomment CRY-1234 CRY-3 <5>
+----
+<1> Comments on the issue with the provided text
+<2> Closes multiple issues without prompting (reason is added as a comment)
+<3> Cancels multiple issues without prompting and moves them to the trash (reason is added as a comment)
+<4> Opens your editor for the comment (use `-` to prompt)
+<5> Always prompts for a comment (`lcomment` is a wrapper for `lc issue update --comment -`)
+
+===== Close one or many issues
+
+[source,sh]
+----
+$ lc issue update --close --reason "These were closable" CRY-1234 CRY-2
+----
+
+=== Wrapper scripts
+
+The `bin/` wrapper scripts (ported verbatim from `linear-cli`'s own `exe/scripts/`)
+make the common commands shorter to type. They just `exec lc ...`, so they work
+anywhere `lc` is on your `$PATH`.
+
+[source,sh]
+----
+$ lcls
+$ lcreate --description "This is a new issue" --labels Bug,Feature --team CRY
+$ lclose --reason "This issue sucks" CRY-1234 CRY-456
+$ lcomment CRY-1234
+$ lproj list --mine
+----
+
+== Development
+
+The project uses ExUnit and `mix format`. Run tests with:
+
+[source,sh]
+----
+$ cd app
+$ mise exec -- mix test
+$ mise exec -- mix format --check-formatted
+----
+
+=== Build a release binary
+
+[source,sh]
+----
+$ cd app
+$ mise exec -- env MIX_ENV=prod BURRITO_TARGET=<target> mix release lc
+----
+
+`<target>` is one of `macos_aarch64`, `linux_x86_64`, or `windows_x86_64`.
+
+=== Build the container
+
+[source,sh]
+----
+$ ./ci/build_image.sh <tag_name>
+----
+
+=== Conventional Commits (semantic commit messages)
+
+This project follows the {conventional-commits} specification.
+
+To contribute, please follow that commit message format, or your pull request
+may be rejected.
+
+== License
+
+WTFPL

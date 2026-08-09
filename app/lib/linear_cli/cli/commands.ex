@@ -4,7 +4,7 @@ defmodule LinearCli.CLI.Commands do
   result. Ported from vendor/ruby-linear-cli/lib/linear/commands/**.
   """
 
-  alias LinearCli.CLI.{Display, IssueHelpers, Prompt}
+  alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt}
   alias LinearCli.{Git, Linear}
 
   @doc "Ported from commands/whoami.rb."
@@ -51,21 +51,38 @@ defmodule LinearCli.CLI.Commands do
   @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
 
-  `--project`/`-p` (which needs the interactive project picker from
-  `CLI::Projects#project_for`) isn't wired up yet - deferred to the phase
-  that builds `Owl`-based prompts.
+  `--project`/`-p` is resolved the same way Ruby's `CLI::Projects#project_for`
+  does - against every project in the workspace (`Project.all`, not
+  team-scoped), prompting interactively when the search is ambiguous or
+  omitted-but-requested (`-p -`). Only resolved at all when `--project` was
+  actually given - unlike `issue create`/`issue update`, a bare `issue list`
+  applies no project filter and never prompts.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
-    input = %{
-      ids: ids,
-      mine: !flags.no_mine,
-      unassigned: flags.unassigned,
-      team_key: options.team
-    }
+    with {:ok, project_id} <- resolve_project_id(options.project) do
+      input = %{
+        ids: ids,
+        mine: !flags.no_mine,
+        unassigned: flags.unassigned,
+        team_key: options.team,
+        project_id: project_id
+      }
 
-    with {:ok, issues} <- Linear.issues(input) do
-      Display.show(issues, %{output: options.output, full: flags.full})
-      :ok
+      with {:ok, issues} <- Linear.issues(input) do
+        Display.show(issues, %{output: options.output, full: flags.full})
+        :ok
+      end
+    end
+  end
+
+  defp resolve_project_id(nil), do: {:ok, nil}
+
+  defp resolve_project_id(search) do
+    with {:ok, projects} <- Linear.projects() do
+      case Projects.project_for(projects, search) do
+        nil -> {:ok, nil}
+        project -> {:ok, project.id}
+      end
     end
   end
 
