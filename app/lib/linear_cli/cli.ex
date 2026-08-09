@@ -307,7 +307,13 @@ defmodule LinearCli.CLI do
                 full: [short: "-f", long: "--full", help: "Show full issue details"]
               ],
               options: [
-                team: [short: "-t", long: "--team", help: "Show issues for only this team"]
+                team: [short: "-t", long: "--team", help: "Show issues for only this team"],
+                project: [
+                  short: "-p",
+                  long: "--project",
+                  help:
+                    "Show issues for only this project. Can be name, URL, ID, or - to select from a list"
+                ]
               ]
             ],
             create: [

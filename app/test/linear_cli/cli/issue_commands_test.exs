@@ -130,6 +130,79 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     )
   end
 
+  # Workspace-wide (not team-scoped) projects query - the shape
+  # `LinearCli.Linear.Project.Read.All`/`Linear.projects/0` actually use,
+  # distinct from `team_projects/1`'s team-scoped `nodes` shape above.
+  defp all_projects(projects) do
+    %{
+      "data" => %{
+        "projects" => %{
+          "edges" => Enum.map(projects, &%{"node" => &1, "cursor" => &1["id"]}),
+          "pageInfo" => %{"hasNextPage" => false}
+        }
+      }
+    }
+  end
+
+  defp issues_response(issues) do
+    %{
+      "data" => %{
+        "issues" => %{
+          "edges" => Enum.map(issues, &%{"node" => &1, "cursor" => &1["id"]}),
+          "pageInfo" => %{"hasNextPage" => false}
+        }
+      }
+    }
+  end
+
+  describe "issue list (Ruby: commands/issue/list.rb + operations/issue/list.rb)" do
+    test "--project resolves against every workspace project and filters the issue query by it" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            Req.Test.json(conn, all_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--project", "Manhattan Rollout"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p1"}}}}
+    end
+
+    test "bare issue list applies no project filter and never queries projects at all" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        if String.contains?(query, "projects(") do
+          raise "issue list must not query projects when --project wasn't given"
+        end
+
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+      assert output =~ "CRY-1"
+    end
+  end
+
   describe "issue create (Ruby: commands/issue/create.rb)" do
     test "resolves every field, declines to take it, and displays the created issue" do
       stub_responses([
