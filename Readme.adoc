@@ -85,6 +85,38 @@ You can find your API key in your https://linear.app/settings/api[Linear Setting
 
 === Commands
 
+==== Command Aliases
+
+Short aliases are available for the top-level commands and some subcommands,
+so you don't have to type the full name every time:
+
+[cols="1,2"]
+|===
+|Command |Aliases
+
+|`whoami` |`me`, `w`, `who`, `whodat`
+|`version` |`v`
+|`issue` |`i`, `issues`
+|`team` |`t`, `teams`
+|`project` |`p`, `projects`
+|`issue create` |`c`, `new`, `add`
+|`issue develop` |`d`, `dev`
+|`issue list` |`l`, `ls`
+|`issue update` |`u`
+|`issue pr` |`pull-request`
+|`team list` |`l`, `ls`
+|`project list` |`l`, `ls`
+|===
+
+[source,sh]
+----
+$ lc w --teams
+$ lc i ls
+$ lc i dev CRY-1234
+----
+
+`issue take` has no alias.
+
 ==== Help
 
 You can get help/usage for any command or subcommand by using the `--help` flag.
