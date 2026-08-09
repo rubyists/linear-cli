@@ -10,6 +10,7 @@ on:  # yamllint disable-line rule:truthy
 permissions:
   contents: write
   packages: write
+  pull-requests: write
 
 jobs:
   burrito:
@@ -129,6 +130,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS --generate-notes
         working-directory: app
+      -
+        # release-please labels its own release PR "autorelease: pending"
+        # and only relabels it "autorelease: tagged" once IT creates the
+        # tag - since we tag it ourselves above instead, that transition
+        # never happens on its own. Without this, release-please's own
+        # findMergedReleasePullRequests() guard in release-pr.yaml keeps
+        # finding this PR stuck "pending" forever and refuses to open any
+        # future release PR ("There are untagged, merged release PRs
+        # outstanding - aborting").
+        name: Mark the release PR as tagged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+              --remove-label "autorelease: pending" \
+              --add-label "autorelease: tagged"
+        working-directory: .
 
   container:
     needs: [burrito]
