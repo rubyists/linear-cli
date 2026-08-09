@@ -77,11 +77,42 @@ jobs:
           done
           [ "$missing" -eq 0 ]
       -
+        # A bare `lc_macos_aarch64` binary download doesn't get you
+        # lcreate/lcls/lclose/lcomment/lproj - only install.sh and the
+        # container image ever pulled those, straight from the repo
+        # checkout, never from a release asset. Package each target
+        # together with the wrapper scripts so a release download is
+        # actually installable on its own, matching what install.sh gives
+        # you.
+        name: Package each target into a per-platform tarball with the wrapper scripts
+        run: |
+          for artifact in lc_*
+          do
+              case "$artifact" in
+                  lc_windows_x86_64.exe)
+                      target=lc_windows_x86_64
+                      binary_name=lc.exe
+                      ;;
+                  *)
+                      target=$artifact
+                      binary_name=lc
+                      ;;
+              esac
+
+              stage=$(mktemp -d)
+              cp "$artifact" "$stage/$binary_name"
+              cp ../../bin/lcreate ../../bin/lcls ../../bin/lclose ../../bin/lcomment ../../bin/lproj "$stage/"
+              chmod +x "$stage"/*
+              tar -czf "${target}.tar.gz" -C "$stage" .
+              rm -rf "$stage" "$artifact"
+          done
+        working-directory: app/burrito_out
+      -
         name: Generate checksums for every built artifact
         run: sha256sum * > SHA256SUMS
         working-directory: app/burrito_out
       -
-        name: Upload binaries and checksums to the GitHub release
+        name: Upload release tarballs and checksums to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag_name }}" app/burrito_out/* --clobber
