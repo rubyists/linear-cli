@@ -3,21 +3,31 @@
 # one build artifact, reused for both the CLI distribution and this image.
 # Build with ci/build_image.sh (which finds this via its
 # Dockerfile/Containerfile/oci/Containerfile search order - build context
-# is still the repo root, so the COPY path below is unaffected by this
-# file's own location) after app/burrito_out/linear_cli_linux_x86_64
+# is still the repo root, so the COPY paths below are unaffected by this
+# file's own location) after app/burrito_out/lc_linux_x86_64
 # already exists (`MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release
-# linear_cli`).
+# lc`).
 FROM alpine:3.22
 
 ARG APP_VERSION
 LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 # ca-certificates: Linear's API is HTTPS-only, and Alpine's base image
-# doesn't bundle a CA trust store.
-RUN apk add --no-cache ca-certificates
+# doesn't bundle a CA trust store. bash: the bin/ wrapper scripts below
+# have `#!/usr/bin/env bash` shebangs and (bin/lclose) use bash-only
+# `[[ ... =~ ... ]]` syntax - Alpine's default /bin/sh (busybox ash)
+# can't run them.
+RUN apk add --no-cache ca-certificates bash
 
-COPY app/burrito_out/linear_cli_linux_x86_64 /linear_cli
-RUN chmod +x /linear_cli
+# The bin/ wrapper scripts (bin/lcreate, bin/lcls, bin/lclose, bin/lcomment,
+# bin/lproj - ported verbatim from vendor/ruby-linear-cli/exe/scripts/) all
+# `exec lc ...`, resolving it via PATH - both go in /usr/local/bin/ together
+# so that resolution actually works, rather than the bare `/lc` this used
+# before (which isn't on PATH at all).
+COPY app/burrito_out/lc_linux_x86_64 /usr/local/bin/lc
+COPY bin/lcreate bin/lcls bin/lclose bin/lcomment bin/lproj /usr/local/bin/
+RUN chmod +x /usr/local/bin/lc /usr/local/bin/lcreate /usr/local/bin/lcls \
+        /usr/local/bin/lclose /usr/local/bin/lcomment /usr/local/bin/lproj
 
 ENV LINEAR_CLI_DAEMON=true
-ENTRYPOINT ["/linear_cli"]
+ENTRYPOINT ["/usr/local/bin/lc"]
