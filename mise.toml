@@ -1,2 +1,8 @@
 [tools]
-elixir = "latest"
+# Pinned to match .github/workflows/*.yaml's erlef/setup-beam@v1 exactly -
+# Burrito's precompiled-ERTS catalog lags bleeding-edge OTP patches, so
+# floating on "latest" (as this used to) drifts local builds away from what
+# Burrito can actually fetch, breaking `mix release` locally while CI still
+# works. See documents/phase-8-plan.adoc.
+erlang = "29.0.3"
+elixir = "1.20.3"
