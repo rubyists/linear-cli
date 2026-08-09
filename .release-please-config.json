@@ -5,7 +5,7 @@
       "release-type": "simple",
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": true,
-      "draft": false,
+      "draft": true,
       "prerelease": false,
       "version-file": ".version.txt",
       "extra-files": [
