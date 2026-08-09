@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/rubyists/linear-cli-ex/compare/v0.3.0...v0.3.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **ci:** package release binaries with the wrapper scripts ([#24](https://github.com/rubyists/linear-cli-ex/issues/24)) ([5fb24a4](https://github.com/rubyists/linear-cli-ex/commit/5fb24a473685ba20fdff0ee57b5fbfa572d2fc45))
+
 ## [0.3.0](https://github.com/rubyists/linear-cli-ex/compare/v0.2.1...v0.3.0) (2026-08-09)
 
 
