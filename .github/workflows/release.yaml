@@ -2,6 +2,8 @@
 name: Release
 
 on:  # yamllint disable-line rule:truthy
+  push:
+    branches: [main]
   pull_request:
     types: [closed]
     branches: [main]
@@ -13,11 +15,41 @@ permissions:
   pull-requests: write
 
 jobs:
+  validate:
+    name: Validations
+    uses: ./.github/workflows/ci.yaml
+
+  manage-release-pr:
+    needs: [validate]
+    # Every push to main (not a release-PR merge itself) - keeps the
+    # pending "chore(main): release X.Y.Z" PR current as commits land.
+    if: github.event_name == 'push'
+    name: Open/update the release PR
+    runs-on: ubuntu-latest
+    steps:
+      -
+        uses: actions/checkout@v7
+        with:
+          fetch-tags: true
+      -
+        # skip-github-release: this only ever manages the version-bump PR
+        # (manifest/CHANGELOG.md/mix.exs) - it never creates a tag or
+        # GitHub Release. The burrito job below does that itself,
+        # atomically, once this PR merges and binaries are already built -
+        # see its own comments for why.
+        uses: googleapis/release-please-action@v5
+        with:
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          skip-github-release: true
+
   burrito:
+    needs: [validate]
     # Only when release-please's own release PR (always from this exact
-    # branch, see release-pr.yaml) actually merges - "approving the
-    # release PR" is the trigger for building, not every push to main.
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release-please--branches--main')
+    # branch) actually merges - "approving the release PR" is the trigger
+    # for building, not every push to main.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release-please--branches--main')
     name: Build Burrito binaries and create the release
     runs-on: ubuntu-latest
     outputs:
@@ -111,9 +143,10 @@ jobs:
         run: sha256sum * > SHA256SUMS
         working-directory: app/burrito_out
       -
-        # release-pr.yaml already bumped .release-please-manifest.json on
-        # main as part of the PR this job's trigger just merged - read the
-        # version straight from it rather than asking release-please again.
+        # manage-release-pr already bumped .release-please-manifest.json
+        # on main as part of the PR this job's trigger just merged - read
+        # the version straight from it rather than asking release-please
+        # again.
         name: Read the version release-please just bumped to
         id: version
         run: |
@@ -132,13 +165,13 @@ jobs:
         working-directory: app
       -
         # release-please labels its own release PR "autorelease: pending"
-        # and only relabels it "autorelease: tagged" once IT creates the
-        # tag - since we tag it ourselves above instead, that transition
-        # never happens on its own. Without this, release-please's own
-        # findMergedReleasePullRequests() guard in release-pr.yaml keeps
-        # finding this PR stuck "pending" forever and refuses to open any
-        # future release PR ("There are untagged, merged release PRs
-        # outstanding - aborting").
+        # and only relabels it "autorelease: tagged" once it creates the
+        # tag itself. Since we tag it ourselves above instead, that
+        # transition never happens on its own. Without this,
+        # release-please's own merged-PR guard (in manage-release-pr)
+        # keeps finding this PR stuck "pending" forever and refuses to
+        # open any future release PR ("There are untagged, merged release
+        # PRs outstanding - aborting").
         name: Mark the release PR as tagged
         env:
           GH_TOKEN: ${{ github.token }}
