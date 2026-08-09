@@ -171,6 +171,12 @@ defmodule LinearCli.CLITest do
     assert capture_io(fn -> LinearCli.CLI.main(["version"]) end) =~ version
   end
 
+  test "version -o json prints valid JSON with the version field" do
+    version = to_string(Application.spec(:linear_cli, :vsn))
+    output = capture_io(fn -> LinearCli.CLI.main(["version", "-o", "json"]) end)
+    assert %{"version" => ^version} = Jason.decode!(output)
+  end
+
   test "--develop and --butwhy are rewritten to their canonical --dev/--reason spellings" do
     # Ruby's create.rb declares `--dev` with alias `--develop`, and update.rb's
     # `--reason` has alias `--butwhy` - both real, user-facing spellings.

@@ -15,9 +15,20 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
-  @doc "Ported from commands/version.rb."
-  def version(_result) do
-    IO.puts(to_string(Application.spec(:linear_cli, :vsn)))
+  @doc """
+  Ported from commands/version.rb, extended to respect the global
+  `--output json` option like every other command does - previously
+  ignored it and always printed plain text.
+  """
+  def version(%{options: options}) do
+    version = to_string(Application.spec(:linear_cli, :vsn))
+
+    if options.output == "json" do
+      IO.puts(Jason.encode!(%{version: version}))
+    else
+      IO.puts(version)
+    end
+
     :ok
   end
 
