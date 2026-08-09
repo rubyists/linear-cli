@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/rubyists/linear-cli-ex/compare/v0.7.0...v0.7.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* **ci:** rebuild the release pipeline to stop the version-bump runaway loop ([#30](https://github.com/rubyists/linear-cli-ex/issues/30)) ([c311fd4](https://github.com/rubyists/linear-cli-ex/commit/c311fd4dbc6a720b995c530daefa3bf1b6343452))
+
 ## [0.7.0](https://github.com/rubyists/linear-cli-ex/compare/v0.6.0...v0.7.0) (2026-08-09)
 
 
