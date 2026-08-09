@@ -5,36 +5,57 @@ defmodule LinearCli.Application do
 
   @impl true
   def start(_type, _args) do
-    children = daemon_children()
-
-    opts = [strategy: :one_for_one, name: LinearCli.Supervisor]
-    Supervisor.start_link(children, opts)
+    if System.get_env("LINEAR_CLI_DAEMON") == "true" do
+      start_daemon()
+    else
+      start_interactive()
+    end
   end
 
   # Only the daemon run mode (LINEAR_CLI_DAEMON=true, set by the mix
-  # release's daemon startup, never by the interactive escript/Burrito
-  # binary) starts the repo + Oban. Confirmed empirically that the escript
-  # boots this whole application on every invocation - without this gate,
-  # every interactive command would also open a database connection and
-  # boot Oban's full supervision tree. See documents/phase-7-plan.adoc.
+  # release's daemon startup) starts the repo + Oban and stays alive.
+  # Confirmed empirically that the escript boots this whole application on
+  # every invocation - without this gate, every interactive command would
+  # also open a database connection and boot Oban's full supervision tree.
+  # See documents/phase-7-plan.adoc.
   #
   # Which repo/engine actually starts is resolved fresh on every boot via
   # LinearCli.ObanRepo.{repo,oban_engine}/0, not baked in at compile time -
   # see that module's moduledoc for why this has to be a runtime choice.
-  defp daemon_children do
-    if System.get_env("LINEAR_CLI_DAEMON") == "true" do
-      repo = LinearCli.ObanRepo.repo()
-      ensure_db_ready!(repo)
+  defp start_daemon do
+    repo = LinearCli.ObanRepo.repo()
+    ensure_db_ready!(repo)
 
-      oban_opts =
-        :linear_cli
-        |> Application.fetch_env!(Oban)
-        |> Keyword.merge(repo: repo, engine: LinearCli.ObanRepo.oban_engine())
+    oban_opts =
+      :linear_cli
+      |> Application.fetch_env!(Oban)
+      |> Keyword.merge(repo: repo, engine: LinearCli.ObanRepo.oban_engine())
 
-      [repo, {Oban, oban_opts}]
-    else
-      []
+    opts = [strategy: :one_for_one, name: LinearCli.Supervisor]
+    Supervisor.start_link([repo, {Oban, oban_opts}], opts)
+  end
+
+  # `mix escript.build`'s `main_module: LinearCli.CLI` makes the escript
+  # runtime call `LinearCli.CLI.main/1` itself once boot finishes here - so
+  # this must NOT also call it, or every interactive command would run
+  # twice. A Burrito-wrapped release has no such runtime: it boots via
+  # `-s elixir start_cli`, which only recognizes Elixir's own CLI flags
+  # (`--help`/`--version`) and otherwise tries to run the first arg as a
+  # script file (see documents/phase-8-plan.adoc's Burrito verification -
+  # it only exercised the daemon boot-and-stay-alive path, not this one).
+  # `LinearCli.CLI.main/2` never reaches this call site as a Burrito
+  # release, so it has to happen here instead, per Burrito's own
+  # "Application Entry Point" README section. `running_standalone?/0`
+  # (checks the `__BURRITO` env var the Zig wrapper sets) is what
+  # distinguishes that case from escript/`mix run`.
+  defp start_interactive do
+    if Burrito.Util.running_standalone?() do
+      LinearCli.CLI.main(Burrito.Util.Args.argv())
+      System.halt(0)
     end
+
+    opts = [strategy: :one_for_one, name: LinearCli.Supervisor]
+    Supervisor.start_link([], opts)
   end
 
   # Only SQLite needs its containing directory prepared before connecting -
