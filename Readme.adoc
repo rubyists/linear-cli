@@ -44,10 +44,13 @@ standalone executables with no Erlang/Elixir install required.
 
 [source,sh]
 ----
-$ curl -sLo lc https://github.com/rubyists/linear-cli-ex/releases/latest/download/lc_macos_aarch64
-$ chmod +x lc
-$ sudo mv lc /usr/local/bin/lc
+$ curl -sLO https://github.com/rubyists/linear-cli-ex/releases/latest/download/lc_macos_aarch64
+$ curl -sLo SHA256SUMS https://github.com/rubyists/linear-cli-ex/releases/latest/download/SHA256SUMS
+$ grep -q lc_macos_aarch64 SHA256SUMS && grep lc_macos_aarch64 SHA256SUMS | shasum -a 256 -c - <1>
+$ chmod +x lc_macos_aarch64
+$ sudo mv lc_macos_aarch64 /usr/local/bin/lc
 ----
+<1> Linux: `sha256sum -c -` instead of `shasum -a 256 -c -`.
 
 NOTE: A Homebrew tap is planned but not yet available.
 
