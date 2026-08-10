@@ -49,5 +49,9 @@ defmodule LinearCli.Linear do
     resource LinearCli.Linear.Comment do
       define :add_comment, action: :create, args: [:issue_identifier, :body]
     end
+
+    resource LinearCli.Linear.ProjectUpdate do
+      define :post_project_update, action: :create, args: [:project_id, :body]
+    end
   end
 end

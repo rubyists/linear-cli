@@ -162,6 +162,10 @@ defmodule LinearCli.CLI do
   defp dispatch([:version], result, halt), do: run(&Commands.version/1, result, halt)
   defp dispatch([:team, :list], result, halt), do: run(&Commands.team_list/1, result, halt)
   defp dispatch([:project, :list], result, halt), do: run(&Commands.project_list/1, result, halt)
+
+  defp dispatch([:project, :update], result, halt),
+    do: run(&Commands.project_update/1, result, halt)
+
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
   defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
 
@@ -344,6 +348,28 @@ defmodule LinearCli.CLI do
               ],
               options: [
                 team: [short: "-t", long: "--team", help: "Show projects for only this team"]
+              ]
+            ],
+            update: [
+              name: "update",
+              about: "Post a status update to a project",
+              args: [
+                project: [
+                  value_name: "PROJECT",
+                  help: "Project name, URL, ID, or search term",
+                  required: true
+                ]
+              ],
+              options: [
+                body: [short: "-b", long: "--body", help: "The update's content (markdown)"],
+                health: [
+                  long: "--health",
+                  help: "Project health: onTrack, atRisk, or offTrack",
+                  parser: fn
+                    v when v in ["onTrack", "atRisk", "offTrack"] -> {:ok, v}
+                    v -> {:error, "must be one of: onTrack, atRisk, offTrack (got #{inspect(v)})"}
+                  end
+                ]
               ]
             ]
           ]
