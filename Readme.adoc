@@ -56,6 +56,14 @@ $ sudo mv lc/* /usr/local/bin/
 
 NOTE: A Homebrew tap is planned but not yet available.
 
+On macOS, Gatekeeper blocks `lc` itself (the wrapper scripts are plain shell,
+so they're unaffected) since it isn't signed/notarized yet:
+
+[source,sh]
+----
+$ xattr -d com.apple.quarantine /usr/local/bin/lc
+----
+
 === install.sh (builds from source, for machines without Homebrew)
 
 [source,sh]
