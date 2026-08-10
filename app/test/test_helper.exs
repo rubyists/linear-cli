@@ -14,4 +14,16 @@ System.put_env("LINEAR_API_KEY", "test-key")
 # LINEAR_API_KEY-style race.
 Application.put_env(:elixir, :ansi_enabled, true)
 
+# LinearCli.Profiles opens/closes its own connection per call rather than
+# holding one open for the whole suite (see its moduledoc), so its sqlite
+# file at :profiles_db_path outlives any single `mix test` invocation on
+# disk. Without this, a stray active profile left behind by an earlier run
+# would leak into every other test that touches issue_list/make_da_issue!
+# but isn't itself aware of profiles - a suite that isn't deterministic
+# against its own previous runs. Individual profile-aware test modules
+# (LinearCli.ProfilesTest, LinearCli.CLI.ProfileDefaultsTest) still delete
+# it again in their own `setup`, since it comes back the moment any test
+# creates a profile.
+Application.fetch_env!(:linear_cli, :profiles_db_path) |> File.rm()
+
 ExUnit.start()

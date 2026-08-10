@@ -102,7 +102,8 @@ defmodule LinearCli.CLI do
       "pull-request" => "pr"
     },
     "team" => %{"l" => "list", "ls" => "list"},
-    "project" => %{"l" => "list", "ls" => "list"}
+    "project" => %{"l" => "list", "ls" => "list"},
+    "profile" => %{"l" => "list", "ls" => "list"}
   }
 
   @doc false
@@ -165,6 +166,16 @@ defmodule LinearCli.CLI do
 
   defp dispatch([:project, :update], result, halt),
     do: run(&Commands.project_update/1, result, halt)
+
+  defp dispatch([:profile, :create], result, halt),
+    do: run(&Commands.profile_create/1, result, halt)
+
+  defp dispatch([:profile, :list], result, halt), do: run(&Commands.profile_list/1, result, halt)
+  defp dispatch([:profile, :use], result, halt), do: run(&Commands.profile_use/1, result, halt)
+  defp dispatch([:profile, :show], result, halt), do: run(&Commands.profile_show/1, result, halt)
+
+  defp dispatch([:profile, :delete], result, halt),
+    do: run(&Commands.profile_delete/1, result, halt)
 
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
   defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
@@ -371,6 +382,37 @@ defmodule LinearCli.CLI do
                   end
                 ]
               ]
+            ]
+          ]
+        ],
+        profile: [
+          name: "profile",
+          about: "Manage saved team/project profiles",
+          subcommands: [
+            create: [
+              name: "create",
+              about: "Save a new profile",
+              args: [name: [value_name: "NAME", help: "Profile name", required: true]],
+              options: [
+                team: [short: "-t", long: "--team", help: "Default team for this profile"],
+                project: [
+                  short: "-p",
+                  long: "--project",
+                  help: "Default project for this profile"
+                ]
+              ]
+            ],
+            list: [name: "list", about: "List saved profiles"],
+            use: [
+              name: "use",
+              about: "Switch to a saved profile",
+              args: [name: [value_name: "NAME", help: "Profile name", required: true]]
+            ],
+            show: [name: "show", about: "Show the active profile"],
+            delete: [
+              name: "delete",
+              about: "Delete a saved profile",
+              args: [name: [value_name: "NAME", help: "Profile name", required: true]]
             ]
           ]
         ],

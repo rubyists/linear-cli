@@ -244,6 +244,24 @@ $ lcomment CRY-1234 CRY-3 <5>
 $ lc issue update --close --reason "These were closable" CRY-1234 CRY-2
 ----
 
+==== Default team/project (profiles)
+
+Not in Ruby's `linear-cli` - save a named team/project bundle once, then
+switch to it instead of passing `--team`/`--project` on every `issue
+create`/`issue list`.
+
+[source,sh]
+----
+$ lc profile create manhattan --team CRY --project Manhattan
+$ lc profile use manhattan
+$ lc profile list
+$ lc profile show
+$ lc profile delete manhattan
+----
+
+An explicit `--team`/`--project` on the command line always overrides the
+active profile.
+
 ==== Post a project status update
 
 Not in Ruby's `linear-cli` - a status post on a project (Linear's own "Project

@@ -78,7 +78,7 @@ defmodule LinearCli.CLI.IssueHelpers do
   """
 
   alias LinearCli.CLI.{Projects, Prompt, WhatFor}
-  alias LinearCli.Linear
+  alias LinearCli.{Linear, Profiles}
 
   @doc """
   Adds a comment to `issue`, resolving `comment` (asking, or opening an
@@ -342,7 +342,10 @@ defmodule LinearCli.CLI.IssueHelpers do
   `LinearCli.CLI.WhatFor`/`LinearCli.CLI.Projects`).
 
   `opts` (Ruby's `**options`): `:title`, `:description`, `:team`, `:labels`,
-  `:project`.
+  `:project`. `:team`/`:project`, if omitted, fall back to
+  `LinearCli.Profiles.default_team/0`/`default_project/0` (the active
+  profile, if any) before `WhatFor.team_for/1`/`Projects.project_for/2`'s
+  own interactive prompting kicks in.
 
   Ported from `CLI::Issue#make_da_issue!`.
   """
@@ -350,11 +353,11 @@ defmodule LinearCli.CLI.IssueHelpers do
   def make_da_issue!(opts \\ []) do
     title = WhatFor.title_for(opts[:title])
     description = WhatFor.description_for(opts[:description])
-    team = WhatFor.team_for(opts[:team])
+    team = WhatFor.team_for(opts[:team] || Profiles.default_team())
     labels = WhatFor.labels_for(team, opts[:labels])
 
     with {:ok, projects} <- Linear.projects_by_team(team.id) do
-      project = Projects.project_for(projects, opts[:project])
+      project = Projects.project_for(projects, opts[:project] || Profiles.default_project())
       label_ids = Enum.map(labels, & &1.id)
       params = maybe_put_project_id(%{label_ids: label_ids}, project)
 

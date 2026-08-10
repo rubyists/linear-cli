@@ -8,6 +8,7 @@ defmodule LinearCli.CLI.Display do
   """
 
   alias LinearCli.Linear.{Issue, Project, ProjectUpdate, Team, User}
+  alias LinearCli.Profiles.Profile
 
   @ash_internal_fields ~w(__meta__ __metadata__ __order__ __lateral_join_source__ aggregates calculations)a
 
@@ -34,6 +35,14 @@ defmodule LinearCli.CLI.Display do
   defp puts_text(%ProjectUpdate{} = update, _opts) do
     health = if update.health, do: " (#{update.health})", else: ""
     IO.puts("Posted#{health}: #{update.url}")
+  end
+
+  defp puts_text(%Profile{} = profile, _opts) do
+    marker = if profile.active, do: "* ", else: "  "
+
+    IO.puts(
+      "#{marker}#{String.pad_trailing(profile.name, 12)} team=#{profile.team || "-"} project=#{profile.project || "-"}"
+    )
   end
 
   defp puts_text(%User{} = user, opts) do
