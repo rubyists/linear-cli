@@ -1,0 +1,245 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 10, 2026
+:my-title: Phase 9 plan: profiles - default team/project (toward 1.0)
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Every `issue create`/`issue list` invocation needs `--team`/`--project` or
+falls back to interactive prompting (`WhatFor.team_for/1`,
+`Projects.project_for/2`) - there's no way to say "I usually work in team
+CRY on the Manhattan project" once and have it stick. Ruby's `linear-cli`
+never had this either - this is a genuinely new feature, not a port.
+
+Not a single flat default pair: named, switchable *profiles* - e.g. a
+"manhattan" profile (team CRY, project Manhattan) and a "platform" profile
+(team ENG, no project) - so someone working across multiple teams/projects
+can flip between them with one command instead of re-typing flags or
+editing a config file. Stored locally in SQLite, per the explicit
+requirement driving this phase. Significant enough in scope (new local data
+store, a new top-level command, changed resolution behavior in two existing
+commands) that it's the last big piece before a 1.0.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *Profiles, not flat defaults*: a `profiles` table, each row a named
+   bundle of `team`/`project`, with exactly one markable *active* at a time.
+   `lc profile use <name>` switches; whichever commands consult a default
+   read the currently active profile.
+2. *A new, separate SQLite store - not Oban's*: Oban's
+   `LinearCli.ObanRepo.Sqlite` (`~/.linear_cli/oban.db`) is daemon-only and
+   the wrong lifecycle for this (see verification below). A new file,
+   `~/.linear_cli/profiles.db`, sibling to it, same `System.user_home!()`
+   convention (`config/runtime.exs:16`).
+3. *Raw `Exqlite.Sqlite3`, not a new `Ecto.Repo`*: no pooled connection, no
+   migration ceremony, no change to `LinearCli.Application`'s supervision
+   tree. Open a connection, ensure the schema (`CREATE TABLE IF NOT
+   EXISTS`), do the one query, close. `exqlite` is already compiled in as a
+   transitive dependency of `ecto_sqlite3` (confirmed in `mix.lock`), so this
+   needs no new dependency.
+4. *At most one active profile, enforced by the database*: a partial unique
+   index (`CREATE UNIQUE INDEX ... WHERE active = 1`), not application-level
+   bookkeeping or a second "current profile" table.
+5. *Scope this phase to `issue create`/`issue list` only*: those are the two
+   highest-traffic commands and the two that already have a clear
+   team/project resolution seam to hook into. `project list --team`,
+   `issue update --project`, etc. get the same treatment as natural,
+   separate follow-ons once this plumbing exists - not bundled in here.
+6. *Explicit flags always win*: the active profile only fills in
+   `--team`/`--project` when the flag is omitted; passing either explicitly
+   behaves exactly as it does today, with no profile involved at all.
+
+== Verified: interactive mode starts nothing, and Oban's own migrations aren't automatic either
+
+Confirmed by reading code, not assumed:
+
+* `LinearCli.Application.start_interactive/0`
+  (`lib/linear_cli/application.ex:51-59`) starts `Supervisor.start_link([],
+  opts)` - an *empty* children list. No Ecto repo, no Oban, for any
+  interactive command. Its own comment (`application.ex:15-20`) is explicit
+  about why: without this gate, every interactive command would open a
+  database connection and boot Oban's full supervision tree. `start_daemon/0`
+  (`application.ex:25-36`) is the only path that starts
+  `LinearCli.ObanRepo.repo()` + `Oban`, gated on `LINEAR_CLI_DAEMON=true`.
+* No `Ecto.Migrator.run`/`with_repo` call exists anywhere in `lib/` or
+  `config/` (checked directly). `priv/sqlite/migrations/` does contain a
+  real migration (`20260807133654_add_oban_jobs_table.exs`, a one-liner
+  calling `Oban.Migrations.up/0`), but it's only ever run via the external
+  `mix ecto.migrate` task - never invoked by application code at boot. That
+  fits a long-lived daemon with a deploy step ahead of it; it does not fit a
+  one-shot Burrito binary with no deploy step at all.
+
+Both together are why this phase does not extend `ObanRepo`/Ecto for
+profiles - it would mean either adding a pooled repo to every interactive
+invocation's now-empty supervisor (the exact overhead
+`start_interactive/0` was written to avoid), or inventing an
+auto-migrate-on-boot mechanism this codebase has never needed. A four-column
+table with no relations doesn't need Ecto's query DSL or changeset
+validation to justify either.
+
+== Data layer: `LinearCli.Profiles`
+
+New file `lib/linear_cli/profiles.ex` (peer to `oban_repo.ex` - a data
+module, not CLI-specific, so it doesn't live under `cli/`).
+
+* DB path: new `config :linear_cli, :profiles_db_path` entry in
+  `config/runtime.exs`, following the exact `case config_env() do :test ->
+  ... :dev -> ... :prod -> ... end` shape already there for Oban's sqlite
+  path (`runtime.exs:12-19`). `:prod` -> `Path.join(System.user_home!(),
+  ".linear_cli/profiles.db")`. `:dev` -> `Path.expand("../profiles_dev.db",
+  __DIR__)`. `:test` -> `Path.expand("../profiles_test.db", __DIR__)` - a
+  real file, not `:memory:` like Oban's test config: since every call here
+  opens *and closes* its own connection, an in-memory database would be
+  wiped between calls.
+* Schema, created idempotently at the top of every connection:
++
+[source,sql]
+----
+CREATE TABLE IF NOT EXISTS profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  team TEXT,
+  project TEXT,
+  active INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_active_idx ON profiles(active) WHERE active = 1;
+----
+* Public API, built on the real `Exqlite.Sqlite3` functions (verified
+  directly against `deps/exqlite/lib/exqlite/sqlite3.ex`: `open/2`,
+  `close/1`, `execute/2`, `prepare/2`, `bind/2`, `step/2`, `fetch_all/2`,
+  `columns/2`, `changes/1`):
+** `create(name, attrs)` - `attrs` an optional `:team`/`:project` map/keyword. `INSERT`.
+** `list/0` - all profiles, ordered by name.
+** `activate(name)` - one transaction: deactivate everything, then activate
+   the named row; `{:error, :not_found}` if `Sqlite3.changes/1` on the
+   second statement is `0`.
+** `active/0` - the single active profile, or `nil`.
+** `delete(name)` - same not-found handling as `activate/1`.
+** `default_team/0`, `default_project/0` - thin wrappers around `active/0`;
+   `nil` with no active profile, including the very first run before the
+   table has any rows.
+* Private `with_db/1` creates the containing directory (mirroring
+  `ensure_db_ready!/1`, `application.ex:63-69`), opens the connection,
+  ensures the schema, runs the given function, always closes.
+
+== CLI surface
+
+New top-level `profile` command in `LinearCli.CLI.spec/0` (`lib/linear_cli/cli.ex`),
+alongside the existing `team:`/`project:` entries, same shape:
+
+[source,elixir]
+----
+profile: [
+  name: "profile",
+  about: "Manage saved team/project profiles",
+  subcommands: [
+    create: [
+      name: "create",
+      about: "Save a new profile",
+      args: [name: [value_name: "NAME", help: "Profile name", required: true]],
+      options: [
+        team: [short: "-t", long: "--team", help: "Default team for this profile"],
+        project: [short: "-p", long: "--project", help: "Default project for this profile"]
+      ]
+    ],
+    list: [name: "list", about: "List saved profiles"],
+    use: [
+      name: "use",
+      about: "Switch to a saved profile",
+      args: [name: [value_name: "NAME", help: "Profile name", required: true]]
+    ],
+    show: [name: "show", about: "Show the active profile"],
+    delete: [
+      name: "delete",
+      about: "Delete a saved profile",
+      args: [name: [value_name: "NAME", help: "Profile name", required: true]]
+    ]
+  ]
+]
+----
+
+Dispatch clauses next to the existing ones (`cli.ex:161-177`):
+`[:profile, :create]`, `[:profile, :list]`, `[:profile, :use]`,
+`[:profile, :show]`, `[:profile, :delete]`, each
+`run(&Commands.profile_*/1, result, halt)`. New functions in
+`lib/linear_cli/cli/commands.ex`: `profile_create/1`, `profile_list/1`,
+`profile_use/1`, `profile_show/1`, `profile_delete/1`. `{:error,
+:not_found}` becomes a plain `{:error, "No profile named #{name}"}`-style
+tuple - the existing `run/3`/`handle_error/3` machinery already turns any
+command's `{:error, reason}` into a clean message and non-zero exit, so no
+new error-handling plumbing is needed.
+
+No new command alias - `p` is already `project`'s alias in
+`@command_aliases`, and nothing here calls for a short form yet.
+
+== Wiring the fallback into `issue create`/`issue list`
+
+* `IssueHelpers.make_da_issue!/1` (`lib/linear_cli/cli/issue_helpers.ex:349-363`)
+  is the single choke point `issue create` already routes through for both
+  team and project resolution. Two lines at the top:
++
+[source,elixir]
+----
+team_key = opts[:team] || LinearCli.Profiles.default_team()
+project_key = opts[:project] || LinearCli.Profiles.default_project()
+----
++
+then use `team_key`/`project_key` in place of `opts[:team]`/`opts[:project]`
+in the existing `WhatFor.team_for/1`/`Projects.project_for/2` calls right
+below - unchanged otherwise, including the fall-through to interactive
+prompting when neither an explicit flag nor a stored default exists.
+* `Commands.issue_list/1` (`lib/linear_cli/cli/commands.ex:92-118`) doesn't
+  route through `make_da_issue!` - it passes `options.team`/`options.project`
+  straight through. Same fallback, applied directly:
+  `team_key: options.team || LinearCli.Profiles.default_team()` and
+  `resolve_project_id(options.project || LinearCli.Profiles.default_project())`.
+
+== Tests
+
+* `test/linear_cli/profiles_test.exs` (new): `create/2`, `list/0`,
+  `activate/1` (activating a second profile deactivates the first;
+  activating an unknown name returns `{:error, :not_found}`), `active/0`,
+  `delete/1`, `default_team/0`/`default_project/0` returning `nil` with no
+  active profile. Not `async: true` - every test shares one sqlite file via
+  `config :linear_cli, :profiles_db_path`; `setup` deletes that file first
+  for isolation between tests.
+* One targeted test each on `IssueHelpers.make_da_issue!/1` and
+  `Commands.issue_list/1`, seeding a real active profile via
+  `Profiles.create/2` + `Profiles.activate/1` against the test db path:
+  the stored default is used when the flag is omitted, and an explicit flag
+  still overrides it.
+
+== Docs
+
+Short "Default team/project (profiles)" subsection in `Readme.adoc`'s
+Commands section, showing `lc profile create`, `lc profile use`, `lc
+profile list`, `lc profile show` - commands only, no rationale, per this
+repo's established Readme style.
+
+== Sequencing
+
+1. `LinearCli.Profiles` (data layer) + its own tests - no CLI wiring yet,
+   fully testable in isolation.
+2. `profile` command (spec, dispatch, `Commands.profile_*` functions) - a
+   working `lc profile create/list/use/show/delete`, testable end to end,
+   still with zero effect on `issue create`/`issue list`.
+3. Wire the fallback into `IssueHelpers.make_da_issue!/1` and
+   `Commands.issue_list/1`, plus their targeted tests.
+4. `Readme.adoc`.
+5. Manual end-to-end verification: build a release/escript, `lc profile
+   create test --team <real team key>`, `lc profile use test`, `lc issue
+   list` with no `--team` and confirm the filter applies, `lc profile show`,
+   `lc profile delete test`.
+
+Standard workflow from here: file a GitHub issue for this phase, branch
+from it, commit, open the PR - no direct-to-main commits.
