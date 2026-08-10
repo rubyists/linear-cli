@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/rubyists/linear-cli-ex/compare/v0.8.1...v0.8.2) (2026-08-10)
+
+
+### Features
+
+* add mix githooks.install to activate the repo's git hooks ([#51](https://github.com/rubyists/linear-cli-ex/issues/51)) ([9b35472](https://github.com/rubyists/linear-cli-ex/commit/9b354722239ee81bbc3cf9ccd832ab4f79ea6ced))
+
 ## [0.8.1](https://github.com/rubyists/linear-cli-ex/compare/v0.8.0...v0.8.1) (2026-08-10)
 
 
