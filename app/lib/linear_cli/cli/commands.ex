@@ -5,7 +5,7 @@ defmodule LinearCli.CLI.Commands do
   """
 
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt}
-  alias LinearCli.{Git, Linear}
+  alias LinearCli.{Git, Linear, Profiles}
 
   @doc "Ported from commands/whoami.rb."
   def whoami(%{flags: flags, options: options}) do
@@ -80,22 +80,86 @@ defmodule LinearCli.CLI.Commands do
   end
 
   @doc """
+  New in this port - Ruby has no equivalent. Saves a new named
+  team/project bundle (`LinearCli.Profiles.create/2`) that `profile use`
+  can later switch to.
+  """
+  def profile_create(%{args: %{name: name}, options: options}) do
+    case Profiles.create(name, team: options.team, project: options.project) do
+      {:ok, profile} ->
+        Display.show(profile, %{output: options.output})
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc "New in this port - Ruby has no equivalent. Lists every saved profile."
+  def profile_list(%{options: options}) do
+    Display.show(Profiles.list(), %{output: options.output})
+    :ok
+  end
+
+  @doc """
+  New in this port - Ruby has no equivalent. Switches the active profile -
+  its team/project become the defaults `issue create`/`issue list` fall
+  back to when `--team`/`--project` are omitted.
+  """
+  def profile_use(%{args: %{name: name}}) do
+    case Profiles.activate(name) do
+      :ok ->
+        Prompt.ok("Switched to profile #{name}")
+        :ok
+
+      {:error, :not_found} ->
+        {:error, {:smells_bad, "No profile named #{name}"}}
+    end
+  end
+
+  @doc "New in this port - Ruby has no equivalent. Shows the active profile, if any."
+  def profile_show(%{options: options}) do
+    case Profiles.active() do
+      nil -> Prompt.warn("No active profile")
+      profile -> Display.show(profile, %{output: options.output})
+    end
+
+    :ok
+  end
+
+  @doc "New in this port - Ruby has no equivalent. Deletes a saved profile."
+  def profile_delete(%{args: %{name: name}}) do
+    case Profiles.delete(name) do
+      :ok ->
+        Prompt.ok("Deleted profile #{name}")
+        :ok
+
+      {:error, :not_found} ->
+        {:error, {:smells_bad, "No profile named #{name}"}}
+    end
+  end
+
+  @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
 
   `--project`/`-p` is resolved the same way Ruby's `CLI::Projects#project_for`
   does - against every project in the workspace (`Project.all`, not
   team-scoped), prompting interactively when the search is ambiguous or
   omitted-but-requested (`-p -`). Only resolved at all when `--project` was
-  actually given - unlike `issue create`/`issue update`, a bare `issue list`
-  applies no project filter and never prompts.
+  actually given (or `LinearCli.Profiles.default_project/0` supplies one) -
+  unlike `issue create`/`issue update`, a bare `issue list` with no active
+  profile applies no project filter and never prompts. `--team`/`--project`
+  passed explicitly always win over the active profile.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
-    with {:ok, project_id} <- resolve_project_id(options.project) do
+    team_key = options.team || Profiles.default_team()
+
+    with {:ok, project_id} <- resolve_project_id(options.project || Profiles.default_project()) do
       input = %{
         ids: ids,
         mine: !flags.no_mine,
         unassigned: flags.unassigned,
-        team_key: options.team,
+        team_key: team_key,
         project_id: project_id
       }
 

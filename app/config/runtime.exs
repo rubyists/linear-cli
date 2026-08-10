@@ -31,3 +31,19 @@ config :linear_cli, LinearCli.ObanRepo.Postgres,
   username: System.get_env("LINEAR_CLI_PG_USER", "postgres"),
   password: System.get_env("LINEAR_CLI_PG_PASSWORD", ""),
   database: System.get_env("LINEAR_CLI_PG_DATABASE", default_pg_database)
+
+# LinearCli.Profiles' own SQLite file - separate from ObanRepo's above
+# (different concern, needed by every interactive invocation, not just the
+# daemon). Unlike ObanRepo, there's no pooled Ecto.Repo behind this -
+# LinearCli.Profiles opens/closes its own connection per call - so :test
+# can't use ":memory:" the way ObanRepo's test config does: an in-memory
+# database is wiped the moment that connection closes, which would be
+# every single call.
+default_profiles_path =
+  case config_env() do
+    :test -> Path.expand("../profiles_test.db", __DIR__)
+    :dev -> Path.expand("../profiles_dev.db", __DIR__)
+    :prod -> Path.join(System.user_home!(), ".linear_cli/profiles.db")
+  end
+
+config :linear_cli, :profiles_db_path, default_profiles_path

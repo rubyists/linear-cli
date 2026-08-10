@@ -32,3 +32,8 @@ app-*.tar
 # Local dev SQLite db for Oban (daemon run mode only).
 /oban_dev.db*
 
+# Local SQLite db for LinearCli.Profiles (dev and test - unlike Oban's,
+# needed by every interactive invocation, not just the daemon).
+/profiles_dev.db*
+/profiles_test.db*
+
