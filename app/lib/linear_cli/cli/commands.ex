@@ -60,6 +60,26 @@ defmodule LinearCli.CLI.Commands do
   defp projects_for(_flags, _options), do: Linear.projects()
 
   @doc """
+  New in this port - Ruby has no equivalent. Posts a status update
+  (Linear's own "Project Update" feature - a journal-style status post,
+  not an edit to the project's own fields) via the projectUpdateCreate
+  mutation. `PROJECT` is resolved the same way issue list's `--project`
+  is - against every project in the workspace, prompting if ambiguous.
+  """
+  def project_update(%{args: %{project: search}, options: options}) do
+    with {:ok, projects} <- Linear.projects(),
+         project when not is_nil(project) <- Projects.project_for(projects, search),
+         {:ok, update} <-
+           Linear.post_project_update(project.id, options.body, %{health: options.health}) do
+      Display.show(update, %{output: options.output})
+      :ok
+    else
+      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
 
   `--project`/`-p` is resolved the same way Ruby's `CLI::Projects#project_for`

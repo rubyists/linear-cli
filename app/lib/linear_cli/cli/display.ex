@@ -7,7 +7,7 @@ defmodule LinearCli.CLI.Display do
   own `#to_s`/`#full`/`#display` methods.
   """
 
-  alias LinearCli.Linear.{Issue, Project, Team, User}
+  alias LinearCli.Linear.{Issue, Project, ProjectUpdate, Team, User}
 
   @ash_internal_fields ~w(__meta__ __metadata__ __order__ __lateral_join_source__ aggregates calculations)a
 
@@ -29,6 +29,11 @@ defmodule LinearCli.CLI.Display do
 
   defp puts_text(%Project{} = project, _opts) do
     IO.puts("#{String.pad_trailing(project.name || "", 12)} #{project.url}")
+  end
+
+  defp puts_text(%ProjectUpdate{} = update, _opts) do
+    health = if update.health, do: " (#{update.health})", else: ""
+    IO.puts("Posted#{health}: #{update.url}")
   end
 
   defp puts_text(%User{} = user, opts) do

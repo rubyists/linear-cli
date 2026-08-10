@@ -106,6 +106,77 @@ defmodule LinearCli.CLITest do
     assert capture_io(fn -> LinearCli.CLI.main(["project", "list"]) end) =~ "Manhattan"
   end
 
+  test "project update resolves the project by name and posts a status update" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      decoded = Jason.decode!(body)
+      query = decoded["query"]
+
+      cond do
+        String.contains?(query, "projects(first: $first") ->
+          Req.Test.json(conn, %{
+            "data" => %{
+              "projects" => %{
+                "edges" => [
+                  %{
+                    "node" => %{
+                      "id" => "p1",
+                      "name" => "Manhattan",
+                      "slugId" => "abc",
+                      "url" => "https://linear.app/x/project/manhattan-abc"
+                    },
+                    "cursor" => "p1"
+                  }
+                ],
+                "pageInfo" => %{"hasNextPage" => false}
+              }
+            }
+          })
+
+        String.contains?(query, "projectUpdateCreate") ->
+          send(test_pid, {:input, decoded["variables"]["input"]})
+
+          Req.Test.json(conn, %{
+            "data" => %{
+              "projectUpdateCreate" => %{
+                "projectUpdate" => %{
+                  "id" => "pu1",
+                  "body" => "Doing great",
+                  "health" => "onTrack",
+                  "url" => "https://linear.app/x/update/pu1"
+                }
+              }
+            }
+          })
+
+        true ->
+          raise "no stub matched query: #{query}"
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "project",
+                   "update",
+                   "Manhattan",
+                   "--body",
+                   "Doing great",
+                   "--health",
+                   "onTrack"
+                 ])
+      end)
+
+    assert output =~ "onTrack"
+    assert output =~ "https://linear.app/x/update/pu1"
+
+    assert_received {:input,
+                     %{"projectId" => "p1", "body" => "Doing great", "health" => "onTrack"}}
+  end
+
   test "issue list prints a one-line summary per issue" do
     assert capture_io(fn -> LinearCli.CLI.main(["issue", "list"]) end) =~ "CRY-1"
   end
@@ -281,7 +352,7 @@ defmodule LinearCli.CLITest do
 
     assert_received {:halted, 1}
     assert output =~ "Manage projects"
-    assert output =~ "list        List projects"
+    assert output =~ "List projects"
   end
 
   test "an unexpected raise (not a returned error) still degrades to exit 88, not a raw crash" do
