@@ -1,0 +1,140 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 10, 2026
+:my-title: Phase 10 plan: favorite teams/projects, and filtering list views by them
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+`team list`/`project list` always show every team/project in the
+workspace. For anyone who only actually cares about one or two, that's
+noise on every single invocation. Let a team/project be marked
+"favorited," and once any favorites of that kind exist, default the
+corresponding list to just those - a new `--all` flag opts back out to
+today's full list. Nobody who's never favorited anything sees any
+difference at all.
+
+This also sets up Phase 11: bare issue numbers (`lc issue develop 1234`)
+will offer a sensible team prompt built from favorited teams instead of
+either guessing or hard-erroring when there's no active profile.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *One `favorites` table, not two* - teams and projects are the exact
+   same shape here (a kind + a value), so one table with a `kind` column
+   (`"team"` | `"project"`) avoids duplicating identical CRUD for two
+   structurally identical concepts.
+2. *Store resolved values, not raw search text*: `project favorite
+   <PROJECT>` resolves `PROJECT` the same way every other command already
+   does (`LinearCli.CLI.Projects.project_for/2` against
+   `LinearCli.Linear.projects/0`, prompting to disambiguate if needed) and
+   stores the resolved project's `id` - not the raw search string. A
+   stored id needs no re-fuzzy-matching every time a list gets filtered;
+   a stored search term would. Teams don't need this same care - a team's
+   `key` (via `LinearCli.Linear.find_team/1`, same as `WhatFor.team_for/1`
+   uses) is already exact and unambiguous, so that's what gets stored for
+   `kind: "team"`.
+3. *Same sqlite file as profiles, new table* - `LinearCli.Favorites`
+   reuses `LinearCli.Profiles`'s exact pattern (raw `Exqlite.Sqlite3`, one
+   connection open/ensure-schema/close per call, no `Ecto.Repo`) against
+   the *same* file (`config :linear_cli, :profiles_db_path` from Phase 9)
+   rather than a second small file - it's the same category of local CLI
+   settings. Each module only ever ensures its *own* table
+   (`CREATE TABLE IF NOT EXISTS favorites (...)` vs `... profiles (...)`)
+   on its own connection open - naturally idempotent, no coordination
+   needed between the two modules sharing one file, and no change to
+   Phase 9's `LinearCli.Profiles` itself.
+4. *Favorites-only by default once any exist, `--all` to see everything*
+   - confirmed directly: once a favorite of a given kind exists,
+   `team list`/`project list` filter to just those; `--all` (new flag on
+   both) shows the unfiltered list regardless. Mirrors the existing
+   `--mine`/`--no-mine` flag-pair style already used by both commands.
+5. *Verbs live under each resource*, not a separate top-level `favorite`
+   command - `lc team favorite/unfavorite <TEAM>`,
+   `lc project favorite/unfavorite <PROJECT>` - matching how `list`
+   already nests under `team`/`project` rather than existing as its own
+   command.
+
+== Schema
+
+[source,sql]
+----
+CREATE TABLE IF NOT EXISTS favorites (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  UNIQUE(kind, value)
+);
+----
+
+`kind: "team"` -> `value` is a team key (e.g. `"CRY"`). `kind: "project"`
+-> `value` is a project id.
+
+== Building blocks
+
+* `LinearCli.Favorites` (new, peer to `LinearCli.Profiles`, same file):
+  `add(kind, value)`, `remove(kind, value)`, `list(kind)` -> `[String.t()]`.
+* CLI additions to `lib/linear_cli/cli.ex`'s `team:`/`project:` specs:
+  `favorite`/`unfavorite` subcommands (single required arg, `TEAM`/
+  `PROJECT` respectively - resolved the same way other commands resolve
+  those args), plus a new `--all` flag on `list` for both.
+* `Commands.team_favorite/1`/`team_unfavorite/1` (resolve via
+  `Linear.find_team/1`, then `Favorites.add/remove("team", team.key)`);
+  `Commands.project_favorite/1`/`project_unfavorite/1` (resolve via
+  `Projects.project_for/2` against `Linear.projects/0`, then
+  `Favorites.add/remove("project", project.id)`).
+* `Commands.team_list/1`/`project_list/1`: after fetching the full
+  list as today, if `--all` wasn't given and `Favorites.list/1` for that
+  kind is non-empty, filter the fetched list down to matches (`key in
+  favorite_keys` for teams, `id in favorite_ids` for projects) before
+  displaying.
+
+== Tests
+
+* `LinearCli.FavoritesTest` (new, mirroring `LinearCli.ProfilesTest`'s own
+  shape/isolation: not async, `setup` deletes the shared db file first) -
+  `add/2`, `remove/2`, `list/1` per kind, uniqueness (favoriting the same
+  value twice is a no-op, not an error - unlike `Profiles.create/2`'s
+  duplicate-name rejection, there's no meaningful "already favorited"
+  failure case here).
+* `Commands.team_list/1`/`project_list/1`: favorites-only by default once
+  one exists; `--all` shows everything regardless; unchanged (shows
+  everything) with zero favorites - explicitly asserting the no-favorites
+  case is byte-for-byte what it is today, so this is provably invisible
+  to anyone who never favorites anything.
+* `Commands.team_favorite/1`/`unfavorite/1` and the project equivalents:
+  resolve-then-store, resolve-then-remove.
+
+== Docs
+
+Short new subsection in `Readme.adoc`, near "Default team/project
+(profiles)": `lc team favorite/unfavorite`, `lc project
+favorite/unfavorite`, and a one-line note that `list` defaults to
+favorites once any exist (`--all` for everything).
+
+== Sequencing
+
+1. `LinearCli.Favorites` + its own tests.
+2. `favorite`/`unfavorite` subcommands + tests - no change to `list`'s
+   output yet.
+3. Wire the favorites-only default + `--all` into `team_list/1`/
+   `project_list/1` + tests, including the explicit "zero favorites ->
+   unchanged" case.
+4. `Readme.adoc`.
+5. Manual end-to-end verification: favorite one team, confirm `lc team
+   list` now shows only it, confirm `lc team list --all` still shows
+   everything, confirm `lc project list` (no project favorites yet) is
+   still unfiltered.
+
+Standard workflow from here: file a GitHub issue for this phase, branch
+from it, commit, open the PR - no direct-to-main commits. Phase 11 (bare
+issue numbers via favorited-team prompts) depends on this landing first.

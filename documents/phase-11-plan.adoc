@@ -1,0 +1,186 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 10, 2026
+:my-title: Phase 11 plan: bare issue numbers, resolved via profile then favorited teams
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Every issue-identifier argument today needs the full team-prefixed form
+(`CRY-1234`) - Linear's own `issue(id: $id)` API field resolves either a
+UUID or that full human identifier, never a bare number on its own
+(verified below). With Phase 9's profiles in place, a profile already
+carries a default team - if one's active, `lc issue develop 1234` should
+work exactly like `lc issue develop CRY-1234`, inferring the `CRY-` prefix
+from the active profile's team.
+
+Without an active profile (or one with no team set), this should *not*
+be a hard error. Phase 10 gives every user a set of favorited teams -
+reuse that here: fall back to a sensible prompt built from favorited
+teams (single favorite -> just use it, several -> pick one, none ->
+fall back further to prompting across every team the user belongs to,
+the same shape `WhatFor.ask_for_team/0` already uses for the unrelated
+"no `--team` given at all" case). A bare number should basically always
+resolve to *something* sensible, never a dead end.
+
+Note this phase only concerns *teams* - a Linear issue identifier is
+always `TEAM-NUMBER`; there's no project component to an issue id at all,
+so Phase 10's favorited *projects* have no role here. They stay useful for
+`project list`'s own filtering and remain a natural candidate for
+improving `Projects.project_for/2`'s own disambiguation prompts later -
+not part of this phase.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *What counts as "bare"*: the whole argument matches `~r/^\d+$/` - just
+   digits, nothing else. Anything already containing a `-` (or any other
+   non-digit), or not looking like an id at all, passes through completely
+   unchanged - existing full-identifier usage (`CRY-1234`) and UUID usage
+   are both untouched.
+2. *Team resolution order for a bare number*, never a hard error:
+   .. Phase 9's active profile, if it has a team - `Profiles.default_team/0`,
+      exactly as today's plan already assumed.
+   .. Otherwise, favorited teams (Phase 10) - `Favorites.list("team")`:
+      one favorite used directly, several prompted
+      (`LinearCli.CLI.Prompt.select/2`), same single-vs-many shape
+      `WhatFor.ask_for_team/0` already uses for its own unrelated case.
+   .. Otherwise (no favorites either), fall back to prompting across
+      *every* team the user belongs to - functionally
+      `WhatFor.ask_for_team/0`'s own full-list behavior, reused rather
+      than reimplemented.
+   A bare number only ever fails if the user has literally no teams at
+   all - the same edge case `ask_for_team/0` already raises on today.
+3. *A new, bare-number-specific helper, not a change to `WhatFor`*: Phase
+   9's profile-default behavior for `--team`/`--project` flags, and
+   `ask_for_team/0`'s own behavior for a fully-omitted `--team`, are both
+   unchanged. This phase adds a new resolution path used only when the
+   argument itself was a bare number - `WhatFor.ask_for_team/0` gets
+   reused as the last-resort fallback (step iii above), not modified.
+4. *Lives in the CLI layer, not `LinearCli.Linear`*: every domain/Ash
+   module (`Issue`, `Team`, `Project`, ...) is profile/favorites-unaware
+   today - Phase 9 kept that boundary intact by resolving defaults in
+   `LinearCli.CLI.IssueHelpers`/`Commands`, never inside `LinearCli.Linear`
+   itself. This phase keeps that boundary too, even though it means
+   touching two call sites instead of the one lower-level choke point
+   identified below.
+5. *One shared function, not duplicated logic*: a single
+   `LinearCli.CLI.IssueHelpers.expand_issue_id/1`, used at both of the
+   call sites identified below.
+
+== Verified: every consumption path, and why there's no single lower choke point
+
+Traced directly (not assumed) where an issue id string actually goes,
+starting from each Optimus arg in `lib/linear_cli/cli.ex`:
+
+* `issue develop <ISSUE_ID>` and `issue pr <ISSUE_ID>` (single named args,
+  `cli.ex:470-487`) both dispatch straight to
+  `IssueHelpers.gimme_da_issue!/2` (`commands.ex:243-253`, `288-301`).
+* `issue take <ids...>` (`cli.ex:488-492`, captured via
+  `allow_unknown_args: true` + `result.unknown` - Optimus has no variadic-
+  positional-arg type, per that section's own existing comment) loops
+  every id through `IssueHelpers.gimme_da_issue!/2` too
+  (`commands.ex:320-349`).
+* `gimme_da_issue!/2` itself (`issue_helpers.ex`) calls
+  `Linear.issues(%{ids: [issue_id]})` internally - so all three of the
+  above ultimately converge on `Linear.issues/1`'s `:ids` list already.
+* `issue update <ids...>` and `issue list`'s own positional ids (both via
+  `result.unknown`, same `allow_unknown_args: true` pattern,
+  `cli.ex:419-426`/`493-518`) call `Linear.issues(%{ids: ...})`
+  *directly* - `commands.ex:154-171`/`366-386` - never routing through
+  `gimme_da_issue!/2` at all.
+* `Linear.issues/1`'s `:ids` and `gimme_da_issue!/2` both bottom out in
+  `LinearCli.Linear.Issue.Read.List.find_by_ids/1`, which fans out one
+  GraphQL call per id:
++
+[source,elixir]
+----
+defp find_document do
+  "query($id: String!) { issue(id: $id) { #{Issue.full_fields()} } }"
+end
+
+defp fetch_one(id) do
+  case Api.call(find_document(), %{"id" => String.upcase(id)}) do
+----
++
+No local parsing happens here or anywhere else in the app (grepped for
+`-\d+`-style patterns and `-`-splitting - the only hits are unrelated: a
+PR-scope regex in `what_for.ex` and project-name slugifying in
+`project.ex`) - the raw string, just uppercased, goes straight to Linear's
+own `issue(id: $id)`, which needs the full identifier or a UUID. *This* is
+the true single lowest-level choke point every path shares - but it's
+inside `LinearCli.Linear`, the domain layer Decision 4 deliberately keeps
+profile/favorites-unaware, so it's not where the expansion belongs despite
+being the one spot that would touch the least code.
+* `bin/` wrapper scripts (`lcls`, `lcreate`, `lclose`, `lcomment`, `lproj`)
+  are all thin `exec lc ...` passthroughs - none manipulate ids
+  themselves, so they get this for free once the CLI layer handles it.
+
+Net: two real call sites, not one - `IssueHelpers.gimme_da_issue!/2`
+(covers develop/pr/take, and issue create's own post-create self-assign
+prompt, for free, since all of them already call it) and the two
+`Commands` functions that call `Linear.issues/1` directly
+(`issue_list/1`, `issue_update/1`).
+
+== Building blocks
+
+* `LinearCli.CLI.IssueHelpers.expand_issue_id/1` (new, public): given a raw
+  id string, `~r/^\d+$/` match -> `"#{team_key}-#{id}"`, `team_key` from a
+  new private `resolve_bare_team/0` implementing Decision 2's three-step
+  order (`Profiles.default_team/0` -> `Favorites.list("team")` ->
+  `WhatFor.ask_for_team/0`); no match -> the id returned unchanged.
+* `IssueHelpers.gimme_da_issue!/2`: one line at the top,
+  `issue_id = expand_issue_id(issue_id)`.
+* `Commands.issue_list/1`: map `expand_issue_id/1` over `ids` (the
+  `unknown` list) before it goes into `input`.
+* `Commands.issue_update/1`: same, over `issue_ids`, before
+  `Linear.issues(%{ids: issue_ids})`.
+
+== Tests
+
+* `LinearCli.CLI.IssueHelpersTest`: `expand_issue_id/1` - bare number with
+  an active profile's team (no prompt); bare number with no active
+  profile but one favorited team (used directly, no prompt); bare number
+  with several favorited teams (prompts, picks the selected one); bare
+  number with no profile and no favorites (falls through to
+  `ask_for_team/0`'s own full-list prompt); already-prefixed id and a
+  UUID both pass through unchanged regardless of any profile/favorites.
+* One test each (new or added to the existing describe blocks) for
+  `issue_develop/2`/`issue_pr/2`/`issue_take/2` confirming a bare number
+  resolves against the active profile's team (asserting on the captured
+  `variables["id"]` sent to the stub, same technique already used in
+  `LinearCli.CLI.ProfileDefaultsTest`).
+* Same for `Commands.issue_list/1` and `Commands.issue_update/1`.
+
+== Docs
+
+Short addition to `Readme.adoc`'s existing "Default team/project
+(profiles)" subsection (Phase 9) - a line noting issue commands also
+accept a bare number (`lc issue develop 1234`), resolved via the active
+profile, then favorited teams, then a prompt across every team.
+
+== Sequencing
+
+Depends on Phase 10 (`LinearCli.Favorites`) landing first.
+
+1. `IssueHelpers.expand_issue_id/1` (with `resolve_bare_team/0`'s full
+   three-step order) + its own tests - no call sites wired yet.
+2. Wire it into `gimme_da_issue!/2` (covers develop/pr/take in one change)
+   + tests.
+3. Wire it into `Commands.issue_list/1`/`issue_update/1` + tests.
+4. `Readme.adoc`.
+5. Manual end-to-end verification: with an active profile's team, a
+   favorited team (no active profile), and neither (falls through to the
+   full team prompt) - `lc issue develop 1234` resolves sensibly in all
+   three cases.
+
+Standard workflow from here: file a GitHub issue for this phase, branch
+from it, commit, open the PR - no direct-to-main commits.
