@@ -170,6 +170,7 @@ jobs:
           reuse-beam: true
           schema: "1.6"
           format: "json"
+          output-file: "sbom.cdx.json"
       -
         # One atomic command creates the tag, the release, and uploads
         # every asset together - no separate release object sits around
