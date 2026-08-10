@@ -155,6 +155,33 @@ jobs:
           version=$(ruby -rjson -e "print JSON.parse(File.read('../.release-please-manifest.json'))['.']")
           printf 'tag_name=v%s\n' "$version" >> "$GITHUB_OUTPUT"
       -
+        # Covers the app + Hex deps + the actual Erlang/OTP and Elixir
+        # versions this release was built with (mix_sbom includes those by
+        # default - verified they show up as individual OTP application
+        # components like kernel/stdlib/crypto/ssl, not one umbrella
+        # "erlang" entry). Not the container image's own OS packages -
+        # that's a separate SBOM, generated in the container job below,
+        # since it's meaningless to anyone not using the container.
+        name: Generate the app SBOM
+        uses: erlef/mix_sbom@v0
+        id: sbom
+        with:
+          project-path: ${{ github.workspace }}/app
+          reuse-beam: true
+          schema: "1.6"
+          format: "json"
+      -
+        # mix_sbom has no output-filename input - it always writes to
+        # $RUNNER_TEMP/$RANDOM.cdx.json internally (verified directly in
+        # the action's own script) and exposes that random path via
+        # sbom-path. gh release create uses a file's own basename as the
+        # asset's actual download filename (the `#label` syntax only sets
+        # a cosmetic display label, not the filename) - without this
+        # rename, the Readme's documented .../download/sbom.cdx.json URL
+        # would 404.
+        name: Rename the SBOM to a stable filename
+        run: mv "${{ steps.sbom.outputs.sbom-path }}" sbom.cdx.json
+      -
         # One atomic command creates the tag, the release, and uploads
         # every asset together - no separate release object sits around
         # empty/unlocked waiting for a later upload, so GitHub's Immutable
@@ -163,7 +190,7 @@ jobs:
         name: Create the release with every asset attached
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS --generate-notes
+        run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS sbom.cdx.json --generate-notes
         working-directory: app
       -
         # release-please labels its own release PR "autorelease: pending"
@@ -216,8 +243,33 @@ jobs:
           APP_VERSION: ${{ needs.burrito.outputs.tag_name }}
         run: ./ci/build_image.sh "${{ needs.burrito.outputs.tag_name }}"
       -
+        # Covers the container's own OS packages (Alpine/apk - ca-certificates,
+        # bash) - meaningless to anyone not using the container, which is
+        # exactly why it's a separate file from the app SBOM in the burrito
+        # job above, not merged into it. Scans the local image ci/build_image.sh
+        # just built (tagged <repo-basename>:<tag_name> - no registry prefix),
+        # before publishing, though nothing here gates the publish step on it.
+        name: Generate the container SBOM
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: "linear-cli-ex:${{ needs.burrito.outputs.tag_name }}"
+          scan-type: image
+          format: cyclonedx
+          output: container-sbom.cdx.json
+      -
         name: Publish the image
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.actor }}
         run: ./ci/publish.sh "${{ needs.burrito.outputs.tag_name }}"
+      -
+        # Can't attach this to the GitHub release the burrito job already
+        # created - it's published (and thus immutable, see #18) by the time
+        # this job runs. A workflow artifact is the honest option here, not
+        # a release asset pretending to be one.
+        name: Upload the container SBOM as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: container-sbom
+          path: container-sbom.cdx.json
+          retention-days: 90
