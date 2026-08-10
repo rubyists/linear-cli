@@ -170,7 +170,17 @@ jobs:
           reuse-beam: true
           schema: "1.6"
           format: "json"
-          output-file: "sbom.cdx.json"
+      -
+        # mix_sbom has no output-filename input - it always writes to
+        # $RUNNER_TEMP/$RANDOM.cdx.json internally (verified directly in
+        # the action's own script) and exposes that random path via
+        # sbom-path. gh release create uses a file's own basename as the
+        # asset's actual download filename (the `#label` syntax only sets
+        # a cosmetic display label, not the filename) - without this
+        # rename, the Readme's documented .../download/sbom.cdx.json URL
+        # would 404.
+        name: Rename the SBOM to a stable filename
+        run: mv "${{ steps.sbom.outputs.sbom-path }}" sbom.cdx.json
       -
         # One atomic command creates the tag, the release, and uploads
         # every asset together - no separate release object sits around
@@ -180,7 +190,7 @@ jobs:
         name: Create the release with every asset attached
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS "${{ steps.sbom.outputs.sbom-path }}" --generate-notes
+        run: gh release create "${{ steps.version.outputs.tag_name }}" burrito_out/*.tar.gz burrito_out/SHA256SUMS sbom.cdx.json --generate-notes
         working-directory: app
       -
         # release-please labels its own release PR "autorelease: pending"
