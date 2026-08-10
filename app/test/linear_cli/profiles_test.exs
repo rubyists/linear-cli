@@ -67,6 +67,14 @@ defmodule LinearCli.ProfilesTest do
     test "activating an unknown profile returns :not_found" do
       assert {:error, :not_found} = Profiles.activate("nope")
     end
+
+    test "activating an unknown profile leaves the current active profile untouched" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      assert {:error, :not_found} = Profiles.activate("nope")
+      assert %Profile{name: "manhattan", active: true} = Profiles.active()
+    end
   end
 
   describe "delete/1" do

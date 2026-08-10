@@ -58,13 +58,27 @@ defmodule LinearCli.Profiles do
     end)
   end
 
-  @doc "Switches the active profile to `name`. `{:error, :not_found}` if no such profile exists."
+  @doc """
+  Switches the active profile to `name`. `{:error, :not_found}` if no such
+  profile exists - the two updates below run inside a transaction so an
+  unknown name rolls back instead of leaving no profile active at all.
+  """
   @spec activate(String.t()) :: :ok | {:error, :not_found}
   def activate(name) do
     with_db(fn conn ->
+      :ok = exec(conn, "BEGIN", [])
       :ok = exec(conn, "UPDATE profiles SET active = 0", [])
       :ok = exec(conn, "UPDATE profiles SET active = 1 WHERE name = ?", [name])
-      changed?(conn)
+
+      case changed?(conn) do
+        :ok ->
+          :ok = exec(conn, "COMMIT", [])
+          :ok
+
+        {:error, :not_found} = error ->
+          :ok = exec(conn, "ROLLBACK", [])
+          error
+      end
     end)
   end
 
