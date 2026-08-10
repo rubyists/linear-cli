@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/rubyists/linear-cli-ex/compare/v0.8.2...v0.8.3) (2026-08-10)
+
+
+### Features
+
+* **ci:** add a full SBOM - app deps, OTP/Elixir runtime, container OS packages ([#54](https://github.com/rubyists/linear-cli-ex/issues/54)) ([e296fdd](https://github.com/rubyists/linear-cli-ex/commit/e296fdde2c141f2098905ae0b5c444db357a073b))
+
 ## [0.8.2](https://github.com/rubyists/linear-cli-ex/compare/v0.8.1...v0.8.2) (2026-08-10)
 
 
