@@ -18,6 +18,8 @@ jobs:
   validate:
     name: Validations
     uses: ./.github/workflows/ci.yaml
+    with:
+      skip_commit_validation: true
 
   manage-release-pr:
     needs: [validate]

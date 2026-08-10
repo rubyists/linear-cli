@@ -4,6 +4,14 @@ name: CI
 on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   workflow_call:
+    inputs:
+      skip_commit_validation:
+        description: >-
+          Skip the commit-subject check - it only makes sense pre-merge
+          (should this PR be mergeable), not as a post-merge gate.
+        required: false
+        type: boolean
+        default: false
   pull_request:
 
 jobs:
@@ -43,6 +51,7 @@ jobs:
         run: mix test
 
   conventional_commits:
+    if: inputs.skip_commit_validation != true
     name: Validate Commit Subjects
     runs-on: ubuntu-latest
     steps:
