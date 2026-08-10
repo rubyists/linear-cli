@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/rubyists/linear-cli-ex/compare/v0.8.0...v0.8.1) (2026-08-10)
+
+
+### Features
+
+* **cli:** add project update - post a status update to a project ([#43](https://github.com/rubyists/linear-cli-ex/issues/43)) ([30dc6dc](https://github.com/rubyists/linear-cli-ex/commit/30dc6dcd2f47fd698adfa74f4e439cc5f57eba5b))
+
 ## [0.8.0](https://github.com/rubyists/linear-cli-ex/compare/v0.7.2...v0.8.0) (2026-08-10)
 
 
