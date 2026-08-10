@@ -66,6 +66,12 @@ $ sudo mv lc/* /usr/local/bin/
 ----
 <1> Linux: `sha256sum -c -` instead of `shasum -a 256 -c -`.
 
+Every release also publishes `sbom.cdx.json` - a CycloneDX SBOM covering the
+app, its Hex dependencies, and the Erlang/OTP and Elixir versions it was
+built with. The container image has its own separate SBOM (its OS packages -
+irrelevant if you're not using the container), published as a workflow
+artifact on the release's build rather than a release asset.
+
 NOTE: A Homebrew tap is planned but not yet available.
 
 On macOS, Gatekeeper blocks `lc` itself (the wrapper scripts are plain shell,
