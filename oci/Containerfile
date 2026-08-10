@@ -29,5 +29,12 @@ COPY bin/lcreate bin/lcls bin/lclose bin/lcomment bin/lproj /usr/local/bin/
 RUN chmod +x /usr/local/bin/lc /usr/local/bin/lcreate /usr/local/bin/lcls \
         /usr/local/bin/lclose /usr/local/bin/lcomment /usr/local/bin/lproj
 
+# CMD, not ENTRYPOINT: `docker/podman run image <args>` appends <args>
+# after an ENTRYPOINT rather than replacing it, so `run image lcls` was
+# actually executing `lc lcls` - never reaching the lcls wrapper script
+# at all. CMD gets fully replaced by any run-time args instead, so
+# `run image` (no args) still boots the daemon (LINEAR_CLI_DAEMON=true
+# makes lc itself become the daemon regardless of argv) and
+# `run image lcls`/`run image lc issue list` run exactly that command.
 ENV LINEAR_CLI_DAEMON=true
-ENTRYPOINT ["/usr/local/bin/lc"]
+CMD ["/usr/local/bin/lc"]
