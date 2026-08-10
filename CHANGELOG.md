@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/rubyists/linear-cli-ex/compare/v0.7.2...v0.8.0) (2026-08-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **ci:** rename release.yaml to main.yaml, workflow name to "main" ([#38](https://github.com/rubyists/linear-cli-ex/issues/38))
+
+### Miscellaneous Chores
+
+* **ci:** rename release.yaml to main.yaml, workflow name to "main" ([#38](https://github.com/rubyists/linear-cli-ex/issues/38)) ([2581a40](https://github.com/rubyists/linear-cli-ex/commit/2581a405fc7f5cdc0532cce54e2a26c34e2f9890))
+
 ## [0.7.2](https://github.com/rubyists/linear-cli-ex/compare/v0.7.1...v0.7.2) (2026-08-09)
 
 
