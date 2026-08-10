@@ -8,13 +8,18 @@
 :experimental:
 :conventional-commits: https://www.conventionalcommits.org/en/v1.0.0/[Conventional Commits]
 
-A command line interface to https://linear.app.
+A command line interface to https://linear.app - list, take, create, develop,
+and update issues without leaving your terminal.
 
-This is an Elixir/OTP port of https://github.com/rubyists/linear-cli[linear-cli] (the
-original Ruby CLI) - same commands, same wrapper scripts, but a single standalone
-binary (via https://github.com/burrito-elixir/burrito[Burrito]) instead of a Ruby
-gem/runtime, and concurrent fan-out (via `Task.async_stream`) for the operations
-that fetch or update several issues at once.
+image::cinemas/listings.cinema.gif[]
+
+This is an Elixir/OTP port of https://github.com/rubyists/linear-cli[linear-cli]
+(the original Ruby CLI): same commands, same wrapper scripts (`lcls`,
+`lcreate`, ...), but shipped as a single standalone binary - no Ruby runtime
+or gem install - via https://github.com/burrito-elixir/burrito[Burrito], and
+real concurrency (`Task.async_stream`) for operations that touch several
+issues at once. Looking up 10 issues by id, for example, runs in ~1.5s here
+vs ~5s doing it one at a time.
 
 == Installation
 
