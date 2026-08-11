@@ -230,7 +230,7 @@ defmodule LinearCli.CLI.Commands do
 
     with {:ok, project_id} <- resolve_project_id(options.project || Profiles.default_project()) do
       input = %{
-        ids: ids,
+        ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
         mine: !flags.no_mine,
         unassigned: flags.unassigned,
         team_key: team_key,
@@ -440,7 +440,8 @@ defmodule LinearCli.CLI.Commands do
   @spec issue_update(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_update(%{unknown: issue_ids, options: options, flags: flags}) do
     with :ok <- validate_issue_ids(issue_ids),
-         {:ok, issues} <- Linear.issues(%{ids: issue_ids}) do
+         {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}) do
       update_opts = [
         comment: options.comment,
         project: options.project,

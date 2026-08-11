@@ -262,6 +262,11 @@ $ lc profile delete manhattan
 An explicit `--team`/`--project` on the command line always overrides the
 active profile.
 
+Issue commands also accept a bare number (`lc issue develop 1234`) in
+place of a full team-prefixed identifier - it's resolved via the active
+profile's team, then favorited teams, then a prompt across every team you
+belong to.
+
 ==== Favorite teams/projects
 
 Not in Ruby's `linear-cli` - favorite the teams/projects you actually
