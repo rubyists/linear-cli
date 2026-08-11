@@ -89,12 +89,12 @@ output_tar=${2:-}
 shift 2 || true
 [ "$#" -eq 0 ] || die 3 "Too many arguments"
 
-if command -v podman >/dev/null 2>&1
-then
-    runtime=podman
-elif command -v docker >/dev/null 2>&1
+if command -v docker >/dev/null 2>&1
 then
     runtime=docker
+elif command -v podman >/dev/null 2>&1
+then
+    runtime=podman
 else
     die 4 "No container runtime found"
 fi

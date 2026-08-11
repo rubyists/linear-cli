@@ -116,12 +116,12 @@ tag=${1:-}
 shift || true
 [ "$#" -eq 0 ] || die 2 "Too many arguments"
 
-if command -v podman >/dev/null 2>&1
-then
-    runtime=podman
-elif command -v docker >/dev/null 2>&1
+if command -v docker >/dev/null 2>&1
 then
     runtime=docker
+elif command -v podman >/dev/null 2>&1
+then
+    runtime=podman
 else
     die 3 "No container runtime found"
 fi

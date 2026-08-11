@@ -133,12 +133,12 @@ fi
 [ -d "$BUILD_CONTEXT" ] || die 5 "Build context '$BUILD_CONTEXT' not found"
 
 runtime=
-if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1
-then
-    runtime=podman
-elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1
 then
     runtime=docker
+elif command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1
+then
+    runtime=podman
 else
     die 6 "No usable container runtime found"
 fi
