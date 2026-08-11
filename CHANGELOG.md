@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.0](https://github.com/rubyists/linear-cli-ex/compare/v0.8.5...v0.9.0) (2026-08-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* **cd:** parallelize Burrito target builds and fix Trivy/Podman image scanning ([#68](https://github.com/rubyists/linear-cli-ex/issues/68))
+
+### Continuous Integration
+
+* **cd:** parallelize Burrito target builds and fix Trivy/Podman image scanning ([#68](https://github.com/rubyists/linear-cli-ex/issues/68)) ([5cc829a](https://github.com/rubyists/linear-cli-ex/commit/5cc829aed802a0d10ce75f1c330628f60ca2b7f1))
+
 ## [0.8.5](https://github.com/rubyists/linear-cli-ex/compare/v0.8.4...v0.8.5) (2026-08-11)
 
 
