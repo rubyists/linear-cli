@@ -356,7 +356,7 @@ defmodule LinearCli.CLI do
               about: "List teams",
               flags: [
                 no_mine: [long: "--no-mine", help: "List all teams, not just your own"],
-                all: [long: "--all", help: "Show every team, ignoring any favorites"]
+                all: [long: "--all", help: "Ignore favorites (doesn't affect --no-mine)"]
               ]
             ],
             favorite: [
@@ -380,7 +380,7 @@ defmodule LinearCli.CLI do
               about: "List projects",
               flags: [
                 mine: [short: "-m", long: "--mine", help: "Only show my projects"],
-                all: [long: "--all", help: "Show every project, ignoring any favorites"]
+                all: [long: "--all", help: "Ignore favorites (doesn't affect --mine/--team)"]
               ],
               options: [
                 team: [short: "-t", long: "--team", help: "Show projects for only this team"]
