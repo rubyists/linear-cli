@@ -8,6 +8,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   import ExUnit.CaptureIO
 
   alias LinearCli.CLI.{Commands, IssueHelpers}
+  alias LinearCli.Linear.User
   alias LinearCli.Profiles
 
   setup do
@@ -90,6 +91,55 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     }
   end
 
+  defp me_map(overrides \\ %{}) do
+    Map.merge(
+      %{"id" => "u1", "name" => "Ada", "email" => "ada@x.com", "teams" => %{"nodes" => []}},
+      overrides
+    )
+  end
+
+  defp comment_created do
+    %{
+      "data" => %{"commentCreate" => %{"comment" => %{"id" => "c1", "body" => "x", "url" => "u"}}}
+    }
+  end
+
+  # Every git-touching test gets a fresh local repo (one commit on "main",
+  # already pushed to/tracking a fresh bare "origin") under
+  # `System.tmp_dir!()` - never the real project working directory. See
+  # `LinearCli.CLI.IssueCommandsTest`'s own identical setup.
+  defp git_repo! do
+    origin_path = tmp_path("origin")
+    File.mkdir_p!(origin_path)
+    {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
+
+    repo_path = tmp_path("repo")
+    File.mkdir_p!(repo_path)
+    {_output, 0} = System.cmd("git", ["init", "-q"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["config", "user.name", "Test User"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo_path)
+    File.write!(Path.join(repo_path, "README.md"), "hello")
+    {_output, 0} = System.cmd("git", ["add", "README.md"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["commit", "-q", "-m", "init"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["branch", "-M", "main"], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["remote", "add", "origin", origin_path], cd: repo_path)
+    {_output, 0} = System.cmd("git", ["push", "-q", "-u", "origin", "main"], cd: repo_path)
+
+    on_exit(fn ->
+      File.rm_rf!(origin_path)
+      File.rm_rf!(repo_path)
+    end)
+
+    repo_path
+  end
+
+  defp tmp_path(prefix) do
+    Path.join(
+      System.tmp_dir!(),
+      "linear_cli_profile_defaults_test_#{prefix}_#{System.unique_integer([:positive, :monotonic])}"
+    )
+  end
+
   describe "Commands.issue_list/1 falls back to the active profile" do
     test "uses the active profile's team/project when both flags are omitted" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
@@ -164,6 +214,206 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       assert_received {:filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
       assert filter["project"] == %{"id" => %{"eq" => "p2"}}
+    end
+
+    test "resolves bare issue numbers (positional ids) via the active profile's team" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        flags: %{no_mine: false, unassigned: false, full: false},
+        options: %{team: nil, project: nil, output: "text"},
+        unknown: ["42"]
+      }
+
+      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+
+      assert output =~ "CRY-1"
+      assert_received {:id, "CRY-42"}
+    end
+  end
+
+  describe "Commands.issue_update/1 resolves bare issue numbers via the active profile" do
+    test "expands a bare positional id before looking it up" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "commentCreate") ->
+            Req.Test.json(conn, comment_created())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        unknown: ["42"],
+        options: %{comment: "fyi", project: nil, reason: nil},
+        flags: %{cancel: false, close: false, trash: false}
+      }
+
+      output = capture_io(fn -> assert :ok = Commands.issue_update(result) end)
+
+      assert output =~ "Comment added to CRY-1"
+      assert_received {:id, "CRY-42"}
+    end
+  end
+
+  describe "Commands.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
+    test "issue_develop/2 expands the bare issue_id before self-assigning/checking it out" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{args: %{issue_id: "42"}}
+
+      output =
+        capture_io(fn ->
+          assert :ok = Commands.issue_develop(result, cwd: repo, me: me)
+        end)
+
+      assert output =~ "Checked out branch main"
+      assert_received {:id, "CRY-42"}
+    end
+
+    test "issue_pr/2 expands the bare issue_id before self-assigning/checking it out" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{args: %{issue_id: "42"}, options: %{title: "fix: title", description: "body"}}
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_pr(result,
+                     cwd: repo,
+                     me: me,
+                     runner: fn _title, _body -> "https://github.com/x/y/pull/1" end
+                   )
+        end)
+
+      assert output =~ "Checked out branch main"
+      assert_received {:id, "CRY-42"}
+    end
+
+    test "issue_take/2 expands every bare id in the batch before self-assigning" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map(%{"assignee" => nil})}})
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_map(%{"assignee" => me_map()})}}
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{unknown: ["42"], options: %{output: "text"}}
+
+      output =
+        capture_io(fn ->
+          assert :ok = Commands.issue_take(result, me: me)
+        end)
+
+      assert output =~ "Assigning issue CRY-42 to ya"
+      assert_received {:id, "CRY-42"}
     end
   end
 

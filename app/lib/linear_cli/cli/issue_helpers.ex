@@ -78,7 +78,13 @@ defmodule LinearCli.CLI.IssueHelpers do
   """
 
   alias LinearCli.CLI.{Projects, Prompt, WhatFor}
-  alias LinearCli.{Linear, Profiles}
+  alias LinearCli.{Favorites, Linear, Profiles}
+
+  # A "bare" issue id is just digits - anything with a `-` (an already
+  # team-prefixed identifier, e.g. "CRY-1234") or that otherwise doesn't
+  # look like an id at all (a UUID) passes through `expand_issue_id/1`
+  # unchanged.
+  @bare_issue_id_regex ~r/^\d+$/
 
   @doc """
   Adds a comment to `issue`, resolving `comment` (asking, or opening an
@@ -369,6 +375,42 @@ defmodule LinearCli.CLI.IssueHelpers do
   defp maybe_put_project_id(params, project), do: Map.put(params, :project_id, project.id)
 
   @doc """
+  Expands a bare issue number (`~r/^\\d+$/`, e.g. `"1234"`) to a full
+  team-prefixed identifier (`"CRY-1234"`) by resolving a team key via
+  `resolve_bare_team/0`. Anything else (an already-prefixed identifier, a
+  UUID) is returned unchanged.
+
+  Team resolution order, never a hard error short of the user having no
+  teams at all: the active profile's team (`LinearCli.Profiles.default_team/0`)
+  -> favorited teams (`LinearCli.Favorites.list/1`, single favorite used
+  directly, several prompted) -> a prompt across every team the user
+  belongs to (`LinearCli.CLI.WhatFor.ask_for_team/0`).
+  """
+  @spec expand_issue_id(String.t()) :: String.t()
+  def expand_issue_id(issue_id) do
+    if Regex.match?(@bare_issue_id_regex, issue_id) do
+      "#{resolve_bare_team()}-#{issue_id}"
+    else
+      issue_id
+    end
+  end
+
+  defp resolve_bare_team do
+    case Profiles.default_team() do
+      nil -> resolve_bare_team_from_favorites()
+      team_key -> team_key
+    end
+  end
+
+  defp resolve_bare_team_from_favorites do
+    case Favorites.list("team") do
+      [] -> WhatFor.ask_for_team().key
+      [team_key] -> team_key
+      team_keys -> Prompt.select("Choose a team", Enum.map(team_keys, &{&1, &1}))
+    end
+  end
+
+  @doc """
   Looks up `issue_id` and self-assigns it to the caller, unless it's already
   assigned to them.
 
@@ -381,16 +423,22 @@ defmodule LinearCli.CLI.IssueHelpers do
   """
   @spec gimme_da_issue!(String.t(), keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def gimme_da_issue!(issue_id, opts \\ []) do
+    issue_id = expand_issue_id(issue_id)
+
     with {:ok, me} <- resolve_me(opts),
          {:ok, [issue]} <- Linear.issues(%{ids: [issue_id]}) do
-      if issue.assignee && issue.assignee.id == me.id do
-        Prompt.say("You are already assigned #{issue_id}")
-        {:ok, issue}
-      else
-        Prompt.say("Assigning issue #{issue_id} to ya")
-        Linear.assign_issue(issue, me.id)
-      end
+      assign_or_confirm(issue, me, issue_id)
     end
+  end
+
+  defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id) do
+    Prompt.say("You are already assigned #{issue_id}")
+    {:ok, issue}
+  end
+
+  defp assign_or_confirm(issue, me, issue_id) do
+    Prompt.say("Assigning issue #{issue_id} to ya")
+    Linear.assign_issue(issue, me.id)
   end
 
   defp resolve_me(opts) do
