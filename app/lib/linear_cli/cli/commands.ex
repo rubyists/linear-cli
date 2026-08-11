@@ -5,7 +5,7 @@ defmodule LinearCli.CLI.Commands do
   """
 
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt}
-  alias LinearCli.{Git, Linear, Profiles}
+  alias LinearCli.{Favorites, Git, Linear, Profiles}
 
   @doc "Ported from commands/whoami.rb."
   def whoami(%{flags: flags, options: options}) do
@@ -37,7 +37,10 @@ defmodule LinearCli.CLI.Commands do
     result = if flags.no_mine, do: Linear.teams(), else: Linear.my_teams()
 
     with {:ok, teams} <- result do
-      Display.show(teams, %{output: options.output})
+      Display.show(filter_favorites(teams, flags.all, "team", & &1.key), %{
+        output: options.output
+      })
+
       :ok
     end
   end
@@ -45,7 +48,10 @@ defmodule LinearCli.CLI.Commands do
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
     with {:ok, projects} <- projects_for(flags, options) do
-      Display.show(projects, %{output: options.output})
+      Display.show(filter_favorites(projects, flags.all, "project", & &1.id), %{
+        output: options.output
+      })
+
       :ok
     end
   end
@@ -58,6 +64,74 @@ defmodule LinearCli.CLI.Commands do
 
   defp projects_for(%{mine: true}, _options), do: Linear.my_projects()
   defp projects_for(_flags, _options), do: Linear.projects()
+
+  @doc """
+  New in this port - Ruby has no equivalent. Favorites a team
+  (`LinearCli.Favorites`) - once any team is favorited, `team list`
+  defaults to showing just favorites (`--all` overrides).
+  """
+  def team_favorite(%{args: %{team: key}}) do
+    with {:ok, team} <- Linear.find_team(key) do
+      Favorites.add("team", team.key)
+      Prompt.ok("Favorited team #{team.key}")
+      :ok
+    end
+  end
+
+  @doc "New in this port - Ruby has no equivalent. Un-favorites a team."
+  def team_unfavorite(%{args: %{team: key}}) do
+    with {:ok, team} <- Linear.find_team(key) do
+      Favorites.remove("team", team.key)
+      Prompt.ok("Un-favorited team #{team.key}")
+      :ok
+    end
+  end
+
+  @doc """
+  New in this port - Ruby has no equivalent. Favorites a project
+  (`LinearCli.Favorites`), resolved the same way `project update`'s
+  `PROJECT` is - against every project in the workspace, prompting if
+  ambiguous. Once any project is favorited, `project list` defaults to
+  showing just favorites (`--all` overrides).
+  """
+  def project_favorite(%{args: %{project: search}}) do
+    with {:ok, projects} <- Linear.projects(),
+         project when not is_nil(project) <- Projects.project_for(projects, search) do
+      Favorites.add("project", project.id)
+      Prompt.ok("Favorited project #{project.name}")
+      :ok
+    else
+      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  @doc "New in this port - Ruby has no equivalent. Un-favorites a project."
+  def project_unfavorite(%{args: %{project: search}}) do
+    with {:ok, projects} <- Linear.projects(),
+         project when not is_nil(project) <- Projects.project_for(projects, search) do
+      Favorites.remove("project", project.id)
+      Prompt.ok("Un-favorited project #{project.name}")
+      :ok
+    else
+      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Once any favorite of `kind` exists, narrows `records` down to just
+  # those (matched via `key_fun`) - invisible to anyone who's never
+  # favorited anything, since an empty favorites list leaves `records`
+  # untouched. `all?` (the new `--all` flag) always shows everything,
+  # bypassing the favorites lookup entirely.
+  defp filter_favorites(records, true, _kind, _key_fun), do: records
+
+  defp filter_favorites(records, _all?, kind, key_fun) do
+    case Favorites.list(kind) do
+      [] -> records
+      favorite_values -> Enum.filter(records, &(key_fun.(&1) in favorite_values))
+    end
+  end
 
   @doc """
   New in this port - Ruby has no equivalent. Posts a status update

@@ -262,6 +262,23 @@ $ lc profile delete manhattan
 An explicit `--team`/`--project` on the command line always overrides the
 active profile.
 
+==== Favorite teams/projects
+
+Not in Ruby's `linear-cli` - `team list`/`project list` show every
+team/project in the workspace by default. Favorite the ones you actually
+care about, and each list defaults to just those (`--all` shows
+everything regardless).
+
+[source,sh]
+----
+$ lc team favorite CRY
+$ lc team list
+$ lc team list --all
+$ lc team unfavorite CRY
+$ lc project favorite Manhattan
+$ lc project list
+----
+
 ==== Post a project status update
 
 Not in Ruby's `linear-cli` - a status post on a project (Linear's own "Project
