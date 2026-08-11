@@ -36,7 +36,7 @@ jobs:
       -
         # skip-github-release: this only ever manages the version-bump PR
         # (manifest/CHANGELOG.md/mix.exs) - it never creates a tag or
-        # GitHub Release. The burrito job below does that itself,
+        # GitHub Release. The burrito-package job below does that itself,
         # atomically, once this PR merges and binaries are already built -
         # see its own comments for why.
         uses: googleapis/release-please-action@v5
@@ -46,16 +46,23 @@ jobs:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           skip-github-release: true
 
-  burrito:
+  burrito-build:
     needs: [validate]
     # Only when release-please's own release PR (always from this exact
     # branch) actually merges - "approving the release PR" is the trigger
     # for building, not every push to main.
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release-please--branches--main')
-    name: Build Burrito binaries and create the release
+    name: Build Burrito target (${{ matrix.target }})
     runs-on: ubuntu-latest
-    outputs:
-      tag_name: ${{ steps.version.outputs.tag_name }}
+    strategy:
+      # Kept in sync with mix.exs's releases.lc.burrito.targets - Burrito
+      # has no introspection command to read this list back out, so it's
+      # duplicated here by hand (see #66). Default fail-fast: true - a
+      # failed required leg cancels the others and fails this job outright,
+      # which correctly skips burrito-package below rather than packaging
+      # a release with a target missing.
+      matrix:
+        target: [macos_aarch64, linux_x86_64, windows_x86_64]
     defaults:
       run:
         working-directory: app
@@ -81,34 +88,85 @@ jobs:
         with:
           version: "0.16.0"
       -
+        # Only the Windows target's own build actually needs 7z.
+        if: matrix.target == 'windows_x86_64'
         name: Install p7zip (Burrito needs 7z for Windows targets)
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
       -
         run: mix deps.get
       -
-        name: Build all Burrito targets
-        run: MIX_ENV=prod mix release lc
+        name: Build the ${{ matrix.target }} target
+        run: MIX_ENV=prod BURRITO_TARGET=${{ matrix.target }} mix release lc
       -
-        # `mix release lc`'s exit code alone doesn't guarantee every target
+        # `mix release lc`'s exit code alone doesn't guarantee this target
         # actually produced a binary - Burrito builds each target
-        # independently, so one target failing partway through wouldn't
+        # independently, so a target failing partway through wouldn't
         # necessarily fail the whole `mix release` invocation. Not everyone
         # installing this uses Homebrew (no tap exists yet anyway - see
-        # #14/CRY-37), so these binaries are the primary install path for
-        # a lot of users; silently shipping a release missing one of them
-        # is worse than failing loudly here.
-        name: Verify the required targets actually built
+        # #14/CRY-37), so linux_x86_64/macos_aarch64 are the primary
+        # install path for a lot of users; silently shipping a release
+        # missing one of them is worse than failing loudly here.
+        # windows_x86_64 stays best-effort, as it always has.
+        name: Verify this target actually built
         run: |
-          missing=0
-          for target in lc_linux_x86_64 lc_macos_aarch64
-          do
-              if [ ! -f "burrito_out/$target" ]
-              then
-                  printf '::error::missing required release artifact: %s\n' "$target"
-                  missing=1
+          artifact="burrito_out/lc_${{ matrix.target }}"
+          if [ "${{ matrix.target }}" = "windows_x86_64" ]; then
+              artifact="${artifact}.exe"
+          fi
+
+          if [ ! -f "$artifact" ]; then
+              if [ "${{ matrix.target }}" = "windows_x86_64" ]; then
+                  printf '::warning::missing optional release artifact: %s\n' "$artifact"
+              else
+                  printf '::error::missing required release artifact: %s\n' "$artifact"
+                  exit 1
               fi
-          done
-          [ "$missing" -eq 0 ]
+          fi
+      -
+        # Handed off to burrito-package below, which needs every target's
+        # binary gathered back into one place before it can build the
+        # per-platform tarballs/SBOM/release.
+        name: Upload the built binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: burrito-${{ matrix.target }}
+          path: app/burrito_out/lc_${{ matrix.target }}*
+
+  burrito-package:
+    needs: [burrito-build]
+    name: Package Burrito binaries and create the release
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.version.outputs.tag_name }}
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      -
+        uses: actions/checkout@v7
+      -
+        # Needed for erlef/mix_sbom below (an accurate dependency graph
+        # needs `mix deps.get` to have run against a real OTP/Elixir
+        # install) - this job never builds a release itself, so no
+        # setup-zig/p7zip here.
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
+          disable_problem_matchers: true
+      -
+        run: mix deps.get
+      -
+        # Every burrito-build matrix leg uploaded exactly one binary under
+        # its own `burrito-<target>` artifact name - merge them all back
+        # into one directory here, same layout the pre-matrix single job
+        # produced.
+        name: Download every built target's binary
+        uses: actions/download-artifact@v7
+        with:
+          path: app/burrito_out
+          pattern: burrito-*
+          merge-multiple: true
       -
         # A bare `lc_macos_aarch64` binary download doesn't get you
         # lcreate/lcls/lclose/lcomment/lproj - only install.sh and the
@@ -142,7 +200,7 @@ jobs:
         working-directory: app/burrito_out
       -
         name: Generate checksums for every built artifact
-        run: sha256sum * > SHA256SUMS
+        run: sha256sum -- * > SHA256SUMS
         working-directory: app/burrito_out
       -
         # manage-release-pr already bumped .release-please-manifest.json
@@ -211,7 +269,7 @@ jobs:
         working-directory: .
 
   container:
-    needs: [burrito]
+    needs: [burrito-package]
     name: Build and publish container image
     runs-on: ubuntu-latest
     steps:
@@ -224,9 +282,10 @@ jobs:
           elixir-version: "1.20.3"
           disable_problem_matchers: true
       -
-        # Same Burrito build as the `burrito` job above, so it needs the same
-        # pinned Zig (see that job's comment) - missing here would fail this
-        # job's build at `mix release` time even though `burrito` succeeds.
+        # Same Burrito build as the `burrito-build` job above, so it needs
+        # the same pinned Zig (see that job's comment) - missing here would
+        # fail this job's build at `mix release` time even though
+        # `burrito-build` succeeds.
         uses: mlugg/setup-zig@v2.2.1
         with:
           version: "0.16.0"
@@ -240,19 +299,37 @@ jobs:
       -
         name: Build the image
         env:
-          APP_VERSION: ${{ needs.burrito.outputs.tag_name }}
-        run: ./ci/build_image.sh "${{ needs.burrito.outputs.tag_name }}"
+          APP_VERSION: ${{ needs.burrito-package.outputs.tag_name }}
+        run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
+      -
+        # ci/build_image.sh prefers Podman over Docker (both are present on
+        # GitHub-hosted runners), so the image above lives only in Podman's
+        # own local storage. Trivy's `image-ref` scanning mode expects a
+        # Docker-compatible daemon/socket and has no visibility into that
+        # storage, so it'd either find nothing or silently try to pull from
+        # a registry instead (see #67 - a runtime-preference reorder was
+        # tried and rejected, since it would've meant Podman-built images
+        # go untested here). Saving to a tarball and scanning that instead
+        # sidesteps the runtime question entirely: Trivy reads the tarball
+        # directly, no daemon of either kind involved.
+        name: Save the image to a tarball for Trivy to scan directly
+        id: save
+        run: |
+          tarball="$RUNNER_TEMP/linear-cli-ex.tar"
+          ./ci/save_image.sh "${{ needs.burrito-package.outputs.tag_name }}" "$tarball"
+          printf 'tarball_path=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
       -
         # Covers the container's own OS packages (Alpine/apk - ca-certificates,
         # bash) - meaningless to anyone not using the container, which is
-        # exactly why it's a separate file from the app SBOM in the burrito
-        # job above, not merged into it. Scans the local image ci/build_image.sh
-        # just built (tagged <repo-basename>:<tag_name> - no registry prefix),
-        # before publishing, though nothing here gates the publish step on it.
+        # exactly why it's a separate file from the app SBOM in the
+        # burrito-package job above, not merged into it. Scans the tarball
+        # the previous step just saved, not a live image-ref - see that
+        # step's own comment for why - before publishing, though nothing
+        # here gates the publish step on it.
         name: Generate the container SBOM
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: "linear-cli-ex:${{ needs.burrito.outputs.tag_name }}"
+          input: ${{ steps.save.outputs.tarball_path }}
           scan-type: image
           format: cyclonedx
           output: container-sbom.cdx.json
@@ -261,12 +338,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.actor }}
-        run: ./ci/publish.sh "${{ needs.burrito.outputs.tag_name }}"
+        run: ./ci/publish.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
-        # Can't attach this to the GitHub release the burrito job already
-        # created - it's published (and thus immutable, see #18) by the time
-        # this job runs. A workflow artifact is the honest option here, not
-        # a release asset pretending to be one.
+        # Can't attach this to the GitHub release the burrito-package job
+        # already created - it's published (and thus immutable, see #18) by
+        # the time this job runs. A workflow artifact is the honest option
+        # here, not a release asset pretending to be one.
         name: Upload the container SBOM as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
