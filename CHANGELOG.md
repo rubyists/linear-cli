@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.4](https://github.com/rubyists/linear-cli-ex/compare/v0.8.3...v0.8.4) (2026-08-11)
+
+
+### Features
+
+* **cli:** add favorite teams/projects, filtering list views by them ([#61](https://github.com/rubyists/linear-cli-ex/issues/61)) ([6c858d9](https://github.com/rubyists/linear-cli-ex/commit/6c858d9295a860b1415f1761c90ddf7e449dec12))
+* **cli:** add profiles - default team/project stored in local SQLite ([#57](https://github.com/rubyists/linear-cli-ex/issues/57)) ([554e336](https://github.com/rubyists/linear-cli-ex/commit/554e336951127e33bd031c380ffb7c9a4eda6328))
+
 ## [0.8.3](https://github.com/rubyists/linear-cli-ex/compare/v0.8.2...v0.8.3) (2026-08-10)
 
 
