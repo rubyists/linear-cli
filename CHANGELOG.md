@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/rubyists/linear-cli-ex/compare/v0.8.4...v0.8.5) (2026-08-11)
+
+
+### Bug Fixes
+
+* **deps:** update ash to a non-vulnerable version ([#63](https://github.com/rubyists/linear-cli-ex/issues/63)) ([b838e2a](https://github.com/rubyists/linear-cli-ex/commit/b838e2ad5147c6c38894be4e374621f55aa4bfeb))
+
 ## [0.8.4](https://github.com/rubyists/linear-cli-ex/compare/v0.8.3...v0.8.4) (2026-08-11)
 
 
