@@ -162,7 +162,20 @@ defmodule LinearCli.CLI do
   defp dispatch([:whoami], result, halt), do: run(&Commands.whoami/1, result, halt)
   defp dispatch([:version], result, halt), do: run(&Commands.version/1, result, halt)
   defp dispatch([:team, :list], result, halt), do: run(&Commands.team_list/1, result, halt)
+
+  defp dispatch([:team, :favorite], result, halt),
+    do: run(&Commands.team_favorite/1, result, halt)
+
+  defp dispatch([:team, :unfavorite], result, halt),
+    do: run(&Commands.team_unfavorite/1, result, halt)
+
   defp dispatch([:project, :list], result, halt), do: run(&Commands.project_list/1, result, halt)
+
+  defp dispatch([:project, :favorite], result, halt),
+    do: run(&Commands.project_favorite/1, result, halt)
+
+  defp dispatch([:project, :unfavorite], result, halt),
+    do: run(&Commands.project_unfavorite/1, result, halt)
 
   defp dispatch([:project, :update], result, halt),
     do: run(&Commands.project_update/1, result, halt)
@@ -342,8 +355,19 @@ defmodule LinearCli.CLI do
               name: "list",
               about: "List teams",
               flags: [
-                no_mine: [long: "--no-mine", help: "List all teams, not just your own"]
+                no_mine: [long: "--no-mine", help: "List all teams, not just your own"],
+                all: [long: "--all", help: "Ignore favorites (doesn't affect --no-mine)"]
               ]
+            ],
+            favorite: [
+              name: "favorite",
+              about: "Favorite a team - list defaults to favorites once any exist",
+              args: [team: [value_name: "TEAM", help: "Team key or id", required: true]]
+            ],
+            unfavorite: [
+              name: "unfavorite",
+              about: "Un-favorite a team",
+              args: [team: [value_name: "TEAM", help: "Team key or id", required: true]]
             ]
           ]
         ],
@@ -355,10 +379,33 @@ defmodule LinearCli.CLI do
               name: "list",
               about: "List projects",
               flags: [
-                mine: [short: "-m", long: "--mine", help: "Only show my projects"]
+                mine: [short: "-m", long: "--mine", help: "Only show my projects"],
+                all: [long: "--all", help: "Ignore favorites (doesn't affect --mine/--team)"]
               ],
               options: [
                 team: [short: "-t", long: "--team", help: "Show projects for only this team"]
+              ]
+            ],
+            favorite: [
+              name: "favorite",
+              about: "Favorite a project - list defaults to favorites once any exist",
+              args: [
+                project: [
+                  value_name: "PROJECT",
+                  help: "Project name, URL, ID, or search term",
+                  required: true
+                ]
+              ]
+            ],
+            unfavorite: [
+              name: "unfavorite",
+              about: "Un-favorite a project",
+              args: [
+                project: [
+                  value_name: "PROJECT",
+                  help: "Project name, URL, ID, or search term",
+                  required: true
+                ]
               ]
             ],
             update: [
