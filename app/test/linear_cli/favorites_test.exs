@@ -40,7 +40,7 @@ defmodule LinearCli.FavoritesTest do
     end
 
     test "an unknown kind has no favorites" do
-      assert Favorites.list("team") == []
+      assert Favorites.list("nope") == []
     end
   end
 
