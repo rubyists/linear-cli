@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/rubyists/linear-cli/compare/v1.4.0...v1.4.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* write .version directly instead of hardcoding the version in urls ([#98](https://github.com/rubyists/linear-cli/issues/98)) ([170ba1e](https://github.com/rubyists/linear-cli/commit/170ba1e4dad7eecdde34e9744269951da760b0e1))
+
 ## [1.4.0](https://github.com/rubyists/linear-cli/compare/v1.3.0...v1.4.0) (2026-08-12)
 
 
