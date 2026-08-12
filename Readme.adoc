@@ -72,8 +72,6 @@ built with. The container image has its own separate SBOM (its OS packages -
 irrelevant if you're not using the container), published as a workflow
 artifact on the release's build rather than a release asset.
 
-NOTE: A Homebrew tap is planned but not yet available.
-
 On macOS, Gatekeeper blocks `lc` itself (the wrapper scripts are plain shell,
 so they're unaffected) since it isn't signed/notarized yet:
 
@@ -82,18 +80,37 @@ so they're unaffected) since it isn't signed/notarized yet:
 $ xattr -d com.apple.quarantine /usr/local/bin/lc
 ----
 
-=== install.sh (builds from source, for machines without Homebrew)
+=== Homebrew (macOS Apple Silicon, Linux x86_64)
 
 [source,sh]
 ----
-$ git clone https://github.com/rubyists/linear-cli-ex.git
-$ cd linear-cli-ex
-$ ./install.sh
+$ brew tap rubyists/tap
+$ brew install lc
 ----
 
-Builds a native release via https://mise.jdx.dev[mise] and installs `lc` plus
-the `bin/` wrapper scripts onto a directory already on your `$PATH`. Run
-`./uninstall.sh` to remove exactly what it installed.
+See https://github.com/rubyists/homebrew-tap for the formula itself.
+
+=== install.sh (fetches a release binary, for machines without Homebrew)
+
+[source,sh]
+----
+$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli-ex/main/install.sh | bash
+----
+
+Detects your platform, downloads and checksum-verifies the matching release
+tarball (the same one the "Download a release binary" section above uses),
+and installs `lc` plus the `bin/` wrapper scripts onto a directory already on
+your `$PATH` - no Erlang/Elixir/Zig toolchain required. `LC_VERSION` pins a
+specific release tag instead of the latest one; `LC_INSTALL_DIR` pins a
+specific install directory.
+
+[source,sh]
+----
+$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli-ex/main/uninstall.sh | bash
+----
+
+Removes exactly what `install.sh` installed, by replaying the manifest it
+wrote - not a guess at where things ended up.
 
 === From Source (You are obviously a developer)
 
