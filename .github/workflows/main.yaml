@@ -350,3 +350,54 @@ jobs:
           name: container-sbom
           path: container-sbom.cdx.json
           retention-days: 90
+
+  homebrew-tap-bump:
+    needs: [burrito-package]
+    name: Bump the Homebrew tap formula
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout linear-cli (for ci/bump_homebrew_formula.rb)
+        uses: actions/checkout@v7
+        with:
+          path: linear-cli
+      -
+        # RELEASE_PLEASE_TOKEN (org secret) - the default GITHUB_TOKEN is
+        # scoped only to this repo, and can't push/open a PR against a
+        # different one.
+        name: Checkout rubyists/homebrew-tap
+        uses: actions/checkout@v7
+        with:
+          repository: rubyists/homebrew-tap
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          path: homebrew-tap
+      -
+        name: Download this release's SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ needs.burrito-package.outputs.tag_name }}" \
+              --repo rubyists/linear-cli --pattern SHA256SUMS --output linear-cli/SHA256SUMS
+      -
+        name: Bump the formula's url/sha256 for each platform
+        run: |
+          ruby linear-cli/ci/bump_homebrew_formula.rb \
+              homebrew-tap/Formula/linear-cli/linear-cli.rb \
+              "${{ needs.burrito-package.outputs.tag_name }}" \
+              linear-cli/SHA256SUMS
+      -
+        # No-op (no PR opened, nothing pushed) when there's nothing to
+        # commit - same action/behavior already relied on in
+        # usage-rules-sync.yaml.
+        name: Open a PR bumping the formula, if anything changed
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          path: homebrew-tap
+          commit-message: "fix: bump linear-cli formula to ${{ needs.burrito-package.outputs.tag_name }}"
+          title: "fix: bump linear-cli formula to ${{ needs.burrito-package.outputs.tag_name }}"
+          body: >-
+            Auto-generated after rubyists/linear-cli's
+            ${{ needs.burrito-package.outputs.tag_name }} release.
+          branch: "bump-formula-${{ needs.burrito-package.outputs.tag_name }}"
+          delete-branch: true
