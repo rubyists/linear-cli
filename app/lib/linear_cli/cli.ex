@@ -282,6 +282,32 @@ defmodule LinearCli.CLI do
     halt.(66)
   end
 
+  # LinearCli.Api.call/2's {:error, :missing_api_key} (LINEAR_API_KEY not
+  # set), reached through any of the Ash manual actions that wrap it -
+  # Ash's own action pipeline stringifies the original reason into
+  # Ash.Error.Unknown.UnknownError's :error field ("unknown error:
+  # :missing_api_key", verified directly) rather than preserving the atom,
+  # hence the exact-string match below instead of `error: :missing_api_key`.
+  # A plain pattern match (no guard - `=~` isn't guard-safe) degrades
+  # gracefully to the generic catch-all below if Ash's wrapping format ever
+  # changes, rather than raising a fresh error of its own. A missing API key
+  # is a configuration problem, not a surprising crash - give it a clear
+  # message and sysexits.h's EX_CONFIG (78) instead of the catch-all's raw
+  # error dump. See #74.
+  defp handle_error(
+         %Ash.Error.Unknown{
+           errors: [%Ash.Error.Unknown.UnknownError{error: "unknown error: :missing_api_key"} | _]
+         },
+         debug,
+         halt
+       ) do
+    IO.puts(:stderr, "LINEAR_API_KEY is not set.")
+    IO.puts(:stderr, "Set it to your Linear API key - see https://linear.app/settings/api")
+    IO.puts(:stderr, "** Missing configuration, cannot continue **")
+    maybe_print_backtrace(debug)
+    halt.(78)
+  end
+
   # Ported from CLI::Caller#call's `rescue SmellsBad` clause. See
   # `LinearCli.CLI.IssueHelpers`'s moduledoc for where this tagged tuple
   # comes from.
