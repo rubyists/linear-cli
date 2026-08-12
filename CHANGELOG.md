@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/rubyists/linear-cli/compare/v1.1.1...v1.2.0) (2026-08-12)
+
+
+### Features
+
+* add a root-level repo-management Mix project (mix container.build/publish) ([#84](https://github.com/rubyists/linear-cli/issues/84)) ([9d0b730](https://github.com/rubyists/linear-cli/commit/9d0b73017e3193a5254e0fcc291a48880440f168))
+
 ## [1.1.1](https://github.com/rubyists/linear-cli/compare/v1.1.0...v1.1.1) (2026-08-12)
 
 
