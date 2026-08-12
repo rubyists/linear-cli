@@ -3,7 +3,7 @@
 # not a guess at where things might be, so this stays correct even if
 # $PATH changed since install.
 
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/linear-cli-ex"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/linear-cli"
 manifest="$state_dir/manifest"
 
 if [ ! -f "$manifest" ]
