@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/rubyists/linear-cli/compare/v1.1.0...v1.1.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* update references after the linear-cli-ex -&gt; linear-cli / linear-cli -&gt; linear-cli-rb repo renames ([#81](https://github.com/rubyists/linear-cli/issues/81)) ([8328782](https://github.com/rubyists/linear-cli/commit/8328782d5c083ee3cfbfe09c3b2432cfe88f06b2))
+
 ## [1.1.0](https://github.com/rubyists/linear-cli-ex/compare/v1.0.0...v1.1.0) (2026-08-12)
 
 
