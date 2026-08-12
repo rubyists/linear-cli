@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/rubyists/linear-cli-ex/compare/v1.0.0...v1.0.0) (2026-08-12)
+
+
+### Features
+
+* **cli:** vendor rubyists/homebrew-tap, make install.sh curl-pipeable ([#75](https://github.com/rubyists/linear-cli-ex/issues/75)) ([e836ab1](https://github.com/rubyists/linear-cli-ex/commit/e836ab1b9e1fd49b6b5a7ce94c15ac137e705c2d))
+
 ## [1.0.0](https://github.com/rubyists/linear-cli-ex/compare/v1.0.0...v1.0.0) (2026-08-11)
 
 
