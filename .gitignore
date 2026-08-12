@@ -2,3 +2,8 @@
 *.swp
 *.swo
 *~
+
+# Root-level repo-management Mix project (mix.exs/lib/ at repo root -
+# see RepoTasks.MixProject) - app/'s own equivalents are in app/.gitignore.
+/_build/
+/deps/
