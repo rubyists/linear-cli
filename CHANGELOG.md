@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/rubyists/linear-cli/compare/v1.3.0...v1.3.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* retry install.sh's curl downloads on transient connection failures ([#94](https://github.com/rubyists/linear-cli/issues/94)) ([c4633a2](https://github.com/rubyists/linear-cli/commit/c4633a2dfbc11f9484a5f5462c7f8888425b4749))
+
 ## [1.3.0](https://github.com/rubyists/linear-cli/compare/v1.2.0...v1.3.0) (2026-08-12)
 
 
