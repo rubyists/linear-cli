@@ -276,26 +276,16 @@ jobs:
       -
         uses: actions/checkout@v7
       -
-        uses: erlef/setup-beam@v1
+        # The image only wraps the already-built Linux Burrito binary (see
+        # oci/Containerfile), so reuse the artifact from burrito-build
+        # instead of rebuilding it here. That keeps the container job aligned
+        # with the release tarballs and avoids a second dependency compile
+        # path whose mdex_native NIF download can fail independently.
+        name: Download the built linux_x86_64 target
+        uses: actions/download-artifact@v7
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
-          disable_problem_matchers: true
-      -
-        # Same Burrito build as the `burrito-build` job above, so it needs
-        # the same pinned Zig (see that job's comment) - missing here would
-        # fail this job's build at `mix release` time even though
-        # `burrito-build` succeeds.
-        uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: "0.16.0"
-      -
-        run: mix deps.get
-        working-directory: app
-      -
-        name: Build the linux_x86_64 target (container's payload)
-        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
-        working-directory: app
+          name: burrito-linux_x86_64
+          path: app/burrito_out
       -
         name: Build the image
         env:
