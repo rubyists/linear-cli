@@ -331,12 +331,11 @@ $ lproj list --mine
 == Development
 
 First, activate the repo's git hooks (enforces conventional-commit subjects
-before you even push):
+on every commit, and again on every commit about to be pushed):
 
 [source,sh]
 ----
-$ cd app
-$ mise exec -- mix githooks.install
+$ mix setup
 ----
 
 The project uses ExUnit and `mix format`. Run tests with:
