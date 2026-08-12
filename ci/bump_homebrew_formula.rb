@@ -19,6 +19,14 @@ unless formula_path && tag && sha256sums_path
   abort "Usage: #{$PROGRAM_NAME} FORMULA_PATH TAG SHA256SUMS_PATH"
 end
 
+# The formula's url lines hardcode a literal "v" before the interpolated
+# version (v#{version}/<asset>) - a TAG without that same prefix would
+# silently write a .version that doesn't match what the url actually
+# requests. Fail loudly instead.
+unless tag.start_with?("v")
+  abort "TAG must start with 'v' (e.g. v1.4.0), got: #{tag}"
+end
+
 sha256sums =
   File.readlines(sha256sums_path).each_with_object({}) do |line, acc|
     sha, name = line.split(/\s+/, 2)
@@ -27,8 +35,6 @@ sha256sums =
 
 version = tag.delete_prefix("v")
 version_file = File.join(File.dirname(formula_path), ".version")
-File.write(version_file, "#{version}\n")
-
 content = File.read(formula_path)
 
 %w[macos_aarch64 linux_x86_64].each do |target|
@@ -37,10 +43,13 @@ content = File.read(formula_path)
 
   # The url line is a constant - it always reads v#{version}/<asset>
   # verbatim in the formula's own source, never a literal version - only
-  # the sha256 that follows it actually changes per release.
+  # the sha256 that follows it actually changes per release. sha256 is
+  # always exactly 64 hex chars - matching that exactly (rather than
+  # [a-f0-9]+, any length) rejects a malformed/truncated checksum instead
+  # of silently writing one.
   pattern = /
     (url\ "https:\/\/github\.com\/rubyists\/linear-cli\/releases\/download\/v\#\{version\}\/#{Regexp.escape(asset)}"
-    \n\s*sha256\ ")[a-f0-9]+(")
+    \n\s*sha256\ ")[a-fA-F0-9]{64}(")
   /x
 
   unless content.match?(pattern)
@@ -50,5 +59,10 @@ content = File.read(formula_path)
   content = content.sub(pattern, "\\1#{sha}\\2")
 end
 
+# Both writes deferred until every asset's checked and every pattern
+# matched - an abort above now never leaves .version bumped while the
+# formula's actual sha256/url pairs are still on the old release (or
+# vice versa).
+File.write(version_file, "#{version}\n")
 File.write(formula_path, content)
 puts "Wrote #{version_file} (#{version}) and updated #{formula_path}'s sha256 pairs to match"
