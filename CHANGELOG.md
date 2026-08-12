@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.0](https://github.com/rubyists/linear-cli/compare/v1.3.0...v1.4.0) (2026-08-12)
+
+
+### Features
+
+* bump the homebrew-tap formula automatically after each release ([#95](https://github.com/rubyists/linear-cli/issues/95)) ([d13ddf4](https://github.com/rubyists/linear-cli/commit/d13ddf46ea207947637a4a30c3c651e60c591bf6))
+
+
+### Bug Fixes
+
+* retry install.sh's curl downloads on transient connection failures ([#94](https://github.com/rubyists/linear-cli/issues/94)) ([c4633a2](https://github.com/rubyists/linear-cli/commit/c4633a2dfbc11f9484a5f5462c7f8888425b4749))
+
 ## [1.3.0](https://github.com/rubyists/linear-cli/compare/v1.2.0...v1.3.0) (2026-08-12)
 
 
