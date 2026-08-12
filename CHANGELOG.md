@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/rubyists/linear-cli/compare/v1.2.0...v1.3.0) (2026-08-12)
+
+
+### Features
+
+* add mix setup/git_hooks, activate a pre-push conventional-commit hook ([#90](https://github.com/rubyists/linear-cli/issues/90)) ([a81ffe1](https://github.com/rubyists/linear-cli/commit/a81ffe133a8be1e8c608778d18669e4bd77b9de9))
+
 ## [1.2.0](https://github.com/rubyists/linear-cli/compare/v1.1.1...v1.2.0) (2026-08-12)
 
 
