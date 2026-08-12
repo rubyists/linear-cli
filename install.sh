@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# Builds a native Burrito release of `lc` for the current machine and
-# installs it, plus the bin/ wrapper scripts (lcreate, lcls, lclose,
-# lcomment, lproj), onto a directory already on $PATH. Fallback path for
-# machines without Homebrew - see rubyists/homebrew-tap once it exists.
+# Downloads a precompiled Burrito release of `lc` for the current machine
+# and installs it, plus the bin/ wrapper scripts (lcreate, lcls, lclose,
+# lcomment, lproj) already bundled in the same release tarball, onto a
+# directory already on $PATH. Fallback path for machines without
+# Homebrew - see rubyists/homebrew-tap for that.
+#
+# LC_VERSION pins a specific release tag (e.g. "v1.0.0") instead of the
+# latest one. LC_INSTALL_DIR pins a specific install directory instead of
+# the first writable $PATH entry found.
 #
 # Records exactly what it installed and where in a manifest file, so
 # uninstall.sh can remove precisely those files even if $PATH changes
 # between install and uninstall.
 
-repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-app_dir="$repo_root/app"
+repo=rubyists/linear-cli-ex
+version=${LC_VERSION:-latest}
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/linear-cli-ex"
 manifest="$state_dir/manifest"
 
@@ -64,44 +69,85 @@ pick_install_dir() {
     printf '%s\n' "$HOME/.local/bin"
 }
 
-build_lc() {
-    local target="$1"
-
-    if ! cd "$app_dir"
+# GNU coreutils' sha256sum vs. macOS's shasum -a 256 - both read the same
+# "<hash>  <filename>" format via `-c -` on stdin.
+checksum_cmd() {
+    if command -v sha256sum >/dev/null 2>&1
     then
-        printf 'error: could not cd into %s\n' "$app_dir" >&2
-        exit 1
-    fi
-
-    rm -rf _build/prod
-
-    have_mise=0
-    if command -v mise >/dev/null 2>&1
+        printf 'sha256sum\n'
+    elif command -v shasum >/dev/null 2>&1
     then
-        have_mise=1
+        printf 'shasum -a 256\n'
     else
-        printf 'warning: mise not found on PATH; building with whatever Erlang/Elixir are active\n' >&2
-    fi
-
-    if [ "$have_mise" -eq 1 ]
-    then
-        MIX_ENV=prod BURRITO_TARGET="$target" mise exec -- mix release lc --overwrite
-    else
-        MIX_ENV=prod BURRITO_TARGET="$target" mix release lc --overwrite
-    fi
-
-    if [ "$?" -ne 0 ]
-    then
-        printf 'error: build failed (mix release lc, target %s)\n' "$target" >&2
+        printf 'error: need sha256sum or shasum on $PATH to verify the download\n' >&2
         exit 1
     fi
 }
 
+release_url() {
+    local asset="$1"
+    if [ "$version" = "latest" ]
+    then
+        printf 'https://github.com/%s/releases/latest/download/%s\n' "$repo" "$asset"
+    else
+        printf 'https://github.com/%s/releases/download/%s/%s\n' "$repo" "$version" "$asset"
+    fi
+}
+
+# Downloads lc_<target>.tar.gz + SHA256SUMS, verifies the tarball's
+# checksum against just its own line (SHA256SUMS covers every target,
+# not only the one being installed here), and extracts it. Prints the
+# directory it extracted into.
+fetch_lc() {
+    local target="$1" tarball tmp_dir sum_tool
+    tarball="lc_${target}.tar.gz"
+
+    tmp_dir=$(mktemp -d) || {
+        printf 'error: could not create a temp directory\n' >&2
+        exit 1
+    }
+    trap 'rm -rf "$tmp_dir"' EXIT
+
+    printf 'Downloading %s (%s)...\n' "$tarball" "$version" >&2
+
+    if ! curl -fsSL "$(release_url "$tarball")" -o "$tmp_dir/$tarball"
+    then
+        printf 'error: failed to download %s\n' "$tarball" >&2
+        exit 1
+    fi
+
+    if ! curl -fsSL "$(release_url "SHA256SUMS")" -o "$tmp_dir/SHA256SUMS"
+    then
+        printf 'error: failed to download SHA256SUMS\n' >&2
+        exit 1
+    fi
+
+    sum_tool=$(checksum_cmd)
+
+    if ! grep -- " $tarball\$" "$tmp_dir/SHA256SUMS" | (cd "$tmp_dir" && $sum_tool -c -) >/dev/null
+    then
+        printf 'error: checksum verification failed for %s\n' "$tarball" >&2
+        exit 1
+    fi
+
+    if ! tar -xzf "$tmp_dir/$tarball" -C "$tmp_dir"
+    then
+        printf 'error: failed to extract %s\n' "$tarball" >&2
+        exit 1
+    fi
+
+    printf '%s\n' "$tmp_dir"
+}
+
+if ! command -v curl >/dev/null 2>&1
+then
+    printf 'error: curl is required\n' >&2
+    exit 1
+fi
+
 target=$(detect_target) || exit 1
 install_dir=$(pick_install_dir)
-
-printf 'Building lc (%s)...\n' "$target"
-build_lc "$target"
+extracted_dir=$(fetch_lc "$target") || exit 1
 
 if ! mkdir -p "$install_dir"
 then
@@ -118,10 +164,7 @@ fi
 : > "$manifest"
 for name in lc lcreate lcls lclose lcomment lproj
 do
-    src="$app_dir/burrito_out/lc_${target}"
-    [ "$name" = lc ] || src="$repo_root/bin/$name"
-
-    if ! install -m 755 "$src" "$install_dir/$name"
+    if ! install -m 755 "$extracted_dir/$name" "$install_dir/$name"
     then
         printf 'error: failed to install %s to %s\n' "$name" "$install_dir" >&2
         exit 1
@@ -129,6 +172,15 @@ do
 
     printf '%s\n' "$install_dir/$name" >> "$manifest"
 done
+
+# Gatekeeper blocks lc itself (a real Mach-O binary) on macOS since it
+# isn't signed/notarized - the wrapper scripts are plain shell, so they're
+# unaffected. Best-effort: xattr not existing/failing shouldn't fail the
+# install, since the user can still do this by hand (see the README).
+if [ "$(uname -s)" = Darwin ]
+then
+    xattr -d com.apple.quarantine "$install_dir/lc" 2>/dev/null || true
+fi
 
 printf 'Installed lc, lcreate, lcls, lclose, lcomment, lproj to %s\n' "$install_dir"
 printf '(uninstall.sh will remove exactly these files - manifest at %s)\n' "$manifest"
