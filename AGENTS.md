@@ -14,9 +14,9 @@ and best practices for agents to follow.
 
 ## Standards
 
-- Conventional Commits: app/usage-rules.md — enforced by the `commit-msg` hook
-  at `githooks/commit-msg` (run `git config core.hooksPath githooks` once per
-  clone to activate it).
+- Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
+  and `pre-push` hooks at `githooks/` (run `mix setup` once per clone to
+  activate them).
 
 <!-- usage-rules-start -->
 <!-- ash-start -->
