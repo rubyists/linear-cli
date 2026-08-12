@@ -110,13 +110,19 @@ fetch_lc() {
 
     printf 'Downloading %s (%s)...\n' "$tarball" "$version" >&2
 
-    if ! curl -fsSL "$(release_url "$tarball")" -o "$tmp_dir/$tarball"
+    # --retry-all-errors: GitHub's release-download redirect chain
+    # occasionally drops the connection outright mid-stream (curl: (56)
+    # Connection died) - verified directly, reproduced it repeatedly, and
+    # confirmed plain --retry alone does NOT cover this specific error
+    # (it's outside curl's default retriable set), only succeeding once
+    # --retry-all-errors was added too.
+    if ! curl -fsSL --retry 5 --retry-all-errors "$(release_url "$tarball")" -o "$tmp_dir/$tarball"
     then
         printf 'error: failed to download %s\n' "$tarball" >&2
         exit 1
     fi
 
-    if ! curl -fsSL "$(release_url "SHA256SUMS")" -o "$tmp_dir/SHA256SUMS"
+    if ! curl -fsSL --retry 5 --retry-all-errors "$(release_url "SHA256SUMS")" -o "$tmp_dir/SHA256SUMS"
     then
         printf 'error: failed to download SHA256SUMS\n' >&2
         exit 1
