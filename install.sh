@@ -13,9 +13,9 @@
 # uninstall.sh can remove precisely those files even if $PATH changes
 # between install and uninstall.
 
-repo=rubyists/linear-cli-ex
+repo=rubyists/linear-cli
 version=${LC_VERSION:-latest}
-state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/linear-cli-ex"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/linear-cli"
 manifest="$state_dir/manifest"
 
 detect_target() {

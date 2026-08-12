@@ -12,7 +12,7 @@
 	url = git@github.com:ash-project/usage_rules
 [submodule "vendor/ruby-linear-cli"]
 	path = vendor/ruby-linear-cli
-	url = git@github.com:rubyists/linear-cli
+	url = git@github.com:rubyists/linear-cli-rb
 [submodule "vendor/drafter"]
 	path = vendor/drafter
 	url = git@github.com:jaman/drafter
