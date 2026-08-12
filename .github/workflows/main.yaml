@@ -315,7 +315,7 @@ jobs:
         name: Save the image to a tarball for Trivy to scan directly
         id: save
         run: |
-          tarball="$RUNNER_TEMP/linear-cli-ex.tar"
+          tarball="$RUNNER_TEMP/linear-cli.tar"
           ./ci/save_image.sh "${{ needs.burrito-package.outputs.tag_name }}" "$tarball"
           printf 'tarball_path=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
       -

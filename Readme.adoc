@@ -20,7 +20,7 @@ and update issues without leaving your terminal.
 
 image::cinemas/listings.cinema.gif[]
 
-This is an Elixir/OTP port of https://github.com/rubyists/linear-cli[linear-cli]
+This is an Elixir/OTP port of https://github.com/rubyists/linear-cli-rb[linear-cli-rb]
 (the original Ruby CLI): same commands, same wrapper scripts (`lcls`,
 `lcreate`, ...), but shipped as a single standalone binary - no Ruby runtime
 or gem install - via https://github.com/burrito-elixir/burrito[Burrito], and
@@ -36,8 +36,8 @@ You can run the CLI from the container image without installing anything.
 
 [source,sh]
 ----
-$ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli-ex:v0 lcls <1>
-$ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli-ex:v0 lcls <2>
+$ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:v0 lcls <1>
+$ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:v0 lcls <2>
 ----
 <1> Podman usage
 <2> Docker usage - `:v0` tracks the latest 0.x release; pin `:v0.1.2` (or whichever version) for a fixed image
@@ -50,7 +50,7 @@ to an empty value (as above) for one-off interactive CLI usage - otherwise
 === Download a release binary (Most should use this)
 
 Grab the tarball for your platform from the
-https://github.com/rubyists/linear-cli-ex/releases[latest release] - macOS
+https://github.com/rubyists/linear-cli/releases[latest release] - macOS
 (Apple Silicon), Linux (x86_64), and Windows (x86_64) are all built as
 standalone executables with no Erlang/Elixir install required. Each tarball
 bundles `lc` with the wrapper scripts (`lcreate`, `lcls`, `lclose`,
@@ -58,8 +58,8 @@ bundles `lc` with the wrapper scripts (`lcreate`, `lcls`, `lclose`,
 
 [source,sh]
 ----
-$ curl -sLO https://github.com/rubyists/linear-cli-ex/releases/latest/download/lc_macos_aarch64.tar.gz
-$ curl -sLo SHA256SUMS https://github.com/rubyists/linear-cli-ex/releases/latest/download/SHA256SUMS
+$ curl -sLO https://github.com/rubyists/linear-cli/releases/latest/download/lc_macos_aarch64.tar.gz
+$ curl -sLo SHA256SUMS https://github.com/rubyists/linear-cli/releases/latest/download/SHA256SUMS
 $ grep -q lc_macos_aarch64.tar.gz SHA256SUMS && grep lc_macos_aarch64.tar.gz SHA256SUMS | shasum -a 256 -c - <1>
 $ mkdir lc && tar -xzf lc_macos_aarch64.tar.gz -C lc
 $ sudo mv lc/* /usr/local/bin/
@@ -94,7 +94,7 @@ See https://github.com/rubyists/homebrew-tap for the formula itself.
 
 [source,sh]
 ----
-$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli-ex/main/install.sh | bash
+$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/install.sh | bash
 ----
 
 Detects your platform, downloads and checksum-verifies the matching release
@@ -106,7 +106,7 @@ specific install directory.
 
 [source,sh]
 ----
-$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli-ex/main/uninstall.sh | bash
+$ curl -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/uninstall.sh | bash
 ----
 
 Removes exactly what `install.sh` installed, by replaying the manifest it
@@ -116,8 +116,8 @@ wrote - not a guess at where things ended up.
 
 [source,sh]
 ----
-$ git clone https://github.com/rubyists/linear-cli-ex.git
-$ cd linear-cli-ex/app
+$ git clone https://github.com/rubyists/linear-cli.git
+$ cd linear-cli/app
 $ mise install
 $ mise exec -- mix deps.get
 $ mise exec -- env MIX_ENV=prod mix release lc
