@@ -93,6 +93,22 @@ jobs:
         name: Install p7zip (Burrito needs 7z for Windows targets)
         run: sudo apt-get update && sudo apt-get install -y p7zip-full
       -
+        # Cache Mix deps and _build to avoid re-downloading precompiled NIFs
+        # (e.g. mdex_native via marcli→mdex) on every run. Without this,
+        # a transient GitHub Releases 503 during NIF download fails the build.
+        # The cache key is tied to the lock file so any dep update gets a
+        # fresh cache automatically.
+        name: Cache Mix deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/deps
+            app/_build
+          key: ${{ runner.os }}-mix-${{ matrix.target }}-${{ hashFiles('app/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.target }}-
+            ${{ runner.os }}-mix-
+      -
         run: mix deps.get
       -
         name: Build the ${{ matrix.target }} target
@@ -272,6 +288,12 @@ jobs:
     needs: [burrito-package]
     name: Build and publish container image
     runs-on: ubuntu-latest
+    env:
+      # Kept in sync with the `run: MIX_ENV=prod BURRITO_TARGET=...` step
+      # below so the cache key matches the actual build target, and so that
+      # this job reuses any warm cache already written by the burrito-build
+      # linux_x86_64 leg above.
+      BURRITO_TARGET: linux_x86_64
     steps:
       -
         uses: actions/checkout@v7
@@ -290,11 +312,25 @@ jobs:
         with:
           version: "0.16.0"
       -
+        # Cache Mix deps and _build to avoid re-downloading precompiled NIFs
+        # (e.g. mdex_native via marcli→mdex) on every run. Without this,
+        # a transient GitHub Releases 503 during NIF download fails the build.
+        name: Cache Mix deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/deps
+            app/_build
+          key: ${{ runner.os }}-mix-${{ env.BURRITO_TARGET }}-${{ hashFiles('app/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.BURRITO_TARGET }}-
+            ${{ runner.os }}-mix-
+      -
         run: mix deps.get
         working-directory: app
       -
         name: Build the linux_x86_64 target (container's payload)
-        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
+        run: MIX_ENV=prod mix release lc
         working-directory: app
       -
         name: Build the image
