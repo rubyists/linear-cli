@@ -7,15 +7,17 @@ defmodule Mix.Tasks.Stokowski do
       mix stokowski
 
   Doesn't launch Stokowski itself yet - for now this just checks the
-  root `workflow.yaml` is safe to use:
+  root `workflow.yaml` is safe to commit:
 
     * it exists
-    * it's covered by `.gitignore` (it can hold a live Linear API key,
-      so it must never be trackable)
     * its `tracker.api_key`, if set at all, is a `"$VAR"` env-var
       reference rather than a bare literal key (omitting the key
       entirely is also fine - Stokowski then falls back to the
       `LINEAR_API_KEY` env var directly)
+
+  `workflow.yaml` is meant to be tracked in this repo, not gitignored -
+  this is a best-effort guard against a literal API key ever landing in
+  it, not a requirement that the file stay untracked.
 
   See `vendor/stokowski/README.md` for what the file needs to contain;
   actually starting a session is a follow-up step.
@@ -29,12 +31,6 @@ defmodule Mix.Tasks.Stokowski do
 
     unless File.exists?(workflow) do
       Mix.raise("No workflow.yaml at #{workflow} - see vendor/stokowski/README.md's setup guide")
-    end
-
-    unless gitignored?(workflow) do
-      Mix.raise(
-        "#{workflow} is not gitignored - it can hold a live Linear API key, add it to .gitignore before continuing"
-      )
     end
 
     case api_key(workflow) do
@@ -54,10 +50,6 @@ defmodule Mix.Tasks.Stokowski do
 
     Mix.shell().info("#{workflow} looks safe to use.")
     :ok
-  end
-
-  defp gitignored?(path) do
-    match?({_, 0}, System.cmd("git", ["check-ignore", "-q", path], stderr_to_stdout: true))
   end
 
   defp api_key(path) do
