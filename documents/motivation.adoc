@@ -1,0 +1,65 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 14, 2026
+:my-title: Motivation
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Why this exists
+
+I have a progressive eye condition. I don't know when it will take the rest
+of my sight, only that it will. When it does, Linear's web app - like every
+other visually-rendered web UI - stops being something I can use. A
+terminal, paired with a screen reader, doesn't.
+
+`linear-cli` isn't a convenience project or a learning exercise that
+happens to be about Linear (`documents/initial-plan.adoc` frames it that
+way, and that's true too - but it's not the reason it exists). It's the
+tool that lets me keep doing this job after my eyes stop being part of the
+equation. That's the actual requirement driving it, and it doesn't expire
+when the port is "done."
+
+== What this means going forward
+
+Accessibility isn't a feature to schedule - it's the reason this codebase
+exists at all. Concretely, that means:
+
+* **Plain, linear text output stays first-class.** Every command's normal
+  output has to read correctly top-to-bottom through a screen reader, with
+  no reliance on spatial layout, color, or a sighted re-scan of the
+  terminal to make sense of it.
+* **No meaning conveyed by color alone.** Color can decorate; it can never
+  be the only signal for something the user needs to know (success/failure,
+  warnings, which field is which).
+* **No TUI as the primary interface.** `documents/initial-plan.adoc`
+  already ruled a TUI out as a non-goal for other reasons; that stance now
+  has a harder requirement behind it. A full-screen, redraw-based interface
+  fights screen readers instead of working with them. If a TUI or dashboard
+  (e.g. Stokowski's) ever becomes part of this project's own surface, it
+  has to be optional, never the only way to get something done.
+* **Interactive prompts stay simple.** Standard line-based prompts (the
+  kind `IO.gets`/readline-alikes produce) work fine with a screen reader.
+  Anything that repaints the screen, relies on cursor-position tricks, or
+  expects the user to visually track a moving selection doesn't.
+* **Machine-readable output stays a real, tested path.** `--output json`
+  isn't just for scripting - it's a second correct way to consume anything
+  this tool produces, and it should stay that easy to reach for every
+  command.
+* **When in doubt, test it the hard way.** Read the actual output linearly,
+  color stripped, top to bottom, before deciding a change is done. If that
+  doesn't make sense read that way, it isn't finished.
+
+== A note for whoever works on this next
+
+This applies to human contributors and to any agent (Claude or otherwise)
+picking up work in this repo. Don't treat accessibility as one more
+non-functional requirement to weigh against others. It's the actual
+reason `lc` exists. Weigh changes against it accordingly.
