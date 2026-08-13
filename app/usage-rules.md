@@ -16,3 +16,20 @@
 - Enforced in CI across a whole PR's commit range by the same
   `ci/conventional_commits.sh` the `pre-push` hook uses (skips GitHub's own
   auto-generated update-branch merge commits).
+
+## Dogfooding: use `lc`, not a Linear MCP server or skill
+
+- When working in this repo, read or write Linear data through this
+  repo's own `lc` CLI — never a Linear MCP server or other
+  Linear-integration skill. `lc` is the codebase under development;
+  routing around it means it never gets exercised.
+- There's no escript build (removed - NIF-backed deps like `exqlite`
+  can't load from inside an escript archive, so it never actually
+  worked once `exqlite` was added). Without a full `mix release lc`
+  build, invoke `lc` from `app/` via `mix run`:
+
+      mix run -e 'LinearCli.CLI.main(["issue", "list"])'
+
+  `main/2`'s default `halt` (`System.halt/1`) is fine to leave as-is —
+  only error paths call it, so a successful command just returns and
+  `mix run` exits 0 normally with real output and real exit codes.

@@ -12,13 +12,8 @@ defmodule LinearCli.MixProject do
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
-      escript: escript(),
       releases: releases()
     ]
-  end
-
-  defp escript do
-    [main_module: LinearCli.CLI, name: "lc"]
   end
 
   # Burrito-wrapped release, both the interactive CLI and (with
