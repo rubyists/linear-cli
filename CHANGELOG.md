@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/rubyists/linear-cli/compare/v1.4.1...v1.5.0) (2026-08-13)
+
+
+### Features
+
+* vendor stokowski for Linear-driven agent orchestration ([#101](https://github.com/rubyists/linear-cli/issues/101)) ([b68fc57](https://github.com/rubyists/linear-cli/commit/b68fc57c0acab0903979d0ea8b36e15a403a0664))
+
 ## [1.4.1](https://github.com/rubyists/linear-cli/compare/v1.4.0...v1.4.1) (2026-08-12)
 
 
