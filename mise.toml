@@ -6,3 +6,4 @@
 # works. See documents/phase-8-plan.adoc.
 erlang = "29.0.3"
 elixir = "1.20.3"
+python = "3.14.1"

@@ -28,3 +28,6 @@
 [submodule "vendor/rubyists-homebrew-tap"]
 	path = vendor/rubyists-homebrew-tap
 	url = git@github.com:rubyists/homebrew-tap
+[submodule "vendor/stokowski"]
+	path = vendor/stokowski
+	url = https://github.com/Sugar-Coffee/stokowski

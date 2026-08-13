@@ -3,8 +3,8 @@ defmodule LinearCli.ObanRepo do
   Resolves which Ecto repo (and matching Oban engine) actually backs Oban's
   job table, at *runtime* - `LINEAR_CLI_DB_ADAPTER=sqlite|postgres` (default
   `sqlite`), read fresh every time the daemon boots (see
-  `LinearCli.Application`). This is what lets one compiled escript/release
-  run against either backend on whatever machine it's deployed to, with no
+  `LinearCli.Application`). This is what lets one compiled release run
+  against either backend on whatever machine it's deployed to, with no
   rebuild.
 
   The *adapter* itself is still necessarily fixed per `Ecto.Repo` module -

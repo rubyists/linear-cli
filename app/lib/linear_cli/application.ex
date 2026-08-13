@@ -14,10 +14,10 @@ defmodule LinearCli.Application do
 
   # Only the daemon run mode (LINEAR_CLI_DAEMON=true, set by the mix
   # release's daemon startup) starts the repo + Oban and stays alive.
-  # Confirmed empirically that the escript boots this whole application on
-  # every invocation - without this gate, every interactive command would
-  # also open a database connection and boot Oban's full supervision tree.
-  # See documents/phase-7-plan.adoc.
+  # Confirmed empirically that every run mode (Burrito release, `mix run`)
+  # boots this whole application on every invocation - without this gate,
+  # every interactive command would also open a database connection and
+  # boot Oban's full supervision tree. See documents/phase-7-plan.adoc.
   #
   # Which repo/engine actually starts is resolved fresh on every boot via
   # LinearCli.ObanRepo.{repo,oban_engine}/0, not baked in at compile time -
@@ -35,19 +35,18 @@ defmodule LinearCli.Application do
     Supervisor.start_link([repo, {Oban, oban_opts}], opts)
   end
 
-  # `mix escript.build`'s `main_module: LinearCli.CLI` makes the escript
-  # runtime call `LinearCli.CLI.main/1` itself once boot finishes here - so
-  # this must NOT also call it, or every interactive command would run
-  # twice. A Burrito-wrapped release has no such runtime: it boots via
-  # `-s elixir start_cli`, which only recognizes Elixir's own CLI flags
-  # (`--help`/`--version`) and otherwise tries to run the first arg as a
-  # script file (see documents/phase-8-plan.adoc's Burrito verification -
-  # it only exercised the daemon boot-and-stay-alive path, not this one).
-  # `LinearCli.CLI.main/2` never reaches this call site as a Burrito
-  # release, so it has to happen here instead, per Burrito's own
-  # "Application Entry Point" README section. `running_standalone?/0`
-  # (checks the `__BURRITO` env var the Zig wrapper sets) is what
-  # distinguishes that case from escript/`mix run`.
+  # A Burrito-wrapped release boots via `-s elixir start_cli`, which only
+  # recognizes Elixir's own CLI flags (`--help`/`--version`) and otherwise
+  # tries to run the first arg as a script file (see
+  # documents/phase-8-plan.adoc's Burrito verification - it only exercised
+  # the daemon boot-and-stay-alive path, not this one). `LinearCli.CLI.
+  # main/2` never reaches this call site as a Burrito release, so it has
+  # to happen here instead, per Burrito's own "Application Entry Point"
+  # README section. `running_standalone?/0` (checks the `__BURRITO` env
+  # var the Zig wrapper sets) is what distinguishes that case from `mix
+  # run`, where the caller (a test, an `-e` script, IEx) invokes
+  # `LinearCli.CLI.main/1` itself - calling it again here would run every
+  # interactive command twice.
   defp start_interactive do
     if Burrito.Util.running_standalone?() do
       LinearCli.CLI.main(Burrito.Util.Args.argv())
