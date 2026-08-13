@@ -17,6 +17,8 @@ and best practices for agents to follow.
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
   and `pre-push` hooks at `githooks/` (run `mix setup` once per clone to
   activate them).
+- Accessibility: app/usage-rules.md — the actual reason this project
+  exists; see documents/motivation.adoc for the full why.
 
 <!-- usage-rules-start -->
 <!-- ash-start -->
