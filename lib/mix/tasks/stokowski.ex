@@ -28,9 +28,7 @@ defmodule Mix.Tasks.Stokowski do
     workflow = Path.expand("workflow.yaml")
 
     unless File.exists?(workflow) do
-      Mix.raise(
-        "No workflow.yaml at #{workflow} - see vendor/stokowski/README.md's setup guide"
-      )
+      Mix.raise("No workflow.yaml at #{workflow} - see vendor/stokowski/README.md's setup guide")
     end
 
     unless gitignored?(workflow) do
