@@ -2,10 +2,37 @@ defmodule Mix.Tasks.StokowskiTest do
   use ExUnit.Case, async: true
 
   test "raises when no workflow.yaml is found" do
-    File.cd!(System.tmp_dir!(), fn ->
+    in_tmp_dir(fn ->
       assert_raise Mix.Error, ~r/No workflow\.yaml at/, fn ->
         Mix.Tasks.Stokowski.run([])
       end
     end)
+  end
+
+  test "raises when tracker.api_key is a bare literal" do
+    in_tmp_dir(fn ->
+      File.write!("workflow.yaml", """
+      tracker:
+        api_key: "lin_api_totally_real"
+      """)
+
+      assert_raise Mix.Error, ~r/is a bare literal key/, fn ->
+        Mix.Tasks.Stokowski.run([])
+      end
+    end)
+  end
+
+  # Each test gets its own directory rather than sharing System.tmp_dir!()
+  # directly - both tests run async and would otherwise race on the same
+  # workflow.yaml.
+  defp in_tmp_dir(fun) do
+    dir = Path.join(System.tmp_dir!(), "stokowski_test_#{System.unique_integer([:positive])}")
+    File.mkdir_p!(dir)
+
+    try do
+      File.cd!(dir, fun)
+    after
+      File.rm_rf!(dir)
+    end
   end
 end

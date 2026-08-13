@@ -2,13 +2,13 @@
 # Stokowski — Example State Machine Workflow
 # =============================================================================
 #
-# Copy this file to workflow.yaml and customise for your project.
-# Stokowski re-reads this file on every poll tick — changes take effect
-# without restart.
+# This is linear-cli's own checked-in workflow config, not a template to
+# copy elsewhere. Stokowski re-reads this file on every poll tick — changes
+# take effect without restart.
 #
-# Prompt files live in the prompts/ directory.  Each agent state references
-# its prompt via the `prompt` field.  A global prompt (shared preamble) is
-# injected before the stage-specific prompt when set.
+# Prompt files live in the .ai/prompts/ directory.  Each agent state
+# references its prompt via the `prompt` field.  A global prompt (shared
+# preamble) is injected before the stage-specific prompt when set.
 #
 # Linear states mapping:
 #   active        → the "working" state for agent stages
@@ -106,7 +106,7 @@ polling:
 # Workspace
 # ---------------------------------------------------------------------------
 workspace:
-  root: ~/rubyists/code/stokowski-workspaces
+  root: ~/.local/share/stokowski/workspaces/linear-cli
 
 # ---------------------------------------------------------------------------
 # Hooks — shell scripts run in the workspace directory
@@ -173,7 +173,7 @@ states:
   # Uses Opus for deeper reasoning.  Low turn count — investigation only.
   investigate:
     type: agent
-    prompt: prompts/investigate.md
+    prompt: .ai/prompts/investigate.md
     linear_state: active
     model: claude-opus-4-6
     max_turns: 8
@@ -197,7 +197,7 @@ states:
   # Uses Sonnet for fast iteration.  Higher turn count for complex work.
   implement:
     type: agent
-    prompt: prompts/implement.md
+    prompt: .ai/prompts/implement.md
     linear_state: active
     model: claude-sonnet-4-6
     max_turns: 30
@@ -223,7 +223,7 @@ states:
   # provider — different states can use different runners in the same run.
   code-review:
     type: agent
-    prompt: prompts/review.md
+    prompt: .ai/prompts/review.md
     linear_state: active
     runner: claude              # "claude" (default) or "codex"
     model: claude-opus-4-6
@@ -247,7 +247,7 @@ states:
   # Merge the PR and clean up.  Short turn count — just the merge.
   merge:
     type: agent
-    prompt: prompts/merge.md
+    prompt: .ai/prompts/merge.md
     linear_state: active
     max_turns: 5
     session: inherit
