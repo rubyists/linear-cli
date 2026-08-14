@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/rubyists/linear-cli/compare/v1.7.0...v1.8.0) (2026-08-14)
+
+
+### Features
+
+* **issue:** add --all and --status filters to issue list ([#117](https://github.com/rubyists/linear-cli/issues/117)) ([4517e82](https://github.com/rubyists/linear-cli/commit/4517e826bf4bc52316e8c947adbe21c2ef9ca4bd))
+
 ## [1.7.0](https://github.com/rubyists/linear-cli/compare/v1.6.0...v1.7.0) (2026-08-14)
 
 
