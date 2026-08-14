@@ -78,6 +78,7 @@ jobs:
     defaults:
       run:
         working-directory: app
+        shell: bash
     steps:
       -
         uses: actions/checkout@v7
