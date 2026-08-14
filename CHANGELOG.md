@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/rubyists/linear-cli/compare/v1.6.0...v1.7.0) (2026-08-14)
+
+
+### Features
+
+* add mix lc development proxy ([#115](https://github.com/rubyists/linear-cli/issues/115)) ([a7da443](https://github.com/rubyists/linear-cli/commit/a7da4432d722fa931967eb5d61ed49c6f4b1f533))
+
 ## [1.6.0](https://github.com/rubyists/linear-cli/compare/v1.5.1...v1.6.0) (2026-08-14)
 
 
