@@ -100,6 +100,7 @@ defmodule Mix.Tasks.Burrito.Dinein do
       {:win32, _} -> :windows
       {:unix, :darwin} -> :darwin
       {:unix, :linux} -> :linux
+      {:unix, other} -> other
     end
   end
 
@@ -115,7 +116,7 @@ defmodule Mix.Tasks.Burrito.Dinein do
       "x86_64" -> :x86_64
       "aarch64" -> :aarch64
       "arm64" -> :aarch64
-      other -> String.to_atom(other)
+      other -> other
     end
   end
 end
