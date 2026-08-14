@@ -8,7 +8,7 @@ defmodule RepoTasks.MixProject do
   # things app/'s own mix.exs has no business knowing about). Kept
   # dependency-free on purpose: every task here just orchestrates other
   # already-existing tools (mix release inside app/, the ci/*.sh scripts)
-  # via System.cmd/3, never runs anything in-process.
+  # as child OS processes, never runs them in-process.
   def project do
     [
       app: :repo_tasks,
