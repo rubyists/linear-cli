@@ -53,7 +53,7 @@ jobs:
     # for building, not every push to main.
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'release-please--branches--main')
     name: Build Burrito target (${{ matrix.target }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       # Kept in sync with mix.exs's releases.lc.burrito.targets - Burrito
       # has no introspection command to read this list back out, so it's
@@ -61,11 +61,24 @@ jobs:
       # failed required leg cancels the others and fails this job outright,
       # which correctly skips burrito-package below rather than packaging
       # a release with a target missing.
+      #
+      # Each target runs on its matching OS runner so rustler_precompiled
+      # (used by mdex_native) downloads the correct precompiled NIF for the
+      # target platform. Cross-compiling from Ubuntu caused the Linux NIF to
+      # be bundled into macOS/Windows releases, making MDEx unavailable at
+      # runtime (see CRY-40).
       matrix:
-        target: [macos_aarch64, linux_x86_64, windows_x86_64]
+        include:
+          - target: macos_aarch64
+            runner: macos-latest
+          - target: linux_x86_64
+            runner: ubuntu-latest
+          - target: windows_x86_64
+            runner: windows-latest
     defaults:
       run:
         working-directory: app
+        shell: bash
     steps:
       -
         uses: actions/checkout@v7
@@ -87,11 +100,6 @@ jobs:
         uses: mlugg/setup-zig@v2.2.1
         with:
           version: "0.16.0"
-      -
-        # Only the Windows target's own build actually needs 7z.
-        if: matrix.target == 'windows_x86_64'
-        name: Install p7zip (Burrito needs 7z for Windows targets)
-        run: sudo apt-get update && sudo apt-get install -y p7zip-full
       -
         run: mix deps.get
       -
