@@ -26,13 +26,15 @@
 - There's no escript build (removed - NIF-backed deps like `exqlite`
   can't load from inside an escript archive, so it never actually
   worked once `exqlite` was added). Without a full `mix release lc`
-  build, invoke `lc` from `app/` via `mix run`:
+  build, invoke the development checkout from the repo root through its
+  proxy task:
 
-      mix run -e 'LinearCli.CLI.main(["issue", "list"])'
+      mix lc issue list
 
-  `main/2`'s default `halt` (`System.halt/1`) is fine to leave as-is —
-  only error paths call it, so a successful command just returns and
-  `mix run` exits 0 normally with real output and real exit codes.
+  `mix lc` compiles and starts the `app/` project as needed, forwards all
+  arguments and standard streams to `LinearCli.CLI.main/1` (including
+  interactive prompt input), and preserves its exit code. It also suppresses
+  child Mix progress messages so `--output json` stays machine-readable.
 
 ## Accessibility
 

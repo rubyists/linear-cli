@@ -338,6 +338,17 @@ on every commit, and again on every commit about to be pushed):
 $ mix setup
 ----
 
+Run the development checkout directly from the repository root with `mix lc`.
+It compiles and starts the application as needed, then forwards arguments,
+interactive input, output, and exit status to the same CLI entry point used by
+the release binary:
+
+[source,sh]
+----
+$ mix lc whoami
+$ mix lc issue list --output json
+----
+
 The project uses ExUnit and `mix format`. Run tests with:
 
 [source,sh]
