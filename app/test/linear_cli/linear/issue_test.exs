@@ -91,6 +91,34 @@ defmodule LinearCli.Linear.IssueTest do
     assert issue.identifier == "CRY-2"
   end
 
+  test "issues/1 parses the issue's current state when present in the response" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query} = Jason.decode!(body)
+      assert query =~ "state {"
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "issue" => %{
+            "id" => "i2",
+            "identifier" => "CRY-2",
+            "title" => "Ship it",
+            "branchName" => "cry-2-ship-it",
+            "description" => nil,
+            "assignee" => nil,
+            "state" => %{"id" => "s1", "name" => "Done", "type" => "completed"},
+            "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+            "comments" => %{"nodes" => []}
+          }
+        }
+      })
+    end)
+
+    assert {:ok, [issue]} = Linear.issues(%{ids: ["cry-2"]})
+    assert issue.state.type == "completed"
+    assert issue.state.name == "Done"
+  end
+
   test "issues/1 with an unknown id returns a not_found error" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{"data" => %{"issue" => nil}})
@@ -274,7 +302,7 @@ defmodule LinearCli.Linear.IssueTest do
   end
 
   describe "close_issue/2+" do
-    test "defaults trashed to false when not given" do
+    test "omits trashed from the mutation input when not given (Linear API rejects trashed: false)" do
       issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
 
       Req.Test.stub(LinearCli.Api, fn conn ->
@@ -282,7 +310,7 @@ defmodule LinearCli.Linear.IssueTest do
         %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
 
         assert id == "CRY-1"
-        assert input == %{"stateId" => "s1", "trashed" => false}
+        assert input == %{"stateId" => "s1"}
 
         Req.Test.json(conn, %{
           "data" => %{
@@ -294,6 +322,7 @@ defmodule LinearCli.Linear.IssueTest do
                 "branchName" => "cry-1-fix-it",
                 "description" => nil,
                 "assignee" => nil,
+                "state" => %{"id" => "s1", "name" => "Done", "type" => "completed"},
                 "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
                 "comments" => %{"nodes" => []}
               }
@@ -302,7 +331,9 @@ defmodule LinearCli.Linear.IssueTest do
         })
       end)
 
-      assert {:ok, _updated} = Linear.close_issue(issue, "s1")
+      assert {:ok, updated} = Linear.close_issue(issue, "s1")
+      assert updated.state.type == "completed"
+      assert updated.state.name == "Done"
     end
 
     test "sends trashed: true when given via opts" do
