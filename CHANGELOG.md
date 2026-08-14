@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.6.0](https://github.com/rubyists/linear-cli/compare/v1.5.1...v1.6.0) (2026-08-14)
+
+
+### Features
+
+* **build:** add mix burrito.dinein for local binary builds ([#112](https://github.com/rubyists/linear-cli/issues/112)) ([decf951](https://github.com/rubyists/linear-cli/commit/decf95122f8ebef4fa642c2969b35aef1d641592))
+
+
+### Bug Fixes
+
+* **ai:** adds CLAUDE.md symlink ([#110](https://github.com/rubyists/linear-cli/issues/110)) ([5165c4e](https://github.com/rubyists/linear-cli/commit/5165c4ecd67d521b0c55550b3089af424b255871))
+* **close:** make issue close/cancel idempotent when already in terminal state ([#113](https://github.com/rubyists/linear-cli/issues/113)) ([0a71060](https://github.com/rubyists/linear-cli/commit/0a710604339e9fbf4db7917a09fcdfdedb2c716f))
+
 ## [1.5.1](https://github.com/rubyists/linear-cli/compare/v1.5.0...v1.5.1) (2026-08-14)
 
 
