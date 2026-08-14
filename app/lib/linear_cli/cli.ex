@@ -46,7 +46,9 @@ defmodule LinearCli.CLI do
       # `parse_result` is bound above, outside this try, specifically so
       # it's still in scope here (bindings from inside a `do` block aren't
       # visible in that same try's `rescue`, but outer-scope bindings are).
-      exception -> handle_error(exception, parse_result.options[:debug], halt)
+      exception ->
+        debug = is_struct(parse_result, Optimus.ParseResult) && parse_result.options[:debug]
+        handle_error(exception, debug, halt)
     end
   end
 
@@ -507,7 +509,11 @@ defmodule LinearCli.CLI do
                   long: "--no-mine",
                   help: "List the most recent issues, not just your own"
                 ],
-                full: [short: "-f", long: "--full", help: "Show full issue details"]
+                full: [short: "-f", long: "--full", help: "Show full issue details"],
+                all: [
+                  long: "--all",
+                  help: "Show all issues including completed and cancelled"
+                ]
               ],
               options: [
                 team: [short: "-t", long: "--team", help: "Show issues for only this team"],
@@ -516,6 +522,25 @@ defmodule LinearCli.CLI do
                   long: "--project",
                   help:
                     "Show issues for only this project. Can be name, URL, ID, or - to select from a list"
+                ],
+                status: [
+                  short: "-s",
+                  long: "--status",
+                  help:
+                    "Filter by workflow state type(s): triage, backlog, unstarted, started, completed, cancelled (comma-separated)",
+                  parser: fn v ->
+                    valid = ~w(triage backlog unstarted started completed cancelled canceled)
+                    types = String.split(v, ",", trim: true)
+
+                    case Enum.find(types, &(&1 not in valid)) do
+                      nil ->
+                        {:ok, types}
+
+                      bad ->
+                        {:error,
+                         "unknown status #{inspect(bad)}, must be one of: #{Enum.join(valid, ", ")}"}
+                    end
+                  end
                 ]
               ]
             ],

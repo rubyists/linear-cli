@@ -201,6 +201,103 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
       assert output =~ "CRY-1"
     end
+
+    test "--all removes completedAt and canceledAt null-check filters" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--all"])
+      end)
+
+      assert_received {:filter, filter}
+      refute Map.has_key?(filter, "completedAt")
+      refute Map.has_key?(filter, "canceledAt")
+    end
+
+    test "--status filters by workflow state type and removes corresponding date filters" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--status", "started"])
+      end)
+
+      assert_received {:filter, filter}
+      assert filter["state"] == %{"type" => %{"in" => ["started"]}}
+      # "started" is not completed/cancelled so both date filters remain
+      assert Map.has_key?(filter, "completedAt")
+      assert Map.has_key?(filter, "canceledAt")
+    end
+
+    test "--status completed removes completedAt filter but keeps canceledAt filter" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--status", "completed"])
+      end)
+
+      assert_received {:filter, filter}
+      assert filter["state"] == %{"type" => %{"in" => ["completed"]}}
+      refute Map.has_key?(filter, "completedAt")
+      assert Map.has_key?(filter, "canceledAt")
+    end
+
+    test "--status accepts multiple comma-separated types" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--status", "started,completed"])
+      end)
+
+      assert_received {:filter, filter}
+      assert filter["state"] == %{"type" => %{"in" => ["started", "completed"]}}
+      refute Map.has_key?(filter, "completedAt")
+      assert Map.has_key?(filter, "canceledAt")
+    end
+
+    test "--status with an unknown type exits 1 (Optimus parse error)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      # Optimus catches the bad value and calls halt.(1); with a fake halt that
+      # doesn't terminate the process, execution continues and eventually crashes
+      # (same artifact as the --help test in cli_test.exs). Rescue it so the test
+      # can still verify halt was called with the right code.
+      try do
+        LinearCli.CLI.main(["issue", "list", "--status", "badtype"], halt)
+      rescue
+        _ -> :ok
+      end
+
+      assert_received {:halted, 1}
+    end
   end
 
   describe "issue create (Ruby: commands/issue/create.rb)" do

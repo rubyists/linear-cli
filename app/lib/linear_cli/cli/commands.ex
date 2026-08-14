@@ -234,7 +234,9 @@ defmodule LinearCli.CLI.Commands do
         mine: !flags.no_mine,
         unassigned: flags.unassigned,
         team_key: team_key,
-        project_id: project_id
+        project_id: project_id,
+        all: Map.get(flags, :all, false),
+        status: Map.get(options, :status) || []
       }
 
       with {:ok, issues} <- Linear.issues(input) do
