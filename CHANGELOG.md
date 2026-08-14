@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.5.1](https://github.com/rubyists/linear-cli/compare/v1.5.0...v1.5.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **ci:** build each Burrito target on its matching OS runner (CRY-40) ([#108](https://github.com/rubyists/linear-cli/issues/108)) ([c2d592d](https://github.com/rubyists/linear-cli/commit/c2d592d29fdb0f488a07afbaa7889ec53534443e))
+
+## [1.5.0](https://github.com/rubyists/linear-cli/compare/v1.4.1...v1.5.0) (2026-08-13)
+
+
+### Features
+
+* launch stokowski sessions via mix stokowski ([#106](https://github.com/rubyists/linear-cli/issues/106)) ([550ed26](https://github.com/rubyists/linear-cli/commit/550ed26e4486af95d936f7b97baa1babed49dec9))
+* vendor stokowski for Linear-driven agent orchestration ([#101](https://github.com/rubyists/linear-cli/issues/101)) ([b68fc57](https://github.com/rubyists/linear-cli/commit/b68fc57c0acab0903979d0ea8b36e15a403a0664))
+
 ## [1.4.1](https://github.com/rubyists/linear-cli/compare/v1.4.0...v1.4.1) (2026-08-12)
 
 
