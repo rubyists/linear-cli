@@ -13,6 +13,8 @@ defmodule LinearCli.Linear.Issue do
       argument :unassigned, :boolean, default: false
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
+      argument :all, :boolean, default: false
+      argument :status, {:array, :string}, default: []
       manual LinearCli.Linear.Issue.Read.List
     end
 
@@ -174,11 +176,46 @@ defmodule LinearCli.Linear.Issue.Read.List do
 
   # Ported from Rubyists::Linear::Operations::Issue::List#build_filter. `unassigned`
   # is checked after `mine` here too, so it wins if both are set - same as Ruby.
+  # `all: true` removes the completedAt/canceledAt null-checks so closed/cancelled
+  # issues are included. `status` injects a state.type filter; when it includes
+  # "completed" or "cancelled"/"canceled", the corresponding date null-checks are
+  # also dropped so those issues aren't filtered out before the type filter applies.
   defp build_filter(args) do
-    %{"completedAt" => %{"null" => true}, "canceledAt" => %{"null" => true}}
+    %{}
+    |> maybe_put_date_filters(args)
     |> maybe_put_assignee_filter(args)
     |> maybe_put_team_filter(args)
     |> maybe_put_project_filter(args)
+    |> maybe_put_state_filter(args)
+  end
+
+  @completed_types ~w(completed)
+  @cancelled_types ~w(cancelled canceled)
+
+  defp maybe_put_date_filters(filter, %{all: true}), do: filter
+
+  defp maybe_put_date_filters(filter, %{status: status}) when status != [] do
+    filter
+    |> maybe_put_completed_date_filter(status)
+    |> maybe_put_cancelled_date_filter(status)
+  end
+
+  defp maybe_put_date_filters(filter, _args) do
+    Map.merge(filter, %{"completedAt" => %{"null" => true}, "canceledAt" => %{"null" => true}})
+  end
+
+  # Suppress the completedAt null-check only when the status list doesn't ask for completed.
+  defp maybe_put_completed_date_filter(filter, status) do
+    if Enum.any?(status, &(&1 in @completed_types)),
+      do: filter,
+      else: Map.put(filter, "completedAt", %{"null" => true})
+  end
+
+  # Suppress the canceledAt null-check only when the status list doesn't ask for cancelled.
+  defp maybe_put_cancelled_date_filter(filter, status) do
+    if Enum.any?(status, &(&1 in @cancelled_types)),
+      do: filter,
+      else: Map.put(filter, "canceledAt", %{"null" => true})
   end
 
   defp maybe_put_assignee_filter(filter, %{unassigned: true}) do
@@ -202,6 +239,12 @@ defmodule LinearCli.Linear.Issue.Read.List do
   end
 
   defp maybe_put_project_filter(filter, _args), do: filter
+
+  defp maybe_put_state_filter(filter, %{status: [_ | _] = types}) do
+    Map.put(filter, "state", %{"type" => %{"in" => types}})
+  end
+
+  defp maybe_put_state_filter(filter, _args), do: filter
 end
 
 defmodule LinearCli.Linear.Issue.Create do
