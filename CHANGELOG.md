@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/rubyists/linear-cli/compare/v1.5.0...v1.5.1) (2026-08-14)
+
+
+### Bug Fixes
+
+* **ci:** build each Burrito target on its matching OS runner (CRY-40) ([#108](https://github.com/rubyists/linear-cli/issues/108)) ([c2d592d](https://github.com/rubyists/linear-cli/commit/c2d592d29fdb0f488a07afbaa7889ec53534443e))
+
 ## [1.5.0](https://github.com/rubyists/linear-cli/compare/v1.4.1...v1.5.0) (2026-08-13)
 
 
