@@ -121,14 +121,19 @@ defmodule LinearCli.CLI.IssueHelpers do
   """
   @spec cancel_issue(%Linear.Issue{}, keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def cancel_issue(issue, opts \\ []) do
-    reason =
-      WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
+    if issue.state && issue.state.type in ["cancelled", "canceled"] do
+      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
+      {:ok, issue}
+    else
+      reason =
+        WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
 
-    with {:ok, _comment} <- issue_comment(issue, reason),
-         {:ok, cancel_state} <- cancelled_state_for(issue),
-         {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
-      Prompt.ok("#{issue.identifier} was cancelled")
-      {:ok, updated}
+      with {:ok, _comment} <- issue_comment(issue, reason),
+           {:ok, cancel_state} <- cancelled_state_for(issue),
+           {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
+        Prompt.ok("#{issue.identifier} was cancelled")
+        {:ok, updated}
+      end
     end
   end
 
@@ -148,17 +153,25 @@ defmodule LinearCli.CLI.IssueHelpers do
   @spec close_issue(%Linear.Issue{}, keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def close_issue(issue, opts \\ []) do
     cancelled = opts[:cancel]
-    doing = if cancelled, do: "cancelling", else: "closing"
+    target_types = if cancelled, do: ["cancelled", "canceled"], else: ["completed"]
     done = if cancelled, do: "cancelled", else: "closed"
 
-    reason =
-      WhatFor.reason_for(opts[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
+    if issue.state && issue.state.type in target_types do
+      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
+      {:ok, issue}
+    else
+      doing = if cancelled, do: "cancelling", else: "closing"
 
-    with {:ok, _comment} <- issue_comment(issue, reason),
-         {:ok, workflow_state} <- state_for(cancelled, issue),
-         {:ok, updated} <- Linear.close_issue(issue, workflow_state.id, %{trash: !!opts[:trash]}) do
-      Prompt.ok("#{issue.identifier} was #{done}")
-      {:ok, updated}
+      reason =
+        WhatFor.reason_for(opts[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
+
+      with {:ok, _comment} <- issue_comment(issue, reason),
+           {:ok, workflow_state} <- state_for(cancelled, issue),
+           {:ok, updated} <-
+             Linear.close_issue(issue, workflow_state.id, %{trash: !!opts[:trash]}) do
+        Prompt.ok("#{issue.identifier} was #{done}")
+        {:ok, updated}
+      end
     end
   end
 

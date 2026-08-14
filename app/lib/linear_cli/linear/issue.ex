@@ -55,15 +55,18 @@ defmodule LinearCli.Linear.Issue do
     attribute :branch_name, :string, public?: true
     attribute :description, :string, public?: true
     attribute :assignee, :term, public?: true
+    attribute :state, :term, public?: true
     attribute :team, :term, public?: true
     attribute :comments, {:array, :term}, public?: true, default: []
   end
 
   @issue_fields "id identifier title branchName description createdAt updatedAt"
+  @state_fields "id name type"
 
   @doc "GraphQL field selection for an issue plus its assignee/team (Ruby: Issue.base_fragment)."
   def base_fields do
     "#{@issue_fields} " <>
+      "state { #{@state_fields} } " <>
       "assignee { #{LinearCli.Linear.User.fields_with_teams()} } " <>
       "team { #{LinearCli.Linear.Team.base_fields()} }"
   end
@@ -71,6 +74,7 @@ defmodule LinearCli.Linear.Issue do
   @doc "GraphQL field selection for a fully detailed issue, incl. comments (Ruby: Issue.full_fragment)."
   def full_fields do
     "#{@issue_fields} " <>
+      "state { #{@state_fields} } " <>
       "assignee { #{LinearCli.Linear.User.fields_with_teams()} } " <>
       "team { #{LinearCli.Linear.Team.full_fields()} } " <>
       "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } }"
@@ -85,6 +89,7 @@ defmodule LinearCli.Linear.Issue do
       branch_name: map["branchName"],
       description: map["description"],
       assignee: map["assignee"] && LinearCli.Linear.User.from_map(map["assignee"]),
+      state: map["state"] && LinearCli.Linear.WorkflowState.from_map(map["state"]),
       team: map["team"] && LinearCli.Linear.Team.from_map(map["team"]),
       comments:
         Enum.map(
@@ -306,10 +311,9 @@ defmodule LinearCli.Linear.Issue.Update.Close do
 
   def update(changeset, _opts, _context) do
     args = changeset.arguments
+    input = %{"stateId" => args.state_id}
+    input = if args.trash, do: Map.put(input, "trashed", true), else: input
 
-    Issue.Update.run(changeset.data.identifier, %{
-      "stateId" => args.state_id,
-      "trashed" => args.trash
-    })
+    Issue.Update.run(changeset.data.identifier, input)
   end
 end

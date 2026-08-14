@@ -182,6 +182,20 @@ defmodule LinearCli.CLI.IssueHelpersTest do
                         IssueHelpers.cancel_issue(issue(), reason: "no longer needed")
              end) =~ "Comment added to CRY-1"
     end
+
+    test "is a no-op when the issue is already in a cancelled state" do
+      already_cancelled =
+        issue(%{state: %WorkflowState{id: "s1", name: "Cancelled", type: "cancelled"}})
+
+      output =
+        capture_io(fn ->
+          assert {:ok, ^already_cancelled} =
+                   IssueHelpers.cancel_issue(already_cancelled, reason: "no longer needed")
+        end)
+
+      assert output =~ "CRY-1 is already Cancelled"
+      refute output =~ "Comment added"
+    end
   end
 
   describe "close_issue/2 (Ruby: CLI::Issue#close_issue)" do
@@ -220,6 +234,32 @@ defmodule LinearCli.CLI.IssueHelpersTest do
         end)
 
       assert output =~ "CRY-1 was cancelled"
+    end
+
+    test "is a no-op when the issue is already in a completed state" do
+      already_done = issue(%{state: %WorkflowState{id: "s1", name: "Done", type: "completed"}})
+
+      output =
+        capture_io(fn ->
+          assert {:ok, ^already_done} = IssueHelpers.close_issue(already_done, reason: "shipped")
+        end)
+
+      assert output =~ "CRY-1 is already Done"
+      refute output =~ "Comment added"
+    end
+
+    test "is a no-op when cancel: true and issue is already in a cancelled state" do
+      already_cancelled =
+        issue(%{state: %WorkflowState{id: "s1", name: "Cancelled", type: "cancelled"}})
+
+      output =
+        capture_io(fn ->
+          assert {:ok, ^already_cancelled} =
+                   IssueHelpers.close_issue(already_cancelled, cancel: true, reason: "nope")
+        end)
+
+      assert output =~ "CRY-1 is already Cancelled"
+      refute output =~ "Comment added"
     end
   end
 
