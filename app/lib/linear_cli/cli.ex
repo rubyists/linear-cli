@@ -533,8 +533,12 @@ defmodule LinearCli.CLI do
                     types = String.split(v, ",", trim: true)
 
                     case Enum.find(types, &(&1 not in valid)) do
-                      nil -> {:ok, types}
-                      bad -> {:error, "unknown status #{inspect(bad)}, must be one of: #{Enum.join(valid, ", ")}"}
+                      nil ->
+                        {:ok, types}
+
+                      bad ->
+                        {:error,
+                         "unknown status #{inspect(bad)}, must be one of: #{Enum.join(valid, ", ")}"}
                     end
                   end
                 ]
