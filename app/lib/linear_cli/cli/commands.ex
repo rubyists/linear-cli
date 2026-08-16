@@ -495,7 +495,10 @@ defmodule LinearCli.CLI.Commands do
          :ok <- maybe_add_status_comment(issue, options.comment),
          {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
       Display.show(updated, %{output: options.output})
-      if options.output != "json", do: Prompt.ok("#{updated.identifier} status set to #{target_state.name}")
+
+      if options.output != "json",
+        do: Prompt.ok("#{updated.identifier} status set to #{target_state.name}")
+
       :ok
     end
   end

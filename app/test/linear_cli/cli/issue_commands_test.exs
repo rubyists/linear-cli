@@ -574,7 +574,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           String.contains?(query, "issueUpdate") ->
             body_decoded = Jason.decode!(body)
             send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -608,7 +611,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           String.contains?(query, "issueUpdate") ->
             body_decoded = Jason.decode!(body)
             send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -641,7 +647,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           String.contains?(query, "issueUpdate") ->
             body_decoded = Jason.decode!(body)
             send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s2", "In Progress")}}})
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s2", "In Progress")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -701,7 +710,8 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
           String.contains?(query, "states {") ->
             # Two states starting with "D" to trigger ambiguity
-            Req.Test.json(conn,
+            Req.Test.json(
+              conn,
               workflow_states([
                 state_map("s1", "Done", 1.0, "completed"),
                 state_map("s2", "Doing", 2.0, "started")
@@ -742,7 +752,9 @@ defmodule LinearCli.CLI.IssueCommandsTest do
             Req.Test.json(conn, comment_created())
 
           String.contains?(query, "issueUpdate") ->
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -781,7 +793,9 @@ defmodule LinearCli.CLI.IssueCommandsTest do
             Req.Test.json(conn, states_response())
 
           String.contains?(query, "issueUpdate") ->
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -811,7 +825,9 @@ defmodule LinearCli.CLI.IssueCommandsTest do
             Req.Test.json(conn, states_response())
 
           String.contains?(query, "issueUpdate") ->
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
@@ -852,7 +868,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
           String.contains?(query, "issueUpdate") ->
             send(test_pid, :updated)
-            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
 
           true ->
             raise "no stub matched query: #{query}"
