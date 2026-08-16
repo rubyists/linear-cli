@@ -556,10 +556,6 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     test "--status sets the workflow state by exact name (case-insensitive)" do
       test_pid = self()
 
-      stub_responses([
-        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}}
-      ])
-
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         %{"query" => query} = Jason.decode!(body)

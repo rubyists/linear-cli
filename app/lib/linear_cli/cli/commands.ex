@@ -477,7 +477,7 @@ defmodule LinearCli.CLI.Commands do
   defp validate_issue_ids(_issue_ids), do: :ok
 
   @doc """
-  New command. Changes the workflow state of an issue.
+  Changes the workflow state of an issue.
 
   With `--status`/`-s`, matches the given name against the issue's team's
   workflow states (case-insensitive exact, then unique prefix). Without it,
