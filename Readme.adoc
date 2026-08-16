@@ -129,7 +129,7 @@ $ ./burrito_out/lc_<target> --version
 === Configuration
 
 You must set the `LINEAR_API_KEY` environment variable to your Linear API key.
-You can find your API key in your https://linear.app/settings/api[Linear Settings].
+You can find your API key in your https://linear.app/settings/account/security[Linear Settings].
 
 === Commands
 

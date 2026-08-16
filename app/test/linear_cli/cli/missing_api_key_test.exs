@@ -16,7 +16,7 @@ defmodule LinearCli.CLI.MissingApiKeyTest do
 
     assert_received {:halted, 78}
     assert output =~ "LINEAR_API_KEY is not set."
-    assert output =~ "https://linear.app/settings/api"
+    assert output =~ "https://linear.app/settings/account/security"
     refute output =~ "What the heck is this?"
     refute output =~ "Ash.Error"
   end
