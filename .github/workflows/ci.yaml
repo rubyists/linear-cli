@@ -44,17 +44,12 @@ jobs:
             app/_build
           key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
       -
-        run: mix deps.get
-      -
-        run: mix format --check-formatted
-      -
-        # Catches drift introduced within this PR (e.g. an ash/oban bump
-        # without re-running the sync) - see #79. The reactive auto-fix
-        # for drift from any other source lives in its own workflow
-        # (usage-rules-sync.yaml), not here.
-        run: mix usage_rules.sync --check
-      -
-        run: mix test
+        # mix ci covers deps.get, format --check-formatted,
+        # usage_rules.sync --check (catches dep-bump drift, see #79),
+        # and mix test. Runs from the repo root; cd: app/ is handled
+        # inside the task itself.
+        run: mix ci
+        working-directory: .
 
   conventional_commits:
     if: inputs.skip_commit_validation != true
