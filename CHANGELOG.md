@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/rubyists/linear-cli/compare/v1.8.0...v1.9.0) (2026-08-16)
+
+
+### Features
+
+* **profile:** add profile clear command ([#120](https://github.com/rubyists/linear-cli/issues/120)) ([45cce6f](https://github.com/rubyists/linear-cli/commit/45cce6f154cc2c8068887a01958abe751aac36d1))
+
 ## [1.8.0](https://github.com/rubyists/linear-cli/compare/v1.7.0...v1.8.0) (2026-08-14)
 
 
