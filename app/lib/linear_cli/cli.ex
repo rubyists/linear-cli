@@ -311,7 +311,12 @@ defmodule LinearCli.CLI do
          halt
        ) do
     IO.puts(:stderr, "LINEAR_API_KEY is not set.")
-    IO.puts(:stderr, "Set it to your Linear API key - see https://linear.app/settings/account/security")
+
+    IO.puts(
+      :stderr,
+      "Set it to your Linear API key - see https://linear.app/settings/account/security"
+    )
+
     IO.puts(:stderr, "** Missing configuration, cannot continue **")
     maybe_print_backtrace(debug)
     halt.(78)
