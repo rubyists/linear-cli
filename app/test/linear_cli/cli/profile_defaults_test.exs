@@ -216,6 +216,74 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       assert filter["project"] == %{"id" => %{"eq" => "p2"}}
     end
 
+    test "--no-profile bypasses the active profile's team/project defaults" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        flags: %{no_mine: false, unassigned: false, full: false, no_profile: true},
+        options: %{team: nil, project: nil, output: "text"},
+        unknown: []
+      }
+
+      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+
+      assert_received {:filter, filter}
+      refute Map.has_key?(filter, "team")
+      refute Map.has_key?(filter, "project")
+    end
+
+    test "--no-profile with an explicit --team still applies the explicit team" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        flags: %{no_mine: false, unassigned: false, full: false, no_profile: true},
+        options: %{team: "ENG", project: nil, output: "text"},
+        unknown: []
+      }
+
+      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+
+      assert_received {:filter, filter}
+      assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
+      refute Map.has_key?(filter, "project")
+    end
+
     test "resolves bare issue numbers (positional ids) via the active profile's team" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -247,6 +315,77 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       assert output =~ "CRY-1"
       assert_received {:id, "CRY-42"}
+    end
+  end
+
+  describe "Commands.issue_list/1 with --no-profile bypasses active profile defaults" do
+    test "ignores both team and project defaults when --no-profile is set" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        if String.contains?(query, "projects(first: $first") do
+          raise "--no-profile must not query projects when --project wasn't given"
+        end
+
+        if String.contains?(query, "issues(filter") do
+          send(test_pid, {:filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([issue_map()]))
+        else
+          raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        flags: %{no_mine: false, unassigned: false, full: false, no_profile: true},
+        options: %{team: nil, project: nil, output: "text"},
+        unknown: []
+      }
+
+      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+
+      assert output =~ "CRY-1"
+      assert_received {:filter, filter}
+      refute Map.has_key?(filter, "team")
+      refute Map.has_key?(filter, "project")
+    end
+
+    test "--no-profile with explicit --team still applies the explicit team" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        if String.contains?(query, "issues(filter") do
+          send(test_pid, {:filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([issue_map()]))
+        else
+          raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        flags: %{no_mine: false, unassigned: false, full: false, no_profile: true},
+        options: %{team: "ENG", project: nil, output: "text"},
+        unknown: []
+      }
+
+      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+
+      assert_received {:filter, filter}
+      assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
+      refute Map.has_key?(filter, "project")
     end
   end
 

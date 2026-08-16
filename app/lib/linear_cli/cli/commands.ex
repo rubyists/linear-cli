@@ -226,9 +226,13 @@ defmodule LinearCli.CLI.Commands do
   passed explicitly always win over the active profile.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
-    team_key = options.team || Profiles.default_team()
+    no_profile = Map.get(flags, :no_profile, false)
+    team_key = options.team || (unless no_profile, do: Profiles.default_team())
 
-    with {:ok, project_id} <- resolve_project_id(options.project || Profiles.default_project()) do
+    project_source =
+      options.project || (unless no_profile, do: Profiles.default_project())
+
+    with {:ok, project_id} <- resolve_project_id(project_source) do
       input = %{
         ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
         mine: !flags.no_mine,

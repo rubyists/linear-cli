@@ -509,6 +509,10 @@ defmodule LinearCli.CLI do
                   long: "--no-mine",
                   help: "List the most recent issues, not just your own"
                 ],
+                no_profile: [
+                  long: "--no-profile",
+                  help: "Ignore the active profile's team/project defaults"
+                ],
                 full: [short: "-f", long: "--full", help: "Show full issue details"],
                 all: [
                   long: "--all",
