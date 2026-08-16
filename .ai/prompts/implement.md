@@ -28,9 +28,7 @@ Implement the solution, create a PR, and ensure it passes all quality checks.
    ```
 4. Implement the changes with clean, logical commits.
 5. Run the full quality suite:
-   - Type checking
-   - Linting
-   - All tests
+   - mix ci
 6. Fix any failures before proceeding.
 7. Push the branch and create a PR:
    ```
