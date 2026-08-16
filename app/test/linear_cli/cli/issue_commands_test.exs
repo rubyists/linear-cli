@@ -880,6 +880,72 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
       assert_received :updated
     end
+
+    test "alias 'st' routes to issue status" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :updated)
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "st", "--status", "Done", "CRY-1"])
+      end)
+
+      assert_received :updated
+    end
+
+    test "alias 'stat' routes to issue status" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :updated)
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "stat", "--status", "Done", "CRY-1"])
+      end)
+
+      assert_received :updated
+    end
   end
 
   describe "issue update (Ruby: commands/issue/update.rb)" do

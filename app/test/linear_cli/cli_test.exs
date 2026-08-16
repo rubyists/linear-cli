@@ -282,6 +282,12 @@ defmodule LinearCli.CLITest do
     assert LinearCli.CLI.normalize_subcommand_aliases(["i", "pull-request", "CRY-1"]) ==
              ["issue", "pr", "CRY-1"]
 
+    assert LinearCli.CLI.normalize_subcommand_aliases(["i", "st", "CRY-1"]) ==
+             ["issue", "status", "CRY-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["i", "stat", "CRY-1"]) ==
+             ["issue", "status", "CRY-1"]
+
     # `take` has no alias in Ruby either - unaliased subcommands pass through.
     assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "take", "CRY-1"]) ==
              ["issue", "take", "CRY-1"]
