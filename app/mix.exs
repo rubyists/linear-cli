@@ -5,7 +5,7 @@ defmodule LinearCli.MixProject do
     [
       app: :linear_cli,
       # x-release-please-start-version
-      version: "1.10.0",
+      version: "1.11.0",
       # x-release-please-end
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
@@ -22,6 +22,7 @@ defmodule LinearCli.MixProject do
   # Burrito's own docs/source, and exqlite's NIF cross-compilation verified
   # empirically (built+ran the linux_x86_64 target under podman/QEMU) - see
   # documents/phase-8-plan.adoc. macOS Intel intentionally not targeted.
+  # Kept in sync with .github/workflows/main.yaml's burrito-build matrix.
   defp releases do
     [
       lc: [
@@ -30,6 +31,7 @@ defmodule LinearCli.MixProject do
           targets: [
             macos_aarch64: [os: :darwin, cpu: :aarch64],
             linux_x86_64: [os: :linux, cpu: :x86_64],
+            linux_aarch64: [os: :linux, cpu: :aarch64],
             windows_x86_64: [os: :windows, cpu: :x86_64]
           ]
         ]
