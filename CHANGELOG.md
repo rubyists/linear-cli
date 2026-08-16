@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.11.0](https://github.com/rubyists/linear-cli/compare/v1.10.0...v1.11.0) (2026-08-16)
+
+
+### Features
+
+* **ci:** add linux_aarch64 release build (CRY-48) ([#125](https://github.com/rubyists/linear-cli/issues/125)) ([da25532](https://github.com/rubyists/linear-cli/commit/da255325b0a0bfa14df23591e2d2d581fe6d4fc0))
+
 ## [1.10.0](https://github.com/rubyists/linear-cli/compare/v1.9.1...v1.10.0) (2026-08-16)
 
 
