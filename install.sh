@@ -32,8 +32,9 @@ detect_target() {
         Linux)
             case "$(uname -m)" in
                 x86_64) printf '%s\n' linux_x86_64 ;;
+                aarch64) printf '%s\n' linux_aarch64 ;;
                 *)
-                    printf 'error: unsupported Linux architecture: %s (only x86_64 is built)\n' "$(uname -m)" >&2
+                    printf 'error: unsupported Linux architecture: %s (only x86_64 and aarch64 are built)\n' "$(uname -m)" >&2
                     exit 1
                     ;;
             esac
