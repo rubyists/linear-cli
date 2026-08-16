@@ -536,6 +536,337 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     end
   end
 
+  describe "issue status" do
+    defp state_map(id, name, position, type) do
+      %{"id" => id, "name" => name, "position" => position, "type" => type, "description" => nil}
+    end
+
+    defp issue_with_state(state_id, state_name) do
+      issue_map(%{"state" => %{"id" => state_id, "name" => state_name, "type" => "started"}})
+    end
+
+    defp states_response do
+      workflow_states([
+        state_map("s1", "Triage", 0.0, "triage"),
+        state_map("s2", "In Progress", 1.0, "started"),
+        state_map("s3", "Done", 2.0, "completed")
+      ])
+    end
+
+    test "--status sets the workflow state by exact name (case-insensitive)" do
+      test_pid = self()
+
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}}
+      ])
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            body_decoded = Jason.decode!(body)
+            send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "status", "--status", "done", "CRY-1"])
+        end)
+
+      assert_received {:state_id, "s3"}
+      assert output =~ "CRY-1"
+      assert output =~ "status set to Done"
+    end
+
+    test "-s short flag also sets the workflow state" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            body_decoded = Jason.decode!(body)
+            send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "status", "-s", "Done", "CRY-1"])
+        end)
+
+      assert_received {:state_id, "s3"}
+      assert output =~ "status set to Done"
+    end
+
+    test "--status with prefix match selects unique match" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            body_decoded = Jason.decode!(body)
+            send(test_pid, {:state_id, body_decoded["variables"]["input"]["stateId"]})
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s2", "In Progress")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "status", "--status", "in", "CRY-1"])
+        end)
+
+      assert_received {:state_id, "s2"}
+      assert output =~ "status set to In Progress"
+    end
+
+    test "--status with unknown name exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "status", "--status", "Nonexistent", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "Unknown status"
+      assert stderr =~ "This smells bad! Bailing."
+    end
+
+    test "--status with ambiguous prefix exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            # Two states starting with "D" to trigger ambiguity
+            Req.Test.json(conn,
+              workflow_states([
+                state_map("s1", "Done", 1.0, "completed"),
+                state_map("s2", "Doing", 2.0, "started")
+              ])
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "status", "--status", "Do", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "Ambiguous status"
+      assert stderr =~ "This smells bad! Bailing."
+    end
+
+    test "--comment adds a comment before changing the status" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "commentCreate") ->
+            send(test_pid, :comment_created)
+            Req.Test.json(conn, comment_created())
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "status",
+                     "--status",
+                     "Done",
+                     "--comment",
+                     "Wrapping up",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received :comment_created
+      assert output =~ "Comment added to CRY-1"
+      assert output =~ "status set to Done"
+    end
+
+    test "interactive selection (no --status) prompts from sorted states" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      # Select the third option ("Done") interactively via stdin
+      output =
+        capture_io([input: "3\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "status", "CRY-1"])
+        end)
+
+      assert output =~ "Choose a status"
+      assert output =~ "status set to Done"
+    end
+
+    test "--output json emits structured output" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "status",
+                     "--status",
+                     "Done",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+    end
+
+    test "alias 's' routes to issue status" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, states_response())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :updated)
+            Req.Test.json(conn, %{"data" => %{"issueUpdate" => %{"issue" => issue_with_state("s3", "Done")}}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "s", "--status", "Done", "CRY-1"])
+      end)
+
+      assert_received :updated
+    end
+  end
+
   describe "issue update (Ruby: commands/issue/update.rb)" do
     test "--close comments with the given reason, then closes the issue" do
       stub_responses([

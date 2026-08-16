@@ -100,6 +100,7 @@ defmodule LinearCli.CLI do
       "dev" => "develop",
       "l" => "list",
       "ls" => "list",
+      "s" => "status",
       "u" => "update",
       "pull-request" => "pr"
     },
@@ -203,6 +204,7 @@ defmodule LinearCli.CLI do
 
   defp dispatch([:issue, :pr], result, halt), do: run(&Commands.issue_pr/1, result, halt)
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
+  defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
@@ -592,6 +594,25 @@ defmodule LinearCli.CLI do
               options: [
                 title: [long: "--title", help: "The title of the PR"],
                 description: [long: "--description", help: "The description of the PR"]
+              ]
+            ],
+            status: [
+              name: "status",
+              about: "Change the workflow state of an issue",
+              args: [
+                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
+              ],
+              options: [
+                status: [
+                  short: "-s",
+                  long: "--status",
+                  help: "Workflow state name to set (prompts if omitted)"
+                ],
+                comment: [
+                  short: "-m",
+                  long: "--comment",
+                  help: "Comment to add alongside the status change"
+                ]
               ]
             ],
             take: [
