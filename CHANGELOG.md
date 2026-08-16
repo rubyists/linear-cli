@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/rubyists/linear-cli/compare/v1.13.0...v1.13.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* **rules:** ensure we mix ci before we do anything else ([#135](https://github.com/rubyists/linear-cli/issues/135)) ([a7347d5](https://github.com/rubyists/linear-cli/commit/a7347d5b8b84ef93d9e2aa265a41a0d51bdbacd5))
+
 ## [1.13.0](https://github.com/rubyists/linear-cli/compare/v1.12.0...v1.13.0) (2026-08-16)
 
 
