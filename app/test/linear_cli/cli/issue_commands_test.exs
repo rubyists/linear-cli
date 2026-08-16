@@ -282,6 +282,33 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert Map.has_key?(filter, "canceledAt")
     end
 
+    test "--no-profile bypasses active profile defaults via the full CLI dispatch path" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        if String.contains?(query, "projects(") do
+          raise "--no-profile must not query projects when --project wasn't given"
+        end
+
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--no-profile"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert_received {:filter, filter}
+      refute Map.has_key?(filter, "team")
+      refute Map.has_key?(filter, "project")
+    end
+
     test "--status with an unknown type exits 1 (Optimus parse error)" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
