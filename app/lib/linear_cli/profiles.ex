@@ -93,6 +93,15 @@ defmodule LinearCli.Profiles do
     end)
   end
 
+  @doc "Clears the active profile - deactivates it without deleting. Always returns `:ok`."
+  @spec clear() :: :ok
+  def clear do
+    with_db(fn conn ->
+      :ok = exec(conn, "UPDATE profiles SET active = 0", [])
+      :ok
+    end)
+  end
+
   @doc "Deletes the named profile. `{:error, :not_found}` if no such profile exists."
   @spec delete(String.t()) :: :ok | {:error, :not_found}
   def delete(name) do

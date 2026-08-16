@@ -201,6 +201,13 @@ defmodule LinearCli.CLI.Commands do
     :ok
   end
 
+  @doc "New in this port - Ruby has no equivalent. Deactivates the active profile without deleting it."
+  def profile_clear(_result) do
+    Profiles.clear()
+    Prompt.ok("Cleared active profile")
+    :ok
+  end
+
   @doc "New in this port - Ruby has no equivalent. Deletes a saved profile."
   def profile_delete(%{args: %{name: name}}) do
     case Profiles.delete(name) do
