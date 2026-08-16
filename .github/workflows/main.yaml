@@ -73,6 +73,8 @@ jobs:
             runner: macos-latest
           - target: linux_x86_64
             runner: ubuntu-latest
+          - target: linux_aarch64
+            runner: ubuntu-24.04-arm
           - target: windows_x86_64
             runner: windows-latest
     defaults:
@@ -130,6 +132,19 @@ jobs:
                   exit 1
               fi
           fi
+      -
+        # Smoke-test the linux_aarch64 binary on the native ARM64 runner:
+        # proves the binary executes (right architecture), the OTP app boots,
+        # and all NIFs (exqlite via elixir_make/Zig, mdex_native via
+        # rustler_precompiled) load correctly. `lc version` runs in
+        # interactive mode (no LINEAR_CLI_DAEMON=true), starts an empty
+        # supervisor, prints the version, and exits 0 - no API key or network
+        # needed. Only runs for linux_aarch64 because that's the only target
+        # whose runner architecture matches the binary (macos/Windows smoke
+        # tests are out of scope for CRY-48).
+        if: matrix.target == 'linux_aarch64'
+        name: Smoke-test the linux_aarch64 binary boots and NIFs load
+        run: burrito_out/lc_linux_aarch64 version
       -
         # Handed off to burrito-package below, which needs every target's
         # binary gathered back into one place before it can build the
