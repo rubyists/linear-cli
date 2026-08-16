@@ -113,8 +113,8 @@ jobs:
         # independently, so a target failing partway through wouldn't
         # necessarily fail the whole `mix release` invocation. Not everyone
         # installing this uses Homebrew (no tap exists yet anyway - see
-        # #14/CRY-37), so linux_x86_64/macos_aarch64 are the primary
-        # install path for a lot of users; silently shipping a release
+        # #14/CRY-37), so linux_x86_64/linux_aarch64/macos_aarch64 are the
+        # primary install path for a lot of users; silently shipping a release
         # missing one of them is worse than failing loudly here.
         # windows_x86_64 stays best-effort, as it always has.
         name: Verify this target actually built
@@ -144,7 +144,7 @@ jobs:
         # tests are out of scope for CRY-48).
         if: matrix.target == 'linux_aarch64'
         name: Smoke-test the linux_aarch64 binary boots and NIFs load
-        run: burrito_out/lc_linux_aarch64 version
+        run: ./burrito_out/lc_linux_aarch64 version
       -
         # Handed off to burrito-package below, which needs every target's
         # binary gathered back into one place before it can build the
