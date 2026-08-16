@@ -35,6 +35,7 @@ defmodule LinearCli.Linear do
       define :assign_issue, action: :assign, args: [:assignee_id]
       define :attach_issue_to_project, action: :attach_to_project, args: [:project_id]
       define :close_issue, action: :close, args: [:state_id]
+      define :set_issue_status, action: :set_status, args: [:state_id]
     end
 
     resource LinearCli.Linear.Label do

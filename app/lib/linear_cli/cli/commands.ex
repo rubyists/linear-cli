@@ -475,4 +475,72 @@ defmodule LinearCli.CLI.Commands do
 
   defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
   defp validate_issue_ids(_issue_ids), do: :ok
+
+  @doc """
+  Changes the workflow state of an issue.
+
+  With `--status`/`-s`, matches the given name against the issue's team's
+  workflow states (case-insensitive exact, then unique prefix). Without it,
+  prompts interactively via `LinearCli.CLI.Prompt.select/2`.
+
+  With `--comment`/`-m`, adds a comment to the issue before transitioning.
+  """
+  @spec issue_status(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_status(%{args: %{issue_id: issue_id}, options: options}) do
+    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+
+    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
+         {:ok, states} <- Linear.workflow_states_by_team(issue.team.id),
+         {:ok, target_state} <- resolve_target_state(states, options.status),
+         :ok <- maybe_add_status_comment(issue, options.comment),
+         {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
+      Display.show(updated, %{output: options.output})
+
+      if options.output != "json",
+        do: Prompt.ok("#{updated.identifier} status set to #{target_state.name}")
+
+      :ok
+    end
+  end
+
+  defp resolve_target_state(states, nil) do
+    choices = Enum.sort_by(states, & &1.position) |> Enum.map(&{&1.name, &1})
+    {:ok, Prompt.select("Choose a status", choices)}
+  end
+
+  defp resolve_target_state(states, name) do
+    normalized_name = String.downcase(name)
+
+    states
+    |> Enum.filter(&(String.downcase(&1.name) == normalized_name))
+    |> use_prefix_matches_if_empty(states, normalized_name)
+    |> resolve_state_matches(states, name)
+  end
+
+  defp use_prefix_matches_if_empty([], states, name) do
+    Enum.filter(states, &String.starts_with?(String.downcase(&1.name), name))
+  end
+
+  defp use_prefix_matches_if_empty(matches, _states, _name), do: matches
+
+  defp resolve_state_matches([state], _states, _name), do: {:ok, state}
+
+  defp resolve_state_matches([], states, name) do
+    available = Enum.map_join(states, ", ", & &1.name)
+    {:error, {:smells_bad, "Unknown status #{inspect(name)}. Available: #{available}"}}
+  end
+
+  defp resolve_state_matches(matches, _states, name) do
+    ambiguous = Enum.map_join(matches, ", ", & &1.name)
+    {:error, {:smells_bad, "Ambiguous status #{inspect(name)}: matches #{ambiguous}"}}
+  end
+
+  defp maybe_add_status_comment(_issue, nil), do: :ok
+
+  defp maybe_add_status_comment(issue, comment) do
+    case IssueHelpers.issue_comment(issue, comment) do
+      {:ok, _} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
 end

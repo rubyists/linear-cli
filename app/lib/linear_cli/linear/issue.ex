@@ -48,6 +48,11 @@ defmodule LinearCli.Linear.Issue do
       argument :trash, :boolean, default: false
       manual LinearCli.Linear.Issue.Update.Close
     end
+
+    update :set_status do
+      argument :state_id, :string, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.SetStatus
+    end
   end
 
   attributes do
@@ -358,5 +363,18 @@ defmodule LinearCli.Linear.Issue.Update.Close do
     input = if args.trash, do: Map.put(input, "trashed", true), else: input
 
     Issue.Update.run(changeset.data.identifier, input)
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.SetStatus do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "stateId" => changeset.arguments.state_id
+    })
   end
 end
