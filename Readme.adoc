@@ -80,7 +80,7 @@ so they're unaffected) since it isn't signed/notarized yet:
 $ xattr -d com.apple.quarantine /usr/local/bin/lc
 ----
 
-=== Homebrew (macOS Apple Silicon, Linux x86_64)
+=== Homebrew (macOS Apple Silicon, Linux x86_64, Linux ARM64)
 
 [source,sh]
 ----
@@ -366,7 +366,7 @@ $ cd app
 $ mise exec -- env MIX_ENV=prod BURRITO_TARGET=<target> mix release lc
 ----
 
-`<target>` is one of `macos_aarch64`, `linux_x86_64`, or `windows_x86_64`.
+`<target>` is one of `macos_aarch64`, `linux_x86_64`, `linux_aarch64`, or `windows_x86_64`.
 
 === Build the container
 

@@ -37,7 +37,7 @@ version = tag.delete_prefix("v")
 version_file = File.join(File.dirname(formula_path), ".version")
 content = File.read(formula_path)
 
-%w[macos_aarch64 linux_x86_64].each do |target|
+%w[macos_aarch64 linux_x86_64 linux_aarch64].each do |target|
   asset = "lc_#{target}.tar.gz"
   sha = sha256sums.fetch(asset) { abort "No checksum found for #{asset} in #{sha256sums_path}" }
 
