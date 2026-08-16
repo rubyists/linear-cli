@@ -89,6 +89,30 @@ defmodule LinearCli.ProfilesTest do
     end
   end
 
+  describe "clear/0" do
+    test "deactivates the active profile without deleting it" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan")
+      :ok = Profiles.activate("manhattan")
+
+      assert :ok = Profiles.clear()
+      assert Profiles.active() == nil
+      assert [%Profile{name: "manhattan", active: false}] = Profiles.list()
+    end
+
+    test "is a no-op when no profile is active" do
+      {:ok, _} = Profiles.create("manhattan")
+
+      assert :ok = Profiles.clear()
+      assert Profiles.active() == nil
+      assert [%Profile{name: "manhattan"}] = Profiles.list()
+    end
+
+    test "is a no-op when no profiles exist" do
+      assert :ok = Profiles.clear()
+      assert Profiles.active() == nil
+    end
+  end
+
   describe "default_team/0 and default_project/0" do
     test "nil with no active profile" do
       assert Profiles.default_team() == nil

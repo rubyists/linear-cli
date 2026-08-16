@@ -192,6 +192,9 @@ defmodule LinearCli.CLI do
   defp dispatch([:profile, :delete], result, halt),
     do: run(&Commands.profile_delete/1, result, halt)
 
+  defp dispatch([:profile, :clear], result, halt),
+    do: run(&Commands.profile_clear/1, result, halt)
+
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
   defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
 
@@ -488,6 +491,10 @@ defmodule LinearCli.CLI do
               name: "delete",
               about: "Delete a saved profile",
               args: [name: [value_name: "NAME", help: "Profile name", required: true]]
+            ],
+            clear: [
+              name: "clear",
+              about: "Deactivate the active profile without deleting it"
             ]
           ]
         ],
