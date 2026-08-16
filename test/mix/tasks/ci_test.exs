@@ -14,6 +14,7 @@ defmodule Mix.Tasks.CiTest do
     assert :ok = Ci.run([], shell)
 
     assert_receive {:run, "mix", ["deps.get"], [cd: "app"]}
+    assert_receive {:run, "mix", ["hex.audit"], [cd: "app"]}
     assert_receive {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
     assert_receive {:run, "mix", ["usage_rules.sync", "--check"], [cd: "app"]}
     assert_receive {:run, "mix", ["test"], [cd: "app"]}
