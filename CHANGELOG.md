@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/rubyists/linear-cli/compare/v1.9.0...v1.9.1) (2026-08-16)
+
+
+### Bug Fixes
+
+* **issue-list:** add --no-profile flag to bypass active profile defaults ([#119](https://github.com/rubyists/linear-cli/issues/119)) ([f19409c](https://github.com/rubyists/linear-cli/commit/f19409c1a083d9b6daacb4f972d4a5188da031f0))
+
 ## [1.9.0](https://github.com/rubyists/linear-cli/compare/v1.8.0...v1.9.0) (2026-08-16)
 
 
