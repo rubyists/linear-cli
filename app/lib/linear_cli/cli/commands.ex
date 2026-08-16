@@ -227,10 +227,10 @@ defmodule LinearCli.CLI.Commands do
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
     no_profile = Map.get(flags, :no_profile, false)
-    team_key = options.team || (unless no_profile, do: Profiles.default_team())
+    team_key = options.team || unless no_profile, do: Profiles.default_team()
 
     project_source =
-      options.project || (unless no_profile, do: Profiles.default_project())
+      options.project || unless no_profile, do: Profiles.default_project()
 
     with {:ok, project_id} <- resolve_project_id(project_source) do
       input = %{
