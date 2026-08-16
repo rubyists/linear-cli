@@ -144,6 +144,7 @@ jobs:
         # tests are out of scope for CRY-48).
         if: matrix.target == 'linux_aarch64'
         name: Smoke-test the linux_aarch64 binary boots and NIFs load
+        timeout-minutes: 1
         run: ./burrito_out/lc_linux_aarch64 version
       -
         # Handed off to burrito-package below, which needs every target's
