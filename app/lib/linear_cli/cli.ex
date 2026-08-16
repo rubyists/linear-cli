@@ -101,6 +101,8 @@ defmodule LinearCli.CLI do
       "l" => "list",
       "ls" => "list",
       "s" => "status",
+      "st" => "status",
+      "stat" => "status",
       "u" => "update",
       "pull-request" => "pr"
     },
