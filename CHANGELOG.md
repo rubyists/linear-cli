@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/rubyists/linear-cli/compare/v1.12.0...v1.13.0) (2026-08-16)
+
+
+### Features
+
+* **homebrew:** add Linux ARM64 to the tap formula and release automation ([#130](https://github.com/rubyists/linear-cli/issues/130)) ([62fe899](https://github.com/rubyists/linear-cli/commit/62fe899156331850736c7414c2e9163961385b46))
+
 ## [1.12.0](https://github.com/rubyists/linear-cli/compare/v1.11.0...v1.12.0) (2026-08-16)
 
 
