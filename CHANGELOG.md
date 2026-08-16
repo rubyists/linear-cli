@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/rubyists/linear-cli/compare/v1.13.1...v1.13.2) (2026-08-16)
+
+
+### Bug Fixes
+
+* correct Linear API key settings URL ([#134](https://github.com/rubyists/linear-cli/issues/134)) ([382e5cf](https://github.com/rubyists/linear-cli/commit/382e5cf8dac856cf65394f38d11778e3db9e3215))
+
 ## [1.13.1](https://github.com/rubyists/linear-cli/compare/v1.13.0...v1.13.1) (2026-08-16)
 
 
