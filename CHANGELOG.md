@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/rubyists/linear-cli/compare/v1.9.1...v1.10.0) (2026-08-16)
+
+
+### Features
+
+* **issue:** add lc issue status command ([#123](https://github.com/rubyists/linear-cli/issues/123)) ([20d0158](https://github.com/rubyists/linear-cli/commit/20d0158e2d103bb796c4d604d2e3a1b4b2ea04f5))
+
 ## [1.9.1](https://github.com/rubyists/linear-cli/compare/v1.9.0...v1.9.1) (2026-08-16)
 
 
