@@ -506,32 +506,30 @@ defmodule LinearCli.CLI.Commands do
   end
 
   defp resolve_target_state(states, name) do
-    lower = String.downcase(name)
+    normalized_name = String.downcase(name)
 
-    case Enum.filter(states, &(String.downcase(&1.name) == lower)) do
-      [state] ->
-        {:ok, state}
+    states
+    |> Enum.filter(&(String.downcase(&1.name) == normalized_name))
+    |> use_prefix_matches_if_empty(states, normalized_name)
+    |> resolve_state_matches(states, name)
+  end
 
-      [] ->
-        matches = Enum.filter(states, &String.starts_with?(String.downcase(&1.name), lower))
+  defp use_prefix_matches_if_empty([], states, name) do
+    Enum.filter(states, &String.starts_with?(String.downcase(&1.name), name))
+  end
 
-        case matches do
-          [state] ->
-            {:ok, state}
+  defp use_prefix_matches_if_empty(matches, _states, _name), do: matches
 
-          [] ->
-            available = Enum.map_join(states, ", ", & &1.name)
-            {:error, {:smells_bad, "Unknown status #{inspect(name)}. Available: #{available}"}}
+  defp resolve_state_matches([state], _states, _name), do: {:ok, state}
 
-          many ->
-            ambiguous = Enum.map_join(many, ", ", & &1.name)
-            {:error, {:smells_bad, "Ambiguous status #{inspect(name)}: matches #{ambiguous}"}}
-        end
+  defp resolve_state_matches([], states, name) do
+    available = Enum.map_join(states, ", ", & &1.name)
+    {:error, {:smells_bad, "Unknown status #{inspect(name)}. Available: #{available}"}}
+  end
 
-      many ->
-        ambiguous = Enum.map_join(many, ", ", & &1.name)
-        {:error, {:smells_bad, "Ambiguous status #{inspect(name)}: matches #{ambiguous}"}}
-    end
+  defp resolve_state_matches(matches, _states, name) do
+    ambiguous = Enum.map_join(matches, ", ", & &1.name)
+    {:error, {:smells_bad, "Ambiguous status #{inspect(name)}: matches #{ambiguous}"}}
   end
 
   defp maybe_add_status_comment(_issue, nil), do: :ok
