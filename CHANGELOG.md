@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.12.0](https://github.com/rubyists/linear-cli/compare/v1.11.0...v1.12.0) (2026-08-16)
+
+
+### Features
+
+* add st and stat aliases for issue status (CRY-50) ([#128](https://github.com/rubyists/linear-cli/issues/128)) ([988d978](https://github.com/rubyists/linear-cli/commit/988d978fcba8bdccc272f4591d3abfde60700118))
+
 ## [1.11.0](https://github.com/rubyists/linear-cli/compare/v1.10.0...v1.11.0) (2026-08-16)
 
 
