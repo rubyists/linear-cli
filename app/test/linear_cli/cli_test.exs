@@ -419,7 +419,9 @@ defmodule LinearCli.CLITest do
     # catch-all. The safety-net handle_error/3 clause in cli.ex handles this.
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{
-        "errors" => [%{"message" => "Rate limit exceeded", "extensions" => %{"type" => "RATE_LIMITED"}}]
+        "errors" => [
+          %{"message" => "Rate limit exceeded", "extensions" => %{"type" => "RATE_LIMITED"}}
+        ]
       })
     end)
 
