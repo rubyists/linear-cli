@@ -14,6 +14,12 @@ ifdef::env-github[]
 :warning-caption: :warning:
 endif::[]
 :conventional-commits: https://www.conventionalcommits.org/en/v1.0.0/[Conventional Commits]
+// x-release-please-start-major
+:image-major-tag: v1
+// x-release-please-end
+// x-release-please-start-version
+:image-pin-example: v1.13.2
+// x-release-please-end
 
 A command line interface to https://linear.app - list, take, create, develop,
 and update issues without leaving your terminal.
@@ -34,13 +40,13 @@ vs ~5s doing it one at a time.
 
 You can run the CLI from the container image without installing anything.
 
-[source,sh]
+[source,sh,subs="attributes+"]
 ----
-$ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:v0 lcls <1>
-$ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:v0 lcls <2>
+$ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:{image-major-tag} lcls <1>
+$ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:{image-major-tag} lcls <2>
 ----
 <1> Podman usage
-<2> Docker usage - `:v0` tracks the latest 0.x release; pin `:v0.1.2` (or whichever version) for a fixed image
+<2> Docker usage - `:v1` tracks the latest 1.x release series; pin `:v1.13.2` (or whichever version) for a fixed image
 
 IMPORTANT: The image sets `LINEAR_CLI_DAEMON=true` by default so its own
 entrypoint can also run as the long-lived Oban scheduling daemon. Override it
