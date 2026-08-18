@@ -31,7 +31,93 @@ All associations described in the ERD below are GraphQL/nested-data
 associations: they are populated from nested JSON in the API response,
 not from Ash relationship declarations or database join logic.
 
-== Resources
+== ERD diagram
+
+All eight resources and their GraphQL/nested-data associations.
+Every edge is labeled *[nested]* to make explicit that these are not
+declared Ash relationships.  Resource attributes that hold nested structs
+are shown with the target resource name as their type.
+
+[source,mermaid]
+----
+erDiagram
+    User {
+        string id PK
+        string name
+        string email
+        Team[] teams
+    }
+    Team {
+        string id PK
+        string key
+        string name
+        string description
+    }
+    Project {
+        string id PK
+        string name
+        string content
+        string slug_id
+        string description
+        string url
+        Team[] teams
+    }
+    Issue {
+        string id PK
+        string identifier
+        string title
+        string branch_name
+        string description
+        User assignee
+        WorkflowState state
+        Team team
+        Comment[] comments
+    }
+    Label {
+        string id PK
+        string name
+        string description
+        boolean is_group
+    }
+    WorkflowState {
+        string id PK
+        string name
+        float position
+        string type
+        string description
+    }
+    Comment {
+        string id PK
+        string body
+        string url
+        User user
+    }
+    ProjectUpdate {
+        string id PK
+        string body
+        string health
+        string url
+    }
+
+    Issue }o--o| User : "assignee [nested]"
+    Issue }o--|| WorkflowState : "state [nested]"
+    Issue }o--|| Team : "team [nested]"
+    Issue ||--o{ Comment : "comments [nested]"
+    User }o--o{ Team : "teams [nested]"
+    Comment }o--|| User : "user/author [nested]"
+    Project }o--o{ Team : "teams [nested]"
+----
+
+NOTE: All edges are GraphQL/nested-data associations. No Ash DSL
+`relationships do` block exists in this domain.  `Label`,
+`WorkflowState`, and `ProjectUpdate` have no stored association
+attributes — their team or project context is passed as action
+arguments only.
+
+== Resources (text reference)
+
+The table below is the plain-text equivalent of the entity boxes in the
+diagram above, included for accessibility.
 
 Eight resources are registered in `LinearCli.Linear`
 (`app/lib/linear_cli/linear.ex`).
@@ -73,11 +159,13 @@ Eight resources are registered in `LinearCli.Linear`
 | `body`, `health`, `url`
 |===
 
-== Associations (GraphQL/nested-data only)
+== Associations (text reference)
+
+The table below is the plain-text equivalent of the diagram edges above,
+included for accessibility.
 
 All associations in this domain are populated from nested GraphQL response
 data, not from declared Ash relationships.
-The table below uses the label *GraphQL/nested-data* for every association.
 *No Ash DSL relationship* is declared anywhere in the domain.
 
 [cols="1,1,1,2,2", options="header"]
@@ -145,29 +233,6 @@ The table below uses the label *GraphQL/nested-data* for every association.
   `projects { nodes { ... } }` (via `Team.full_fields/0`), but those
   projects are not stored on the `Team` struct — the list is available
   to the caller inline and is not persisted anywhere.
-
-== ERD diagram
-
-The diagram below shows the same information as the table above in a
-visual form.  Because this project has no Ash relationships, every edge
-is labeled *[nested]* (GraphQL/nested-data).
-Tooling that renders Mermaid diagrams will display the graph; others
-should rely on the tables above.
-
-[source,mermaid]
-----
-erDiagram
-    Issue }o--o| User : "assignee [nested]"
-    Issue }o--|| WorkflowState : "state [nested]"
-    Issue }o--|| Team : "team [nested]"
-    Issue ||--o{ Comment : "comments [nested]"
-    User }o--o{ Team : "teams [nested]"
-    Comment }o--|| User : "user/author [nested]"
-    Project }o--o{ Team : "teams [nested]"
-----
-
-NOTE: All edges are GraphQL/nested-data associations. No Ash DSL
-`relationships do` block exists in this domain.
 
 == Action and code-interface matrix
 
