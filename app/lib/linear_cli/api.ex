@@ -17,10 +17,15 @@ defmodule LinearCli.Api do
   where `reason` is one of:
 
     * `:missing_api_key` - `LINEAR_API_KEY` is not set
-    * `{:graphql_errors, errors}` - the response body had a non-empty `"errors"` list
+    * `{:graphql_errors, errors}` - the response body has errors but no `"data"` field
     * `{:unexpected_response, body}` - a 200 response with neither `"data"` nor `"errors"`
     * `{:http_error, status, body}` - a non-200 response
     * `{:transport_error, exception}` - the request itself failed (timeout, DNS, etc.)
+
+  GraphQL partial-success responses (both `"data"` and `"errors"` present) return
+  `{:ok, data}` — the `"errors"` are field-level annotations on an otherwise valid
+  result. Callers inspect nil fields (e.g. `{:ok, %{"issue" => nil}}`) to detect
+  entity-not-found, which is how Linear signals a missing entity when the query ran.
   """
   def call(document, variables \\ %{}) do
     with {:ok, api_key} <- fetch_api_key() do
@@ -38,12 +43,20 @@ defmodule LinearCli.Api do
     end
   end
 
-  defp handle_response({:ok, %Req.Response{status: 200, body: %{"errors" => [_ | _] = errors}}}) do
-    {:error, {:graphql_errors, errors}}
+  # "data" takes precedence: a response with both "data" and "errors" is a
+  # GraphQL partial-success - the query ran and produced a result (possibly
+  # with nil fields); callers handle nil fields themselves. Only fall back to
+  # {:error, {:graphql_errors, ...}} when there is no "data" at all.
+  # Guard: only match when data is a map (the expected shape). A null top-level
+  # "data" means the entire operation failed; in that case the errors clause
+  # below provides the more informative result.
+  defp handle_response({:ok, %Req.Response{status: 200, body: %{"data" => data}}})
+       when is_map(data) do
+    {:ok, data}
   end
 
-  defp handle_response({:ok, %Req.Response{status: 200, body: %{"data" => data}}}) do
-    {:ok, data}
+  defp handle_response({:ok, %Req.Response{status: 200, body: %{"errors" => [_ | _] = errors}}}) do
+    {:error, {:graphql_errors, errors}}
   end
 
   defp handle_response({:ok, %Req.Response{status: 200, body: body}}) do

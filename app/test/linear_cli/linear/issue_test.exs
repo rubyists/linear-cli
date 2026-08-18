@@ -132,6 +132,29 @@ defmodule LinearCli.Linear.IssueTest do
     assert {:error, %Ash.Error.Unknown{}} = Linear.issues(%{ids: ["nope"]})
   end
 
+  test "issues/1 with a GraphQL entity-not-found response normalises to not_found" do
+    # Linear returns HTTP 200 with both "data": {"issue": null} and "errors" when
+    # an issue does not exist. Api.handle_response/1 now checks "data" before
+    # "errors", so it returns {:ok, %{"issue" => nil}}; fetch_one/1's nil-data
+    # clause converts that to {:error, {:not_found, id}}, which handle_error/3
+    # in cli.ex maps to a clean "No issue found" message with exit 66.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{"issue" => nil},
+        "errors" => [
+          %{
+            "message" => "Entity not found: Issue",
+            "path" => ["issue"],
+            "extensions" => %{"type" => "invalid input", "userError" => true}
+          }
+        ]
+      })
+    end)
+
+    assert {:error, %Ash.Error.Unknown{errors: [%{value: [not_found: _id]}]}} =
+             Linear.issues(%{ids: ["nope"]})
+  end
+
   describe "create_issue/3+" do
     test "sends title/description/teamId and returns the created issue via base_fields" do
       Req.Test.stub(LinearCli.Api, fn conn ->

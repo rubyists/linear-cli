@@ -413,6 +413,77 @@ defmodule LinearCli.CLITest do
              "Roadmap"
   end
 
+  test "a non-entity-not-found GraphQL error prints the error message, not WTH" do
+    # GraphQL errors that are NOT ENTITY_NOT_FOUND (e.g. rate limits, auth errors)
+    # should print the API's own message rather than the opaque "What the heck"
+    # catch-all. The safety-net handle_error/3 clause in cli.ex handles this.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{
+        "errors" => [
+          %{"message" => "Rate limit exceeded", "extensions" => %{"type" => "RATE_LIMITED"}}
+        ]
+      })
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output =
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(["whoami"], halt)
+      end)
+
+    assert_received {:halted, 88}
+    assert output =~ "Rate limit exceeded"
+    refute output =~ "What the heck is this?"
+  end
+
+  test "issue develop with a GraphQL entity-not-found error gives a clear not-found message, not WTH" do
+    # Linear returns 200 with both "errors" and "data": {"issue": null} for
+    # missing issues. Previously this hit the "What the heck is this?" catch-all;
+    # now fetch_one/1 converts the ENTITY_NOT_FOUND graphql error to {:not_found,
+    # id} so the existing handle_error/3 clause fires with exit 66.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query} = Jason.decode!(body)
+
+      if query =~ "viewer" do
+        Req.Test.json(conn, %{
+          "data" => %{
+            "viewer" => %{
+              "id" => "u1",
+              "name" => "Ada",
+              "email" => "ada@example.com",
+              "teams" => %{"nodes" => []}
+            }
+          }
+        })
+      else
+        Req.Test.json(conn, %{
+          "errors" => [
+            %{
+              "message" => "Entity not found",
+              "extensions" => %{"type" => "ENTITY_NOT_FOUND"}
+            }
+          ],
+          "data" => %{"issue" => nil}
+        })
+      end
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output =
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(["issue", "develop", "CRY-999"], halt)
+      end)
+
+    assert_received {:halted, 66}
+    assert output =~ "No issue found with id"
+    refute output =~ "What the heck is this?"
+  end
+
   test "project list --team with an unknown team key gives a clear not-found message, not WTH" do
     # find_team/1's get?: true action returns Ash's own built-in
     # %Ash.Error.Query.NotFound{} when the API responds with a nil team - a

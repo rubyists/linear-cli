@@ -334,6 +334,25 @@ defmodule LinearCli.CLI do
     halt.(22)
   end
 
+  # Safety net for any LinearCli.Api.call/2 site whose {:error, {:graphql_errors,
+  # errors}} return was not already converted to a domain-specific error tuple
+  # (e.g. by fetch_one/1's ENTITY_NOT_FOUND clause in issue.ex). Ash wraps the
+  # raw tuple in %Ash.Error.Unknown.UnknownError{error: {:graphql_errors, ...}}.
+  # Extracting the first error's "message" gives a human-readable error rather
+  # than falling through to the opaque "What the heck is this?" catch-all.
+  defp handle_error(
+         %Ash.Error.Unknown{
+           errors: [%{value: [{:graphql_errors, [%{"message" => message} | _]}]} | _]
+         },
+         debug,
+         halt
+       ) do
+    IO.puts(:stderr, "Linear API error: #{message}")
+    IO.puts(:stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug)
+    halt.(88)
+  end
+
   # Ported from CLI::Caller#call's catch-all `rescue StandardError` clause.
   defp handle_error(error, debug, halt) do
     IO.puts(:stderr, "What the heck is this? #{Exception.format_banner(:error, error)}")
