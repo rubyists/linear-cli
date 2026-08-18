@@ -74,8 +74,8 @@ defmodule LinearCli.Linear.User.Read.ByTeam do
     document =
       "query($id: String!) { team(id: $id) { members(first: 50) { nodes { #{User.base_fields()} } } } }"
 
-    with {:ok, %{"team" => team}} when is_map(team) <- Api.call(document, %{"id" => team_id}),
-         %{"members" => %{"nodes" => nodes}} <- team do
+    with {:ok, %{"team" => %{"members" => %{"nodes" => nodes}}}} <-
+           Api.call(document, %{"id" => team_id}) do
       {:ok, Enum.map(nodes, &User.from_map/1)}
     else
       {:ok, _} -> {:ok, []}
