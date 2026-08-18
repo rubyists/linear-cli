@@ -11,6 +11,87 @@ and best practices for agents to follow.
 - Phase 6 Plan: documents/phase-6-plan.adoc
 - Phase 7 Plan: documents/phase-7-plan.adoc
 - Phase 8 Plan: documents/phase-8-plan.adoc
+- Phase 9 Plan: documents/phase-9-plan.adoc
+- Phase 10 Plan: documents/phase-10-plan.adoc
+- Phase 11 Plan: documents/phase-11-plan.adoc
+
+## Project Structure
+
+### Repository layout
+
+This repo uses two Mix projects side-by-side, not nested:
+
+- `app/` — The CLI itself (`LinearCli` application, version-managed,
+  Burrito-released). All end-user features live here.
+- `lib/`, `mix.exs` (root) — Repo-management tooling (`RepoTasks` project,
+  no deps). Mix tasks that operate on the repo as a whole: `mix lc`,
+  `mix setup`, `mix git_hooks`, `mix stokowski`, `mix container.build/publish`.
+  These tasks orchestrate other tools as child processes and know nothing
+  about `app/`'s internal modules.
+
+Supporting directories (not Mix projects):
+
+- `bin/` — Wrapper shell scripts (`lcls`, `lcreate`, `lclose`, `lcomment`,
+  `lproj`). Each one just calls `exec lc ...`.
+- `ci/` — Shell scripts for CI and release: conventional-commit enforcement,
+  container build/publish, Homebrew formula bump.
+- `githooks/` — `commit-msg` and `pre-push` hooks; installed by `mix setup`.
+- `oci/` — `Containerfile` for the published container image.
+- `schema/` — The Linear GraphQL schema (`LinearAPI.graphql`), kept for reference.
+- `cinemas/` — Terminal session recordings (`.cinema.gif`) embedded in Readme.adoc.
+- `.ai/prompts/` — Stokowski agent-stage prompt files (`global.md`,
+  `implement.md`, `investigate.md`, etc.).
+- `vendor/` — Git submodules: `ash`, `oban`, `usage_rules`, `ruby-linear-cli`,
+  and others. Source references and local development copies, not build inputs
+  — the app uses Hex packages, not these.
+- `documents/` — Architecture decision records and phase plans (see The Plan above).
+
+### App module structure (`app/lib/linear_cli/`)
+
+The app is organized in layers:
+
+```
+LinearCli.CLI           — Entry point; Optimus argument parsing and dispatch
+  CLI.Commands          — One function per subcommand; formats and prints output
+  CLI.IssueHelpers      — Issue-lookup logic shared across subcommands
+  CLI.WhatFor           — Interactive prompts (team, project, label selection)
+  CLI.Display           — Output formatting helpers
+  CLI.Projects          — Project-specific prompt/resolution helpers
+  CLI.Prompt            — Low-level readline-style prompt wrapper
+
+LinearCli.Linear        — Ash domain; all Linear API resources and actions
+  Linear.Issue/Team/... — Ash resources (actions are manual GraphQL calls)
+  LinearCli.Api         — Thin GraphQL client (Req); the only module that
+                          speaks to api.linear.app directly
+
+LinearCli.Profiles      — Named team/project bundles, persisted in SQLite
+LinearCli.Favorites     — Favorited teams/projects, same SQLite file
+LinearCli.Git           — Git branch creation/detection logic
+LinearCli.Rollover      — Monthly issue-rollover logic (pure, no Oban dep)
+  Rollover.Worker       — Thin Oban wrapper around Rollover.run/2
+
+LinearCli.ObanRepo      — Runtime adapter selector (SQLite or Postgres)
+  ObanRepo.Sqlite/.Postgres — Ecto repos for each backend
+
+LinearCli.Application   — OTP Application; starts interactive or daemon mode
+```
+
+Data flows top-to-bottom through these layers: `CLI.Commands` calls the
+`LinearCli.Linear` domain code interface; the domain's Ash resources call
+`LinearCli.Api`; `LinearCli.Api` calls the Linear GraphQL API. `Profiles`
+and `Favorites` are side-channels consulted by `CLI.Commands` and
+`CLI.IssueHelpers` for defaults, not part of the main API data flow.
+
+The daemon mode (started when `LINEAR_CLI_DAEMON=true`) runs
+`LinearCli.Rollover.Worker` via Oban on a monthly cron schedule. The
+interactive CLI mode never starts Oban or an Ecto repo.
+
+### Maintenance convention
+
+Update this section when adding a new top-level directory, a new major module
+(one that other modules depend on or that introduces a new architectural layer),
+or a new phase plan document. File-level changes inside existing directories do
+not need a structural-doc update.
 
 ## Domain documentation
 
