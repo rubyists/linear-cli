@@ -9,6 +9,7 @@ defmodule LinearCli.MixProject do
       # x-release-please-end
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
+      elixirc_options: [warnings_as_errors: Mix.env() == :test],
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
@@ -71,7 +72,9 @@ defmodule LinearCli.MixProject do
       {:sourceror, "~> 1.8", only: [:dev, :test]},
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]},
-      {:sbom, "~> 0.10", only: :dev, runtime: false}
+      {:sbom, "~> 0.10", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
     ]
