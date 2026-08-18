@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.0](https://github.com/rubyists/linear-cli/compare/v1.13.2...v1.14.0) (2026-08-18)
+
+
+### Features
+
+* **issue:** add interactive issue assign command ([#140](https://github.com/rubyists/linear-cli/issues/140)) ([33176bd](https://github.com/rubyists/linear-cli/commit/33176bdb5427b5e36146973d7b383304c394ad90))
+
 ## [1.13.2](https://github.com/rubyists/linear-cli/compare/v1.13.1...v1.13.2) (2026-08-16)
 
 
