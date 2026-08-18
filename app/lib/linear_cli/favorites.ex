@@ -18,7 +18,7 @@ defmodule LinearCli.Favorites do
 
   alias Exqlite.Sqlite3
 
-  @doc "Favorites `value` under `kind` (`\"team\"` or `\"project\"`). A no-op if already favorited."
+  @doc ~s[Favorites `value` under `kind` (`"team"` or `"project"`). A no-op if already favorited.]
   @spec add(String.t(), String.t()) :: :ok
   def add(kind, value) do
     with_db(fn conn ->

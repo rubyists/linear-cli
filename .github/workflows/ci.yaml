@@ -44,7 +44,8 @@ jobs:
             app/_build
           key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
       -
-        # mix ci covers deps.get, hex.audit, format --check-formatted,
+        # mix ci covers: deps.get, hex.audit, deps.audit (Elixir security
+        # advisories), format --check-formatted, credo (static analysis),
         # usage_rules.sync --check (catches dep-bump drift, see #79),
         # and mix test. Runs from the repo root; cd: app/ is handled
         # inside the task itself.
