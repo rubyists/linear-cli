@@ -302,6 +302,26 @@ defmodule LinearCli.CLI.IssueHelpers do
   end
 
   @doc """
+  Updates `issue`'s description to `description_input`, resolving it (asking,
+  or opening an editor, if not already given - via
+  `LinearCli.CLI.WhatFor.description_for/1`) first.
+  """
+  @spec update_description(%Linear.Issue{}, String.t() | nil) ::
+          {:ok, %Linear.Issue{}} | {:error, term()}
+  def update_description(issue, description_input) do
+    description = WhatFor.description_for(description_input)
+
+    case Linear.update_issue_description(issue, description) do
+      {:ok, updated} ->
+        Prompt.ok("#{issue.identifier} description updated")
+        {:ok, updated}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Dispatches an issue update per whichever of `opts`' keys is set, in Ruby's
   exact precedence order:
 
@@ -341,6 +361,7 @@ defmodule LinearCli.CLI.IssueHelpers do
       opts[:cancel] -> normalize(cancel_issue(issue, opts))
       opts[:pr] -> issue_pr(issue, opts)
       opts[:project] -> normalize(attach_project(issue, opts[:project]))
+      opts[:description] -> normalize(update_description(issue, opts[:description]))
       opts[:comment] -> :ok
       true -> no_action_taken()
     end

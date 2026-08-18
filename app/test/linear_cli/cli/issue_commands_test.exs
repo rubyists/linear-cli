@@ -970,6 +970,64 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "CRY-1 was closed"
     end
 
+    test "--description updates the issue description via the issueUpdate mutation" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:description, decoded["variables"]["input"]["description"]})
+            Req.Test.json(conn, issue_updated(%{"description" => "Updated body"}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "--description",
+                     "Updated body",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received {:description, "Updated body"}
+      assert output =~ "CRY-1 description updated"
+    end
+
+    test "-d short flag also updates the issue description" do
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}},
+        {"issueUpdate", issue_updated(%{"description" => "Short flag body"})}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "-d",
+                     "Short flag body",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert output =~ "CRY-1 description updated"
+    end
+
     test "with no issue ids, exits 22 (Ruby: raise SmellsBad -> exit 22)" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end

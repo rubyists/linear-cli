@@ -376,4 +376,49 @@ defmodule LinearCli.Linear.IssueTest do
       assert {:error, %Ash.Error.Invalid{}} = Linear.close_issue(issue, "nope")
     end
   end
+
+  describe "update_issue_description/2" do
+    test "sends description and returns the issue refetched via full_fields" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
+
+        assert id == "CRY-1"
+        assert input == %{"description" => "Updated body"}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => "Updated body",
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.update_issue_description(issue, "Updated body")
+      assert updated.description == "Updated body"
+    end
+
+    test "surfaces a GraphQL error" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "unauthorized"}]})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               Linear.update_issue_description(issue, "Updated body")
+    end
+  end
 end

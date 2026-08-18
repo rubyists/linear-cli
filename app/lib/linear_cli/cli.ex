@@ -645,6 +645,11 @@ defmodule LinearCli.CLI do
                   long: "--comment",
                   help: "Comment to add to the issue. - open an editor"
                 ],
+                description: [
+                  short: "-d",
+                  long: "--description",
+                  help: "Update the issue description. - to open an editor"
+                ],
                 project: [
                   short: "-p",
                   long: "--project",
