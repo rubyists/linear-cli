@@ -93,6 +93,15 @@ Update this section when adding a new top-level directory, a new major module
 or a new phase plan document. File-level changes inside existing directories do
 not need a structural-doc update.
 
+## Domain documentation
+
+- Ash domain ERD: documents/ash-domain-erd.adoc — canonical inventory of
+  the `LinearCli.Linear` domain: resources, actions, code interfaces,
+  GraphQL associations, and shared helpers. **Must be updated in the same
+  change** whenever an Ash resource, action, code interface, association
+  attribute, or shared helper is added, removed, renamed, or materially
+  changed.
+
 ## Standards
 
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`

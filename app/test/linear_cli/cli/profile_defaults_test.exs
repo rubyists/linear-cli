@@ -264,13 +264,11 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         decoded = Jason.decode!(body)
         query = decoded["query"]
 
-        cond do
-          String.contains?(query, "issues(filter") ->
-            send(test_pid, {:filter, decoded["variables"]["filter"]})
-            Req.Test.json(conn, issues_response([issue_map()]))
-
-          true ->
-            raise "no stub matched query: #{query}"
+        if String.contains?(query, "issues(filter") do
+          send(test_pid, {:filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([issue_map()]))
+        else
+          raise "no stub matched query: #{query}"
         end
       end)
 
@@ -335,13 +333,11 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         decoded = Jason.decode!(body)
         query = decoded["query"]
 
-        cond do
-          String.contains?(query, "issue(id: $id)") ->
-            send(test_pid, {:id, decoded["variables"]["id"]})
-            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
-
-          true ->
-            raise "no stub matched query: #{query}"
+        if String.contains?(query, "issue(id: $id)") do
+          send(test_pid, {:id, decoded["variables"]["id"]})
+          Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+        else
+          raise "no stub matched query: #{query}"
         end
       end)
 
@@ -410,21 +406,19 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         decoded = Jason.decode!(body)
         query = decoded["query"]
 
-        cond do
-          String.contains?(query, "issue(id: $id)") ->
-            send(test_pid, {:id, decoded["variables"]["id"]})
+        if String.contains?(query, "issue(id: $id)") do
+          send(test_pid, {:id, decoded["variables"]["id"]})
 
-            Req.Test.json(
-              conn,
-              %{
-                "data" => %{
-                  "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
-                }
+          Req.Test.json(
+            conn,
+            %{
+              "data" => %{
+                "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
               }
-            )
-
-          true ->
-            raise "no stub matched query: #{query}"
+            }
+          )
+        else
+          raise "no stub matched query: #{query}"
         end
       end)
 
@@ -452,21 +446,19 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         decoded = Jason.decode!(body)
         query = decoded["query"]
 
-        cond do
-          String.contains?(query, "issue(id: $id)") ->
-            send(test_pid, {:id, decoded["variables"]["id"]})
+        if String.contains?(query, "issue(id: $id)") do
+          send(test_pid, {:id, decoded["variables"]["id"]})
 
-            Req.Test.json(
-              conn,
-              %{
-                "data" => %{
-                  "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
-                }
+          Req.Test.json(
+            conn,
+            %{
+              "data" => %{
+                "issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})
               }
-            )
-
-          true ->
-            raise "no stub matched query: #{query}"
+            }
+          )
+        else
+          raise "no stub matched query: #{query}"
         end
       end)
 

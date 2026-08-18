@@ -12,12 +12,14 @@ defmodule Mix.Tasks.Ci do
   either ever breaks:
 
     1. `mix deps.get` — ensure deps are present
-    2. `mix hex.audit` — reject retired or vulnerable dependencies
-    3. `mix format --check-formatted` — code is formatted
-    4. `mix usage_rules.sync --check` — usage rules are in sync with deps
+    2. `mix hex.audit` — reject retired or vulnerable Hex packages
+    3. `mix deps.audit` — scan dependencies for known security advisories
+    4. `mix format --check-formatted` — code is formatted
+    5. `mix credo --strict` — static analysis (style, complexity, common bugs)
+    6. `mix usage_rules.sync --check` — usage rules are in sync with deps
        (catches drift introduced by a dep bump without re-running the sync;
        see #79)
-    5. `mix test` — all tests pass
+    7. `mix test` — all tests pass
 
   All steps run inside `app/`.
   """
@@ -35,7 +37,9 @@ defmodule Mix.Tasks.Ci do
   def run(_argv, shell) do
     shell.("mix", ["deps.get"], cd: "app")
     shell.("mix", ["hex.audit"], cd: "app")
+    shell.("mix", ["deps.audit"], cd: "app")
     shell.("mix", ["format", "--check-formatted"], cd: "app")
+    shell.("mix", ["credo", "--strict"], cd: "app")
     shell.("mix", ["usage_rules.sync", "--check"], cd: "app")
     shell.("mix", ["test"], cd: "app")
     :ok

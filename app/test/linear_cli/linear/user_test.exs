@@ -3,6 +3,58 @@ defmodule LinearCli.Linear.UserTest do
 
   alias LinearCli.Linear
 
+  test "team_members/1 returns a list of users for a valid team response" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{
+          "team" => %{
+            "members" => %{
+              "nodes" => [
+                %{"id" => "u1", "name" => "Alice", "email" => "alice@example.com"},
+                %{"id" => "u2", "name" => "Bob", "email" => "bob@example.com"}
+              ]
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, [%Linear.User{id: "u1", name: "Alice"}, %Linear.User{id: "u2", name: "Bob"}]} =
+             Linear.team_members("t1")
+  end
+
+  test "team_members/1 returns an empty list when team is null" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"team" => nil}})
+    end)
+
+    assert {:ok, []} = Linear.team_members("nonexistent")
+  end
+
+  test "team_members/1 returns an empty list when members key is absent" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"team" => %{}}})
+    end)
+
+    assert {:ok, []} = Linear.team_members("t1")
+  end
+
+  test "team_members/1 returns an empty list when nodes key is absent" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"team" => %{"members" => %{}}}})
+    end)
+
+    assert {:ok, []} = Linear.team_members("t1")
+  end
+
+  test "team_members/1 propagates API errors" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"errors" => [%{"message" => "Unauthorized"}]})
+    end)
+
+    assert {:error, %Ash.Error.Unknown{}} = Linear.team_members("t1")
+  end
+
   test "me/0 decodes the viewer, including nested teams" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{

@@ -30,7 +30,7 @@ defmodule LinearCli.Rollover do
   @doc "e.g. month_name(8) == \"August\""
   def month_name(month) when month in 1..12, do: Enum.at(@month_names, month - 1)
 
-  @doc "e.g. project_name(\"PAYMENTS SWAT\", {2026, 8}) == \"PAYMENTS SWAT August 2026\""
+  @doc ~s[e.g. project_name("PAYMENTS SWAT", {2026, 8}) == "PAYMENTS SWAT August 2026"]
   def project_name(prefix, {year, month}), do: "#{prefix} #{month_name(month)} #{year}"
 
   @doc """

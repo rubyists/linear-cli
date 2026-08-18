@@ -12,6 +12,10 @@
         {
           "type": "generic",
           "path": "app/mix.exs"
+        },
+        {
+          "type": "generic",
+          "path": "Readme.adoc"
         }
       ],
       "exclude-paths": [
