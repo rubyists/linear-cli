@@ -93,6 +93,7 @@ defmodule LinearCli.CLI do
   # too, so this port doesn't need to invent one.
   @subcommand_aliases %{
     "issue" => %{
+      "a" => "assign",
       "c" => "create",
       "new" => "create",
       "add" => "create",
@@ -199,6 +200,7 @@ defmodule LinearCli.CLI do
     do: run(&Commands.profile_clear/1, result, halt)
 
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
+  defp dispatch([:issue, :assign], result, halt), do: run(&Commands.issue_assign/1, result, halt)
   defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
 
   defp dispatch([:issue, :develop], result, halt),
@@ -561,6 +563,20 @@ defmodule LinearCli.CLI do
                          "unknown status #{inspect(bad)}, must be one of: #{Enum.join(valid, ", ")}"}
                     end
                   end
+                ]
+              ]
+            ],
+            assign: [
+              name: "assign",
+              about: "Assign an issue to a team member",
+              args: [
+                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
+              ],
+              options: [
+                assignee: [
+                  short: "-a",
+                  long: "--assignee",
+                  help: "Team member name to assign to (prompts if omitted)"
                 ]
               ]
             ],

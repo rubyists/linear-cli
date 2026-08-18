@@ -13,6 +13,7 @@ defmodule LinearCli.Linear do
   resources do
     resource LinearCli.Linear.User do
       define :me, action: :me, get?: true
+      define :team_members, action: :by_team, args: [:team_id]
     end
 
     resource LinearCli.Linear.Team do
