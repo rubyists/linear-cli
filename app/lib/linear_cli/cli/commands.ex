@@ -543,4 +543,67 @@ defmodule LinearCli.CLI.Commands do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  @doc """
+  Assigns an issue to a team member.
+
+  With `--assignee`/`-a`, matches the given name against the issue's team's
+  members (case-insensitive exact, then unique prefix). Without it, prompts
+  interactively via `LinearCli.CLI.Prompt.select/2`.
+  """
+  @spec issue_assign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_assign(%{args: %{issue_id: issue_id}, options: options}) do
+    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+
+    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
+         {:ok, members} <- Linear.team_members(issue.team.id),
+         :ok <- guard_has_members(members, issue),
+         {:ok, target_member} <- resolve_target_member(members, options.assignee),
+         {:ok, updated} <- Linear.assign_issue(issue, target_member.id) do
+      Display.show(updated, %{output: options.output})
+
+      if options.output != "json",
+        do: Prompt.ok("#{updated.identifier} assigned to #{target_member.name}")
+
+      :ok
+    end
+  end
+
+  defp guard_has_members([], issue) do
+    {:error, {:smells_bad, "No assignable members found for team #{issue.team.key || issue.team.id}"}}
+  end
+
+  defp guard_has_members(_members, _issue), do: :ok
+
+  defp resolve_target_member(members, nil) do
+    choices = Enum.sort_by(members, & &1.name) |> Enum.map(&{&1.name, &1})
+    {:ok, Prompt.select("Choose an assignee", choices)}
+  end
+
+  defp resolve_target_member(members, name) do
+    normalized = String.downcase(name)
+
+    members
+    |> Enum.filter(&(String.downcase(&1.name) == normalized))
+    |> use_prefix_member_matches_if_empty(members, normalized)
+    |> resolve_member_matches(members, name)
+  end
+
+  defp use_prefix_member_matches_if_empty([], members, name) do
+    Enum.filter(members, &String.starts_with?(String.downcase(&1.name), name))
+  end
+
+  defp use_prefix_member_matches_if_empty(matches, _members, _name), do: matches
+
+  defp resolve_member_matches([member], _members, _name), do: {:ok, member}
+
+  defp resolve_member_matches([], members, name) do
+    available = Enum.map_join(Enum.sort_by(members, & &1.name), ", ", & &1.name)
+    {:error, {:smells_bad, "Unknown assignee #{inspect(name)}. Available: #{available}"}}
+  end
+
+  defp resolve_member_matches(matches, _members, name) do
+    ambiguous = Enum.map_join(matches, ", ", & &1.name)
+    {:error, {:smells_bad, "Ambiguous assignee #{inspect(name)}: matches #{ambiguous}"}}
+  end
 end

@@ -10,6 +10,11 @@ defmodule LinearCli.Linear.User do
       get? true
       manual LinearCli.Linear.User.Read.Me
     end
+
+    read :by_team do
+      argument :team_id, :string, allow_nil?: false
+      manual LinearCli.Linear.User.Read.ByTeam
+    end
   end
 
   attributes do
@@ -52,6 +57,30 @@ defmodule LinearCli.Linear.User.Read.Me do
 
     with {:ok, %{"viewer" => viewer}} <- Api.call(document) do
       {:ok, [User.from_map(viewer)]}
+    end
+  end
+end
+
+defmodule LinearCli.Linear.User.Read.ByTeam do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.User
+
+  def read(query, _ecto_query, _opts, _context) do
+    team_id = query.arguments.team_id
+    document = "query($id: String!) { team(id: $id) { members(first: 50) { nodes { #{User.base_fields()} } } } }"
+
+    case Api.call(document, %{"id" => team_id}) do
+      {:ok, %{"team" => %{"members" => %{"nodes" => nodes}}}} ->
+        {:ok, Enum.map(nodes, &User.from_map/1)}
+
+      {:ok, %{"team" => nil}} ->
+        {:ok, []}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end
