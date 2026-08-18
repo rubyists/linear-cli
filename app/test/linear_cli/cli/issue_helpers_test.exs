@@ -638,8 +638,13 @@ defmodule LinearCli.CLI.IssueHelpersTest do
              "team" => %{
                "states" => %{
                  "nodes" => [
-                   %{"id" => "s1", "name" => "In Progress", "position" => 1.0, "type" => "started",
-                     "description" => nil}
+                   %{
+                     "id" => "s1",
+                     "name" => "In Progress",
+                     "position" => 1.0,
+                     "type" => "started",
+                     "description" => nil
+                   }
                  ]
                }
              }
@@ -695,8 +700,13 @@ defmodule LinearCli.CLI.IssueHelpersTest do
                 "team" => %{
                   "states" => %{
                     "nodes" => [
-                      %{"id" => "s99", "name" => "Todo", "position" => 0.0, "type" => "unstarted",
-                        "description" => nil}
+                      %{
+                        "id" => "s99",
+                        "name" => "Todo",
+                        "position" => 0.0,
+                        "type" => "unstarted",
+                        "description" => nil
+                      }
                     ]
                   }
                 }
@@ -706,14 +716,17 @@ defmodule LinearCli.CLI.IssueHelpersTest do
           String.contains?(query, "issueUpdate") ->
             send(test_pid, {:input, decoded["variables"]["input"]})
 
-            Req.Test.json(conn, issue_updated(%{
-              "assignee" => %{
-                "id" => "u1",
-                "name" => "Ada",
-                "email" => "ada@x.com",
-                "teams" => %{"nodes" => []}
-              }
-            }))
+            Req.Test.json(
+              conn,
+              issue_updated(%{
+                "assignee" => %{
+                  "id" => "u1",
+                  "name" => "Ada",
+                  "email" => "ada@x.com",
+                  "teams" => %{"nodes" => []}
+                }
+              })
+            )
 
           true ->
             raise "no stub matched: #{query}"
@@ -766,8 +779,13 @@ defmodule LinearCli.CLI.IssueHelpersTest do
                 "team" => %{
                   "states" => %{
                     "nodes" => [
-                      %{"id" => "s2", "name" => "In Progress", "position" => 1.0, "type" => "started",
-                        "description" => nil}
+                      %{
+                        "id" => "s2",
+                        "name" => "In Progress",
+                        "position" => 1.0,
+                        "type" => "started",
+                        "description" => nil
+                      }
                     ]
                   }
                 }
@@ -777,14 +795,17 @@ defmodule LinearCli.CLI.IssueHelpersTest do
           String.contains?(query, "issueUpdate") ->
             send(test_pid, {:input, decoded["variables"]["input"]})
 
-            Req.Test.json(conn, issue_updated(%{
-              "assignee" => %{
-                "id" => "u1",
-                "name" => "Ada",
-                "email" => "ada@x.com",
-                "teams" => %{"nodes" => []}
-              }
-            }))
+            Req.Test.json(
+              conn,
+              issue_updated(%{
+                "assignee" => %{
+                  "id" => "u1",
+                  "name" => "Ada",
+                  "email" => "ada@x.com",
+                  "teams" => %{"nodes" => []}
+                }
+              })
+            )
 
           true ->
             raise "no stub matched: #{query}"
@@ -825,8 +846,13 @@ defmodule LinearCli.CLI.IssueHelpersTest do
              "team" => %{
                "states" => %{
                  "nodes" => [
-                   %{"id" => "s1", "name" => "Todo", "position" => 0.0, "type" => "unstarted",
-                     "description" => nil}
+                   %{
+                     "id" => "s1",
+                     "name" => "Todo",
+                     "position" => 0.0,
+                     "type" => "unstarted",
+                     "description" => nil
+                   }
                  ]
                }
              }
