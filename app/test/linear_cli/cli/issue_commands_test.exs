@@ -1324,5 +1324,626 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert stderr =~ "No assignable members"
       assert stderr =~ "This smells bad! Bailing."
     end
+
+    test "--status sends assigneeId and stateId in one issueUpdate" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(
+              conn,
+              workflow_states([
+                state_map("s2", "In Progress", 1.0, "started")
+              ])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+
+            Req.Test.json(
+              conn,
+              issue_assigned(member_map("u2", "Bob"))
+              |> put_in(
+                ["data", "issueUpdate", "issue", "state"],
+                %{"id" => "s2", "name" => "In Progress", "type" => "started"}
+              )
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "assign",
+                     "--assignee",
+                     "Bob",
+                     "--status",
+                     "In Progress",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received {:input, input}
+      assert input["assigneeId"] == "u2"
+      assert input["stateId"] == "s2"
+      assert output =~ "assigned to Bob"
+      assert output =~ "In Progress"
+    end
+
+    test "--status short form -s also works on assign" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["issue", "assign", "-a", "Bob", "-s", "Todo", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input["stateId"] == "s1"
+    end
+
+    test "--status with case-insensitive name match on assign" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["issue", "assign", "-a", "Bob", "--status", "todo", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input["stateId"] == "s1"
+    end
+
+    test "--status unknown name exits 22 before sending any mutation on assign" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            raise "issueUpdate should not be called when status is invalid"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            ["issue", "assign", "-a", "Bob", "--status", "NoSuchState", "CRY-1"],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      refute_received :mutated
+      assert stderr =~ "Unknown status"
+    end
+
+    test "omitting --status sends only assigneeId (backward compat) on assign" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "assign", "-a", "Bob", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input == %{"assigneeId" => "u2"}
+      refute Map.has_key?(input, "stateId")
+    end
+
+    test "--output json with --status returns structured output on assign" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(
+              conn,
+              issue_assigned(member_map("u2", "Bob"))
+              |> put_in(
+                ["data", "issueUpdate", "issue", "state"],
+                %{"id" => "s1", "name" => "Todo", "type" => "unstarted"}
+              )
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "assign",
+                     "-a",
+                     "Bob",
+                     "--status",
+                     "Todo",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+      assert decoded["state"]["name"] == "Todo"
+    end
+
+    test "--status with space in name works on assign" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-ip", "In Progress", 1.0, "started")])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "assign",
+                   "-a",
+                   "Bob",
+                   "--status",
+                   "In Progress",
+                   "CRY-53"
+                 ])
+      end)
+
+      assert_received {:input, input}
+      assert input["stateId"] == "s-ip"
+    end
+  end
+
+  describe "issue take with --status" do
+    defp take_member_map, do: %{"id" => "u1", "name" => "Ada", "email" => "ada@x.com"}
+
+    defp take_issue_map(overrides \\ %{}) do
+      Map.merge(
+        %{
+          "id" => "i1",
+          "identifier" => "CRY-1",
+          "title" => "Fix the thing",
+          "branchName" => "cry-1-fix-the-thing",
+          "description" => nil,
+          "assignee" => nil,
+          "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+          "comments" => %{"nodes" => []}
+        },
+        overrides
+      )
+    end
+
+    test "--status sends both assigneeId and stateId in one issueUpdate" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => take_issue_map()}})
+
+          query =~ "states {" ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "take", "--status", "Todo", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input["assigneeId"] == "u1"
+      assert input["stateId"] == "s1"
+    end
+
+    test "-s short form works on take" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => take_issue_map()}})
+
+          query =~ "states {" ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "take", "-s", "Todo", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input["stateId"] == "s1"
+    end
+
+    test "already-self-assigned issue still updates status when --status given" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issue" => take_issue_map(%{"assignee" => take_member_map()})
+                }
+              }
+            )
+
+          query =~ "states {" ->
+            Req.Test.json(conn, workflow_states([state_map("s2", "In Progress", 1.0, "started")]))
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["issue", "take", "--status", "In Progress", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input["assigneeId"] == "u1"
+      assert input["stateId"] == "s2"
+    end
+
+    test "--status unknown name exits 22 before any mutation on take" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => take_issue_map()}})
+
+          query =~ "states {" ->
+            Req.Test.json(conn, workflow_states([state_map("s1", "Todo", 0.0, "unstarted")]))
+
+          query =~ "issueUpdate" ->
+            send(test_pid, :mutated)
+            raise "issueUpdate should not be called"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "take", "--status", "Bogus", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      refute_received :mutated
+      assert stderr =~ "Unknown status"
+    end
+
+    test "omitting --status sends only assigneeId on take (backward compat)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => take_issue_map()}})
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "take", "CRY-1"])
+      end)
+
+      assert_received {:input, input}
+      assert input == %{"assigneeId" => "u1"}
+      refute Map.has_key?(input, "stateId")
+    end
+
+    test "multiple issues from different teams resolve status independently" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+        variables = decoded["variables"] || %{}
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" and variables["id"] == "CRY-1" ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issue" =>
+                    take_issue_map(%{
+                      "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                    })
+                }
+              }
+            )
+
+          query =~ "issue(id: $id)" and variables["id"] == "CRY-2" ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issue" =>
+                    take_issue_map(%{
+                      "id" => "i2",
+                      "identifier" => "CRY-2",
+                      "team" => %{"id" => "t2", "key" => "OPS", "name" => "Operations"}
+                    })
+                }
+              }
+            )
+
+          query =~ "states {" and variables["teamId"] == "t1" ->
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-eng-todo", "Todo", 0.0, "unstarted")])
+            )
+
+          query =~ "states {" and variables["teamId"] == "t2" ->
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-ops-todo", "Todo", 0.0, "unstarted")])
+            )
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "take", "--status", "Todo", "CRY-1", "CRY-2"])
+      end)
+
+      assert_received {:input, input1}
+      assert_received {:input, input2}
+
+      state_ids = MapSet.new([input1["stateId"], input2["stateId"]])
+      assert MapSet.member?(state_ids, "s-eng-todo")
+      assert MapSet.member?(state_ids, "s-ops-todo")
+    end
+
+    test "--status with space in name works on take" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        cond do
+          query =~ "viewer" ->
+            Req.Test.json(conn, %{"data" => %{"viewer" => take_member_map()}})
+
+          query =~ "issue(id: $id)" ->
+            Req.Test.json(conn, %{"data" => %{"issue" => take_issue_map()}})
+
+          query =~ "states {" ->
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-ip", "In Progress", 1.0, "started")])
+            )
+
+          query =~ "issueUpdate" ->
+            send(test_pid, {:input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => take_member_map()}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "take", "--status", "In Progress", "CRY-53"])
+      end)
+
+      assert_received {:input, input}
+      assert input["stateId"] == "s-ip"
+    end
   end
 end

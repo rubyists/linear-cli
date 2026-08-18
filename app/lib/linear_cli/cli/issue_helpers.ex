@@ -458,21 +458,69 @@ defmodule LinearCli.CLI.IssueHelpers do
   @spec gimme_da_issue!(String.t(), keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def gimme_da_issue!(issue_id, opts \\ []) do
     issue_id = expand_issue_id(issue_id)
+    status_opt = parse_status_opt(opts)
 
     with {:ok, me} <- resolve_me(opts),
-         {:ok, [issue]} <- Linear.issues(%{ids: [issue_id]}) do
-      assign_or_confirm(issue, me, issue_id)
+         {:ok, [issue]} <- Linear.issues(%{ids: [issue_id]}),
+         {:ok, state_id} <- resolve_status_for_issue(issue, status_opt) do
+      assign_or_confirm(issue, me, issue_id, state_id)
     end
   end
 
-  defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id) do
+  defp parse_status_opt(opts) do
+    case Keyword.fetch(opts, :state_id) do
+      {:ok, id} -> {:resolved, id}
+      :error -> {:name, Keyword.get(opts, :status)}
+    end
+  end
+
+  defp resolve_status_for_issue(_issue, {:resolved, id}), do: {:ok, id}
+  defp resolve_status_for_issue(_issue, {:name, nil}), do: {:ok, nil}
+
+  defp resolve_status_for_issue(issue, {:name, name}) do
+    with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id) do
+      case resolve_workflow_state(states, name) do
+        {:ok, state} -> {:ok, state.id}
+        error -> error
+      end
+    end
+  end
+
+  defp resolve_workflow_state(states, name) do
+    normalized = String.downcase(name)
+
+    states
+    |> Enum.filter(&(String.downcase(&1.name) == normalized))
+    |> use_prefix_state_matches_if_empty(states, normalized)
+    |> resolve_workflow_state_matches(states, name)
+  end
+
+  defp use_prefix_state_matches_if_empty([], states, name) do
+    Enum.filter(states, &String.starts_with?(String.downcase(&1.name), name))
+  end
+
+  defp use_prefix_state_matches_if_empty(matches, _states, _name), do: matches
+
+  defp resolve_workflow_state_matches([state], _states, _name), do: {:ok, state}
+
+  defp resolve_workflow_state_matches([], states, name) do
+    available = Enum.map_join(states, ", ", & &1.name)
+    smells_bad("Unknown status #{inspect(name)}. Available: #{available}")
+  end
+
+  defp resolve_workflow_state_matches(matches, _states, name) do
+    ambiguous = Enum.map_join(matches, ", ", & &1.name)
+    smells_bad("Ambiguous status #{inspect(name)}: matches #{ambiguous}")
+  end
+
+  defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id, nil) do
     Prompt.say("You are already assigned #{issue_id}")
     {:ok, issue}
   end
 
-  defp assign_or_confirm(issue, me, issue_id) do
+  defp assign_or_confirm(issue, me, issue_id, state_id) do
     Prompt.say("Assigning issue #{issue_id} to ya")
-    Linear.assign_issue(issue, me.id)
+    Linear.assign_issue(issue, me.id, %{state_id: state_id})
   end
 
   defp resolve_me(opts) do

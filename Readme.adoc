@@ -208,7 +208,25 @@ $ lcls -f CRY-1
 ----
 $ lc issue take CRY-1234
 $ lc issue take CRY-456 CRY-789
+$ lc issue take CRY-1234 --status "In Progress" <1>
+$ lc issue take CRY-1234 -s Todo <2>
 ----
+<1> Self-assign and move to the named workflow state in one update
+<2> Short form of `--status`
+
+==== Assign an issue to a team member
+
+[source,sh]
+----
+$ lc issue assign CRY-1234 --assignee alice <1>
+$ lc issue assign CRY-1234 -a alice --status "In Progress" <2>
+$ lc issue assign CRY-1234 -a alice -s Todo <3>
+$ lc issue assign CRY-1234 <4>
+----
+<1> Assign to a team member by name (case-insensitive, prefix match)
+<2> Assign and move to the named workflow state in one update
+<3> Short form of `--status`
+<4> Prompts for the assignee interactively
 
 ==== Create an issue
 

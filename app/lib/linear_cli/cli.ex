@@ -577,6 +577,11 @@ defmodule LinearCli.CLI do
                   short: "-a",
                   long: "--assignee",
                   help: "Team member name to assign to (prompts if omitted)"
+                ],
+                status: [
+                  short: "-s",
+                  long: "--status",
+                  help: "Workflow state name to set after assigning (e.g. \"In Progress\")"
                 ]
               ]
             ],
@@ -641,7 +646,14 @@ defmodule LinearCli.CLI do
             take: [
               name: "take",
               about: "Assign one or more issues to yourself",
-              allow_unknown_args: true
+              allow_unknown_args: true,
+              options: [
+                status: [
+                  short: "-s",
+                  long: "--status",
+                  help: "Workflow state name to set after self-assigning (e.g. \"In Progress\")"
+                ]
+              ]
             ],
             update: [
               name: "update",

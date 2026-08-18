@@ -326,7 +326,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:assign`
 | update
 | `Linear.Issue.Update.Assign`
-| `issueUpdate(id:, input: { assigneeId })` via `Issue.Update.run/2`
+| `issueUpdate(id:, input: { assigneeId, stateId? })` via `Issue.Update.run/2`
 
 | `Issue`
 | `attach_issue_to_project`
