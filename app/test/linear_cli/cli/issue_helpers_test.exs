@@ -263,6 +263,26 @@ defmodule LinearCli.CLI.IssueHelpersTest do
     end
   end
 
+  describe "update_description/2" do
+    test "resolves and sends the description, printing a confirmation" do
+      stub_responses([{"issueUpdate", issue_updated(%{"description" => "New body"})}])
+
+      assert capture_io(fn ->
+               assert {:ok, %Issue{description: "New body"}} =
+                        IssueHelpers.update_description(issue(), "New body")
+             end) =~ "CRY-1 description updated"
+    end
+
+    test "propagates an API error without printing confirmation" do
+      stub_responses([{"issueUpdate", %{"errors" => [%{"message" => "boom"}]}}])
+
+      assert capture_io(fn ->
+               assert {:error, %Ash.Error.Invalid{}} =
+                        IssueHelpers.update_description(issue(), "New body")
+             end) == ""
+    end
+  end
+
   describe "attach_project/2 (Ruby: CLI::Issue#attach_project)" do
     test "resolves the project by name against the team's projects and attaches it" do
       stub_responses([
@@ -361,6 +381,17 @@ defmodule LinearCli.CLI.IssueHelpersTest do
         end)
 
       assert output =~ "CRY-1 was attached to Manhattan Rollout"
+    end
+
+    test "with :description, updates the issue description" do
+      stub_responses([{"issueUpdate", issue_updated(%{"description" => "New body"})}])
+
+      output =
+        capture_io(fn ->
+          assert :ok = IssueHelpers.update_issue(issue(), description: "New body")
+        end)
+
+      assert output =~ "CRY-1 description updated"
     end
 
     test "with only :comment, comments and stops without the 'no action taken' warning" do

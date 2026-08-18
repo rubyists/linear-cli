@@ -457,6 +457,7 @@ defmodule LinearCli.CLI.Commands do
            Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}) do
       update_opts = [
         comment: options.comment,
+        description: Map.get(options, :description),
         project: options.project,
         cancel: flags.cancel,
         close: flags.close,

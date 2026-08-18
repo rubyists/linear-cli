@@ -53,6 +53,11 @@ defmodule LinearCli.Linear.Issue do
       argument :state_id, :string, allow_nil?: false
       manual LinearCli.Linear.Issue.Update.SetStatus
     end
+
+    update :update_description do
+      argument :description, :string, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.UpdateDescription
+    end
   end
 
   attributes do
@@ -375,6 +380,19 @@ defmodule LinearCli.Linear.Issue.Update.SetStatus do
   def update(changeset, _opts, _context) do
     Issue.Update.run(changeset.data.identifier, %{
       "stateId" => changeset.arguments.state_id
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.UpdateDescription do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "description" => changeset.arguments.description
     })
   end
 end
