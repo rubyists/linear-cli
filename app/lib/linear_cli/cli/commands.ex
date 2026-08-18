@@ -408,11 +408,16 @@ defmodule LinearCli.CLI.Commands do
   def issue_take(result, opts \\ [])
 
   def issue_take(%{unknown: issue_ids, options: options}, opts) do
+    opts = maybe_put_status(opts, Map.get(options, :status))
+
     with {:ok, updates} <- take_issues(issue_ids, opts) do
       Display.show(updates, %{output: options.output})
       :ok
     end
   end
+
+  defp maybe_put_status(opts, nil), do: opts
+  defp maybe_put_status(opts, status), do: Keyword.put(opts, :status, status)
 
   defp take_issues(issue_ids, opts) do
     issue_ids
@@ -545,6 +550,15 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
+  defp resolve_optional_status(_issue, nil), do: {:ok, nil}
+
+  defp resolve_optional_status(issue, name) do
+    with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id),
+         {:ok, state} <- resolve_target_state(states, name) do
+      {:ok, state.id}
+    end
+  end
+
   @doc """
   Assigns an issue to a team member.
 
@@ -560,11 +574,20 @@ defmodule LinearCli.CLI.Commands do
          {:ok, members} <- Linear.team_members(issue.team.id),
          :ok <- guard_has_members(members, issue),
          {:ok, target_member} <- resolve_target_member(members, options.assignee),
-         {:ok, updated} <- Linear.assign_issue(issue, target_member.id) do
+         {:ok, state_id} <- resolve_optional_status(issue, Map.get(options, :status)),
+         {:ok, updated} <- Linear.assign_issue(issue, target_member.id, %{state_id: state_id}) do
       Display.show(updated, %{output: options.output})
 
-      if options.output != "json",
-        do: Prompt.ok("#{updated.identifier} assigned to #{target_member.name}")
+      if options.output != "json" do
+        msg = "#{updated.identifier} assigned to #{target_member.name}"
+
+        msg =
+          if updated.state,
+            do: "#{msg} and set to #{updated.state.name}",
+            else: msg
+
+        Prompt.ok(msg)
+      end
 
       :ok
     end

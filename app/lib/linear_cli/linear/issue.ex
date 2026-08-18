@@ -31,6 +31,7 @@ defmodule LinearCli.Linear.Issue do
     # Ruby: Issue#assign!(user)
     update :assign do
       argument :assignee_id, :string, allow_nil?: false
+      argument :state_id, :string, allow_nil?: true
       manual LinearCli.Linear.Issue.Update.Assign
     end
 
@@ -337,9 +338,13 @@ defmodule LinearCli.Linear.Issue.Update.Assign do
   alias LinearCli.Linear.Issue
 
   def update(changeset, _opts, _context) do
-    Issue.Update.run(changeset.data.identifier, %{
-      "assigneeId" => changeset.arguments.assignee_id
-    })
+    args = changeset.arguments
+    state_id = Map.get(args, :state_id)
+
+    input = %{"assigneeId" => args.assignee_id}
+    input = if state_id, do: Map.put(input, "stateId", state_id), else: input
+
+    Issue.Update.run(changeset.data.identifier, input)
   end
 end
 
