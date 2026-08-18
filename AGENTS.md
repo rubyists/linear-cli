@@ -12,6 +12,15 @@ and best practices for agents to follow.
 - Phase 7 Plan: documents/phase-7-plan.adoc
 - Phase 8 Plan: documents/phase-8-plan.adoc
 
+## Domain documentation
+
+- Ash domain ERD: documents/ash-domain-erd.adoc — canonical inventory of
+  the `LinearCli.Linear` domain: resources, actions, code interfaces,
+  GraphQL associations, and shared helpers. **Must be updated in the same
+  change** whenever an Ash resource, action, code interface, association
+  attribute, or shared helper is added, removed, renamed, or materially
+  changed.
+
 ## Standards
 
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
