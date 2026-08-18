@@ -1350,9 +1350,11 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
           String.contains?(query, "issueUpdate") ->
             send(test_pid, {:input, decoded["variables"]["input"]})
+
             Req.Test.json(
               conn,
-              issue_assigned(member_map("u2", "Bob")) |> put_in(
+              issue_assigned(member_map("u2", "Bob"))
+              |> put_in(
                 ["data", "issueUpdate", "issue", "state"],
                 %{"id" => "s2", "name" => "In Progress", "type" => "started"}
               )
@@ -1547,7 +1549,8 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           String.contains?(query, "issueUpdate") ->
             Req.Test.json(
               conn,
-              issue_assigned(member_map("u2", "Bob")) |> put_in(
+              issue_assigned(member_map("u2", "Bob"))
+              |> put_in(
                 ["data", "issueUpdate", "issue", "state"],
                 %{"id" => "s1", "name" => "Todo", "type" => "unstarted"}
               )
@@ -1847,7 +1850,14 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           query =~ "issue(id: $id)" and variables["id"] == "CRY-1" ->
             Req.Test.json(
               conn,
-              %{"data" => %{"issue" => take_issue_map(%{"team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}})}}
+              %{
+                "data" => %{
+                  "issue" =>
+                    take_issue_map(%{
+                      "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                    })
+                }
+              }
             )
 
           query =~ "issue(id: $id)" and variables["id"] == "CRY-2" ->
@@ -1866,10 +1876,16 @@ defmodule LinearCli.CLI.IssueCommandsTest do
             )
 
           query =~ "states {" and variables["teamId"] == "t1" ->
-            Req.Test.json(conn, workflow_states([state_map("s-eng-todo", "Todo", 0.0, "unstarted")]))
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-eng-todo", "Todo", 0.0, "unstarted")])
+            )
 
           query =~ "states {" and variables["teamId"] == "t2" ->
-            Req.Test.json(conn, workflow_states([state_map("s-ops-todo", "Todo", 0.0, "unstarted")]))
+            Req.Test.json(
+              conn,
+              workflow_states([state_map("s-ops-todo", "Todo", 0.0, "unstarted")])
+            )
 
           query =~ "issueUpdate" ->
             send(test_pid, {:input, decoded["variables"]["input"]})
