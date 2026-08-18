@@ -12,13 +12,28 @@ defmodule LinearCli.ApiTest do
     assert LinearCli.Api.call("{ viewer { id } }") == {:ok, %{"viewer" => %{"id" => "123"}}}
   end
 
-  test "returns {:error, {:graphql_errors, errors}} when the response has errors" do
+  test "returns {:error, {:graphql_errors, errors}} when the response has errors but no data" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{"errors" => [%{"message" => "boom"}]})
     end)
 
     assert LinearCli.Api.call("{ viewer { id } }") ==
              {:error, {:graphql_errors, [%{"message" => "boom"}]}}
+  end
+
+  test "returns {:ok, data} when the response has both data and errors (partial success)" do
+    # Linear returns HTTP 200 with both "data": {"issue": null} and "errors"
+    # when the requested entity doesn't exist. Returning {:ok, data} lets callers
+    # handle the nil field themselves (e.g. fetch_one/1's {:not_found, id} clause)
+    # rather than discarding the data and surfacing an opaque graphql_errors tuple.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{"issue" => nil},
+        "errors" => [%{"message" => "Entity not found: Issue", "path" => ["issue"]}]
+      })
+    end)
+
+    assert LinearCli.Api.call("{ issue(id: $id) { id } }") == {:ok, %{"issue" => nil}}
   end
 
   test "returns {:error, {:unexpected_response, body}} when there's neither data nor errors" do
