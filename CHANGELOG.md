@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/rubyists/linear-cli/compare/v1.14.0...v1.15.0) (2026-08-18)
+
+
+### Features
+
+* **issue:** add --status/-s to assign and take ([#151](https://github.com/rubyists/linear-cli/issues/151)) ([537f54b](https://github.com/rubyists/linear-cli/commit/537f54b073cdae3ce595e1b57426e6b1c0b645c9))
+
 ## [1.14.0](https://github.com/rubyists/linear-cli/compare/v1.13.2...v1.14.0) (2026-08-18)
 
 
