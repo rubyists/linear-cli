@@ -34,7 +34,7 @@ defmodule LinearCli.ObanRepo do
         valid
 
       other ->
-        raise "LINEAR_CLI_DB_ADAPTER must be \"sqlite\" or \"postgres\", got: #{inspect(other)}"
+        raise ~s[LINEAR_CLI_DB_ADAPTER must be "sqlite" or "postgres", got: #{inspect(other)}]
     end
   end
 
