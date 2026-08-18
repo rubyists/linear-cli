@@ -984,4 +984,287 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "This smells bad! Bailing."
     end
   end
+
+  describe "issue assign" do
+    defp member_map(id, name, email \\ nil) do
+      %{"id" => id, "name" => name, "email" => email || "#{id}@example.com"}
+    end
+
+    defp members_response(members) do
+      %{"data" => %{"team" => %{"members" => %{"nodes" => members}}}}
+    end
+
+    defp issue_assigned(assignee_map) do
+      %{"data" => %{"issueUpdate" => %{"issue" => issue_map(%{"assignee" => assignee_map})}}}
+    end
+
+    test "--assignee sets the assignee by exact name (case-insensitive)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        decoded = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:assignee_id, decoded["variables"]["input"]["assigneeId"]})
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "assign", "--assignee", "bob", "CRY-1"])
+        end)
+
+      assert_received {:assignee_id, "u2"}
+      assert output =~ "assigned to Bob"
+    end
+
+    test "--assignee prefix match selects unique match" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        decoded = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:assignee_id, decoded["variables"]["input"]["assigneeId"]})
+            Req.Test.json(conn, issue_assigned(member_map("u3", "Alice")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "assign", "--assignee", "Ali", "CRY-1"])
+        end)
+
+      assert_received {:assignee_id, "u3"}
+      assert output =~ "assigned to Alice"
+    end
+
+    test "--assignee with unknown name exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "assign", "--assignee", "Nobody", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "Unknown assignee"
+      assert stderr =~ "This smells bad! Bailing."
+    end
+
+    test "--assignee with ambiguous prefix exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              members_response([member_map("u2", "Bob"), member_map("u3", "Bobby")])
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "assign", "--assignee", "Bo", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "Ambiguous assignee"
+      assert stderr =~ "This smells bad! Bailing."
+    end
+
+    test "interactive selection (no --assignee) prompts from sorted members" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, issue_assigned(member_map("u3", "Alice")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      # Members are sorted by name: Alice (1), Bob (2) — select "1\n" for Alice
+      output =
+        capture_io([input: "1\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "assign", "CRY-1"])
+        end)
+
+      assert output =~ "Choose an assignee"
+      assert output =~ "assigned to Alice"
+    end
+
+    test "--output json emits structured output" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "assign",
+                     "--assignee",
+                     "Bob",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+    end
+
+    test "alias 'a' routes to issue assign" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :assigned)
+            Req.Test.json(conn, issue_assigned(member_map("u2", "Bob")))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "a", "--assignee", "Bob", "CRY-1"])
+      end)
+
+      assert_received :assigned
+    end
+
+    test "no assignable members exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "assign", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "No assignable members"
+      assert stderr =~ "This smells bad! Bailing."
+    end
+  end
 end
