@@ -46,7 +46,7 @@ $ podman run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr
 $ docker run --rm -e LINEAR_CLI_DAEMON= -e LINEAR_API_KEY="$LINEAR_API_KEY" ghcr.io/rubyists/linear-cli:{image-major-tag} lcls <2>
 ----
 <1> Podman usage
-<2> Docker usage - `:{image-major-tag}` tracks the latest {image-major-tag}.x releases; pin `:{image-pin-example}` (or whichever version) for a fixed image
+<2> Docker usage - `:v1` tracks the latest 1.x release series; pin `:v1.13.2` (or whichever version) for a fixed image
 
 IMPORTANT: The image sets `LINEAR_CLI_DAEMON=true` by default so its own
 entrypoint can also run as the long-lived Oban scheduling daemon. Override it
