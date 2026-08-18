@@ -70,7 +70,9 @@ defmodule LinearCli.Linear.User.Read.ByTeam do
 
   def read(query, _ecto_query, _opts, _context) do
     team_id = query.arguments.team_id
-    document = "query($id: String!) { team(id: $id) { members(first: 50) { nodes { #{User.base_fields()} } } } }"
+
+    document =
+      "query($id: String!) { team(id: $id) { members(first: 50) { nodes { #{User.base_fields()} } } } }"
 
     with {:ok, %{"team" => team}} when is_map(team) <- Api.call(document, %{"id" => team_id}),
          %{"members" => %{"nodes" => nodes}} <- team do

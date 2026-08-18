@@ -570,7 +570,8 @@ defmodule LinearCli.CLI.Commands do
   end
 
   defp guard_has_members([], issue) do
-    {:error, {:smells_bad, "No assignable members found for team #{issue.team.key || issue.team.id}"}}
+    {:error,
+     {:smells_bad, "No assignable members found for team #{issue.team.key || issue.team.id}"}}
   end
 
   defp guard_has_members(_members, _issue), do: :ok
