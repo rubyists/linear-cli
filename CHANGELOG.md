@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.1](https://github.com/rubyists/linear-cli/compare/v1.15.0...v1.15.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* fix workflow for rebasing ([#155](https://github.com/rubyists/linear-cli/issues/155)) ([c44178c](https://github.com/rubyists/linear-cli/commit/c44178c4261de4b02371aaa919437ebf523d1072))
+
 ## [1.15.0](https://github.com/rubyists/linear-cli/compare/v1.14.0...v1.15.0) (2026-08-19)
 
 
