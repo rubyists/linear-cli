@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.2](https://github.com/rubyists/linear-cli/compare/v1.15.1...v1.15.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* ensure team scoping wraps sub filters ([#158](https://github.com/rubyists/linear-cli/issues/158)) ([bc19184](https://github.com/rubyists/linear-cli/commit/bc19184b527a40e0cf21c60d67c8056095fc375f))
+
 ## [1.15.1](https://github.com/rubyists/linear-cli/compare/v1.15.0...v1.15.1) (2026-08-19)
 
 
