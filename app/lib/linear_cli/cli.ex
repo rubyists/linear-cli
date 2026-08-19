@@ -456,6 +456,9 @@ defmodule LinearCli.CLI do
                   help: "Project name, URL, ID, or search term",
                   required: true
                 ]
+              ],
+              options: [
+                team: [short: "-t", long: "--team", help: "Scope project search to this team"]
               ]
             ],
             unfavorite: [
@@ -467,6 +470,9 @@ defmodule LinearCli.CLI do
                   help: "Project name, URL, ID, or search term",
                   required: true
                 ]
+              ],
+              options: [
+                team: [short: "-t", long: "--team", help: "Scope project search to this team"]
               ]
             ],
             update: [
@@ -480,6 +486,7 @@ defmodule LinearCli.CLI do
                 ]
               ],
               options: [
+                team: [short: "-t", long: "--team", help: "Scope project search to this team"],
                 body: [short: "-b", long: "--body", help: "The update's content (markdown)"],
                 health: [
                   long: "--health",

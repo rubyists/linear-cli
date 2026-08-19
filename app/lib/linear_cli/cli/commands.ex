@@ -4,7 +4,7 @@ defmodule LinearCli.CLI.Commands do
   result. Ported from vendor/ruby-linear-cli/lib/linear/commands/**.
   """
 
-  alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt}
+  alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
   @doc "Ported from commands/whoami.rb."
@@ -94,8 +94,10 @@ defmodule LinearCli.CLI.Commands do
   ambiguous. Once any project is favorited, `project list` defaults to
   showing just favorites (`--all` overrides).
   """
-  def project_favorite(%{args: %{project: search}}) do
-    with {:ok, projects} <- Linear.projects(),
+  def project_favorite(%{args: %{project: search}, options: options}) do
+    team = WhatFor.team_for(options.team || Profiles.default_team())
+
+    with {:ok, projects} <- Linear.projects_by_team(team.id),
          project when not is_nil(project) <- Projects.project_for(projects, search) do
       Favorites.add("project", project.id)
       Prompt.ok("Favorited project #{project.name}")
@@ -107,8 +109,10 @@ defmodule LinearCli.CLI.Commands do
   end
 
   @doc "New in this port - Ruby has no equivalent. Un-favorites a project."
-  def project_unfavorite(%{args: %{project: search}}) do
-    with {:ok, projects} <- Linear.projects(),
+  def project_unfavorite(%{args: %{project: search}, options: options}) do
+    team = WhatFor.team_for(options.team || Profiles.default_team())
+
+    with {:ok, projects} <- Linear.projects_by_team(team.id),
          project when not is_nil(project) <- Projects.project_for(projects, search) do
       Favorites.remove("project", project.id)
       Prompt.ok("Un-favorited project #{project.name}")
@@ -137,11 +141,14 @@ defmodule LinearCli.CLI.Commands do
   New in this port - Ruby has no equivalent. Posts a status update
   (Linear's own "Project Update" feature - a journal-style status post,
   not an edit to the project's own fields) via the projectUpdateCreate
-  mutation. `PROJECT` is resolved the same way issue list's `--project`
-  is - against every project in the workspace, prompting if ambiguous.
+  mutation. `PROJECT` is resolved against the active team's projects,
+  prompting if ambiguous. Team is resolved via `--team`, the active
+  profile, or an interactive prompt.
   """
   def project_update(%{args: %{project: search}, options: options}) do
-    with {:ok, projects} <- Linear.projects(),
+    team = WhatFor.team_for(options.team || Profiles.default_team())
+
+    with {:ok, projects} <- Linear.projects_by_team(team.id),
          project when not is_nil(project) <- Projects.project_for(projects, search),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do

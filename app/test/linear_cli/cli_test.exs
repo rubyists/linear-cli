@@ -115,22 +115,34 @@ defmodule LinearCli.CLITest do
       query = decoded["query"]
 
       cond do
-        String.contains?(query, "projects(first: $first") ->
+        String.contains?(query, "viewer") ->
           Req.Test.json(conn, %{
             "data" => %{
-              "projects" => %{
-                "edges" => [
-                  %{
-                    "node" => %{
+              "viewer" => %{
+                "id" => "u1",
+                "name" => "Ada",
+                "email" => "ada@example.com",
+                "teams" => %{
+                  "nodes" => [%{"id" => "t1", "key" => "ENG", "name" => "Engineering"}]
+                }
+              }
+            }
+          })
+
+        String.contains?(query, "team(id: $teamId)") ->
+          Req.Test.json(conn, %{
+            "data" => %{
+              "team" => %{
+                "projects" => %{
+                  "nodes" => [
+                    %{
                       "id" => "p1",
                       "name" => "Manhattan",
                       "slugId" => "abc",
                       "url" => "https://linear.app/x/project/manhattan-abc"
-                    },
-                    "cursor" => "p1"
-                  }
-                ],
-                "pageInfo" => %{"hasNextPage" => false}
+                    }
+                  ]
+                }
               }
             }
           })

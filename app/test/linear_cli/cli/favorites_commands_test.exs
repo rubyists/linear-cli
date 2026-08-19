@@ -53,6 +53,30 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
           }
         })
 
+      query =~ "team(id: $teamId)" ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "team" => %{
+              "projects" => %{
+                "nodes" => [
+                  %{
+                    "id" => "p1",
+                    "name" => "Manhattan",
+                    "slugId" => "abc",
+                    "url" => "https://linear.app/x/project/manhattan-abc"
+                  },
+                  %{
+                    "id" => "p2",
+                    "name" => "Platform Cleanup",
+                    "slugId" => "def",
+                    "url" => "https://linear.app/x/project/platform-cleanup-def"
+                  }
+                ]
+              }
+            }
+          }
+        })
+
       query =~ "projects(" ->
         Req.Test.json(conn, %{
           "data" => %{
