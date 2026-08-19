@@ -89,10 +89,10 @@ defmodule LinearCli.CLI.Commands do
 
   @doc """
   New in this port - Ruby has no equivalent. Favorites a project
-  (`LinearCli.Favorites`), resolved the same way `project update`'s
-  `PROJECT` is - against every project in the workspace, prompting if
-  ambiguous. Once any project is favorited, `project list` defaults to
-  showing just favorites (`--all` overrides).
+  (`LinearCli.Favorites`), resolved against the active team's projects,
+  prompting if ambiguous. Team is resolved via `--team`, the active
+  profile, or an interactive prompt. Once any project is favorited,
+  `project list` defaults to showing just favorites (`--all` overrides).
   """
   def project_favorite(%{args: %{project: search}, options: options}) do
     team = WhatFor.team_for(options.team || Profiles.default_team())
@@ -230,14 +230,15 @@ defmodule LinearCli.CLI.Commands do
   @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
 
-  `--project`/`-p` is resolved the same way Ruby's `CLI::Projects#project_for`
-  does - against every project in the workspace (`Project.all`, not
-  team-scoped), prompting interactively when the search is ambiguous or
-  omitted-but-requested (`-p -`). Only resolved at all when `--project` was
-  actually given (or `LinearCli.Profiles.default_project/0` supplies one) -
-  unlike `issue create`/`issue update`, a bare `issue list` with no active
-  profile applies no project filter and never prompts. `--team`/`--project`
-  passed explicitly always win over the active profile.
+  `--project`/`-p` resolution is team-scoped when `--team` is given (or
+  the active profile supplies a team) - it searches that team's projects via
+  `projects_by_team`. Without a team context it falls back to all workspace
+  projects (`Project.all`). Prompts interactively when the search is
+  ambiguous or omitted-but-requested (`-p -`). Only resolved at all when
+  `--project` was actually given (or `LinearCli.Profiles.default_project/0`
+  supplies one) - unlike `issue create`/`issue update`, a bare `issue list`
+  with no active profile applies no project filter and never prompts.
+  `--team`/`--project` passed explicitly always win over the active profile.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
     no_profile = Map.get(flags, :no_profile, false)
