@@ -78,6 +78,13 @@ defmodule LinearCli.CLI.ProjectsTest do
       assert Projects.project_for([manhattan, brooklyn], "Manhattan") == manhattan
     end
 
+    test "an exact name wins over a weaker substring match" do
+      exact = project(id: "1", name: "Wallet Service Extraction")
+      partial = project(id: "2", name: "Wallet Service Extraction for Humans")
+
+      assert Projects.project_for([partial, exact], "Wallet Service Extraction") == exact
+    end
+
     test "an exact match by id wins outright even among several candidates" do
       exact = project(id: "abc-123", name: "Something Else")
       other = project(id: "other", name: "Something Else Entirely")

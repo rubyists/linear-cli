@@ -97,7 +97,7 @@ defmodule LinearCli.CLI.Commands do
   def project_favorite(%{args: %{project: search}, options: options}) do
     team = WhatFor.team_for(options.team || Profiles.default_team())
 
-    with {:ok, projects} <- Linear.projects_by_team(team.id),
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
          project when not is_nil(project) <- Projects.project_for(projects, search) do
       Favorites.add("project", project.id)
       Prompt.ok("Favorited project #{project.name}")
@@ -112,7 +112,7 @@ defmodule LinearCli.CLI.Commands do
   def project_unfavorite(%{args: %{project: search}, options: options}) do
     team = WhatFor.team_for(options.team || Profiles.default_team())
 
-    with {:ok, projects} <- Linear.projects_by_team(team.id),
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
          project when not is_nil(project) <- Projects.project_for(projects, search) do
       Favorites.remove("project", project.id)
       Prompt.ok("Un-favorited project #{project.name}")
@@ -148,7 +148,7 @@ defmodule LinearCli.CLI.Commands do
   def project_update(%{args: %{project: search}, options: options}) do
     team = WhatFor.team_for(options.team || Profiles.default_team())
 
-    with {:ok, projects} <- Linear.projects_by_team(team.id),
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
          project when not is_nil(project) <- Projects.project_for(projects, search),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do
@@ -269,7 +269,7 @@ defmodule LinearCli.CLI.Commands do
 
   defp resolve_project_id(search, team_key) when is_binary(team_key) do
     with {:ok, team} <- Linear.find_team(team_key),
-         {:ok, projects} <- Linear.projects_by_team(team.id) do
+         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}) do
       case Projects.project_for(projects, search) do
         nil -> {:ok, nil}
         project -> {:ok, project.id}

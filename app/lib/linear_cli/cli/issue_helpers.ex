@@ -287,7 +287,8 @@ defmodule LinearCli.CLI.IssueHelpers do
   @spec attach_project(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
   def attach_project(issue, project_search) do
-    with {:ok, projects} <- Linear.projects_by_team(issue.team.id) do
+    with {:ok, projects} <-
+           Linear.projects_by_team(issue.team.id, %{search: project_search}) do
       project = Projects.project_for(projects, project_search)
 
       case Linear.attach_issue_to_project(issue, project.id) do
@@ -395,9 +396,10 @@ defmodule LinearCli.CLI.IssueHelpers do
     description = WhatFor.description_for(opts[:description])
     team = WhatFor.team_for(opts[:team] || Profiles.default_team())
     labels = WhatFor.labels_for(team, opts[:labels])
+    project_search = opts[:project] || Profiles.default_project()
 
-    with {:ok, projects} <- Linear.projects_by_team(team.id) do
-      project = Projects.project_for(projects, opts[:project] || Profiles.default_project())
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: project_search}) do
+      project = Projects.project_for(projects, project_search)
       label_ids = Enum.map(labels, & &1.id)
       params = maybe_put_project_id(%{label_ids: label_ids}, project)
 

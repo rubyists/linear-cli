@@ -25,7 +25,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
   # Dispatches to one of `pairs` ({substring, response_map}) based on which
   # substring appears in the outgoing GraphQL document - every document in
   # this codebase has a distinguishing operation name/field
-  # (`commentCreate`, `issueUpdate`, `states {`, `projects(first: 100)`,
+  # (`commentCreate`, `issueUpdate`, `states {`, `projects(first: 100`,
   # `issueCreate`, `viewer`, `issue(id: $id)`), so one stub per test can
   # drive an entire multi-call flow.
   defp stub_responses(pairs) do
@@ -286,7 +286,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
   describe "attach_project/2 (Ruby: CLI::Issue#attach_project)" do
     test "resolves the project by name against the team's projects and attaches it" do
       stub_responses([
-        {"projects(first: 100)",
+        {"projects(first: 100",
          team_projects([
            %{
              "id" => "p1",
@@ -361,7 +361,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
 
     test "with :project, resolves and attaches" do
       stub_responses([
-        {"projects(first: 100)",
+        {"projects(first: 100",
          team_projects([
            %{
              "id" => "p1",
@@ -460,7 +460,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
              }
            }
          }},
-        {"projects(first: 100)",
+        {"projects(first: 100",
          team_projects([
            %{
              "id" => "p1",
