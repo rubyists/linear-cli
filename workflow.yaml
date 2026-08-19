@@ -75,6 +75,7 @@ tracker:
   kind: linear
   project_slug: "94a76f2ac65f"    # hex slugId from your Linear project URL
   # api_key: "$LINEAR_API_KEY"  # your Linear API key — agents inherit this
+  assignee: me                  # only issues assigned to the API key's user
 
 # ---------------------------------------------------------------------------
 # Linear state name mapping
@@ -100,7 +101,7 @@ linear_states:
 # Polling
 # ---------------------------------------------------------------------------
 polling:
-  interval_ms: 15000              # 15 seconds between ticks
+  interval_ms: 60000              # 15 seconds between ticks
 
 # ---------------------------------------------------------------------------
 # Workspace
@@ -116,8 +117,14 @@ hooks:
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
     mix setup
   before_run: |
+    set -eu
     git fetch origin main
-    git rebase origin/main 2>/dev/null || git rebase --abort
+    changes="$(git status --porcelain)"
+    if [ -n "$changes" ]; then
+      echo "before_run: preserving uncommitted workspace changes; skipping rebase"
+    else
+      git rebase origin/main
+    fi
   timeout_ms: 120000
 
 # ---------------------------------------------------------------------------
