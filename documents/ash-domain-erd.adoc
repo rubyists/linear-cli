@@ -291,7 +291,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:by_team`
 | read
 | `Linear.Project.Read.ByTeam`
-| `team(id: $teamId) { projects(first: 100) { nodes { ... } } }`
+| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects, or applies a server-side name/slug/id filter when `search` is supplied
 
 | `Project`
 | `create_project`

@@ -201,8 +201,18 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           String.contains?(query, "team(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
 
-          String.contains?(query, "projects(first: 100)") ->
-            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+          String.contains?(query, "projects(first: 100, filter: $filter)") ->
+            filters = decoded["variables"]["filter"]["or"]
+
+            assert %{"name" => %{"containsIgnoreCase" => "Wallet Service Extraction"}} in filters
+
+            Req.Test.json(
+              conn,
+              team_projects([
+                project_map("p2", "Wallet Service Extraction for Humans"),
+                project_map("p1", "Wallet Service Extraction")
+              ])
+            )
 
           String.contains?(query, "issues(filter") ->
             send(test_pid, {:filter, decoded["variables"]["filter"]})
@@ -222,7 +232,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
                      "--team",
                      "ENG",
                      "--project",
-                     "Manhattan Rollout"
+                     "Wallet Service Extraction"
                    ])
         end)
 
@@ -376,7 +386,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       stub_responses([
         {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
         {"issueLabels", label_response(["urgent"])},
-        {"projects(first: 100)", team_projects([project_map("p1", "Manhattan Rollout")])},
+        {"projects(first: 100", team_projects([project_map("p1", "Manhattan Rollout")])},
         {"issueCreate",
          %{
            "data" => %{
@@ -435,7 +445,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       stub_responses([
         {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
         {"issueLabels", label_response(["urgent"])},
-        {"projects(first: 100)", team_projects([project_map("p1", "Manhattan Rollout")])},
+        {"projects(first: 100", team_projects([project_map("p1", "Manhattan Rollout")])},
         {"issueCreate", %{"data" => %{"issueCreate" => %{"issue" => created_issue}}}},
         {"issue(id: $id)", %{"data" => %{"issue" => created_issue}}}
       ])

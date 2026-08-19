@@ -30,6 +30,33 @@ defmodule LinearCli.Linear.ProjectTest do
     assert {:ok, [%Linear.Project{id: "p1", name: "Manhattan"}]} = Linear.projects()
   end
 
+  test "projects_by_team/1 paginates only the selected team's projects" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => variables} = Jason.decode!(body)
+
+      {projects, page_info} =
+        case variables["after"] do
+          nil ->
+            {[%{"id" => "p1", "name" => "First"}],
+             %{"hasNextPage" => true, "endCursor" => "page-1"}}
+
+          "page-1" ->
+            {[%{"id" => "p2", "name" => "Second"}],
+             %{"hasNextPage" => false, "endCursor" => "page-2"}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "team" => %{"projects" => %{"nodes" => projects, "pageInfo" => page_info}}
+        }
+      })
+    end)
+
+    assert {:ok, projects} = Linear.projects_by_team("team-1")
+    assert Enum.map(projects, & &1.id) == ["p1", "p2"]
+  end
+
   test "my_projects/0 flat-maps each of the viewer's teams' projects (Ruby: Project.mine)" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -187,6 +214,10 @@ defmodule LinearCli.Linear.ProjectTest do
 
     test "scores 100 on an exact (case-insensitive) url match", %{project: project} do
       assert Linear.Project.match_score?(project, String.upcase(project.url)) == 100
+    end
+
+    test "scores 100 when a Linear project URL ends in /issues", %{project: project} do
+      assert Linear.Project.match_score?(project, project.url <> "/issues") == 100
     end
 
     test "scores 100 when the slugified search term equals the slug", %{project: project} do

@@ -26,8 +26,7 @@ defmodule LinearCli.CLI.Projects do
     * `search` given but no project scores positively -> delegates to
       `ask_for_projects/2` (which warns "No project found matching
       \#{search}." and then prompts across *all* `projects`)
-    * exactly the positively-scoring candidates score `100` in aggregate,
-      i.e. the lowest-scoring positive match is itself a `100` (an exact
+    * any positively-scoring candidate scores `100` (an exact
       id/url/slug/name match) -> that project, no prompt
     * otherwise -> `LinearCli.CLI.Prompt.select/2` over the positively
       scoring candidates (lowest score first, per `project_scores/2`'s
@@ -44,12 +43,14 @@ defmodule LinearCli.CLI.Projects do
       [] ->
         ask_for_projects(projects, search)
 
-      [first | _] = possibles ->
-        if Project.match_score?(first, search) == 100 do
-          first
-        else
-          selections = possibles ++ (projects -- possibles)
-          Prompt.select("Project:", Enum.map(selections, &{&1.name, &1}))
+      possibles ->
+        case Enum.find(possibles, &(Project.match_score?(&1, search) == 100)) do
+          nil ->
+            selections = possibles ++ (projects -- possibles)
+            Prompt.select("Project:", Enum.map(selections, &{&1.name, &1}))
+
+          exact ->
+            exact
         end
     end
   end

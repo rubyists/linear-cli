@@ -16,6 +16,7 @@ defmodule LinearCli.Linear.Project do
 
     read :by_team do
       argument :team_id, :string, allow_nil?: false
+      argument :search, :string
       manual LinearCli.Linear.Project.Read.ByTeam
     end
 
@@ -111,11 +112,23 @@ defmodule LinearCli.Linear.Project do
   def matches_attributes?(%__MODULE__{} = project, string, attrs) do
     Enum.any?(attrs, fn attr ->
       case Map.get(project, attr) do
-        value when is_binary(value) -> String.downcase(value) == String.downcase(string)
-        _ -> false
+        value when is_binary(value) ->
+          normalize_match_value(attr, value) == normalize_match_value(attr, string)
+
+        _ ->
+          false
       end
     end)
   end
+
+  defp normalize_match_value(:url, value) do
+    value
+    |> String.trim_trailing("/")
+    |> String.trim_trailing("/issues")
+    |> String.downcase()
+  end
+
+  defp normalize_match_value(_attr, value), do: String.downcase(value)
 
   defp exact_name_or_slug_match?(project, string) do
     downed = String.downcase(string)
@@ -166,11 +179,24 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   alias LinearCli.Api
   alias LinearCli.Linear.Project
 
-  # Ruby's Team#projects fetches a single page of 100, no cursor loop.
+  @uuid ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  @slugged_reference ~r/^(.*)-([[:alnum:]]{12})$/
+
   @document """
-  query($teamId: String!) {
+  query($teamId: String!, $after: String) {
     team(id: $teamId) {
-      projects(first: 100) {
+      projects(first: 100, after: $after) {
+        nodes { #{Project.base_fields()} }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  """
+
+  @search_document """
+  query($teamId: String!, $filter: ProjectFilter!) {
+    team(id: $teamId) {
+      projects(first: 100, filter: $filter) {
         nodes { #{Project.base_fields()} }
       }
     }
@@ -180,10 +206,82 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   def read(query, _ecto_query, _opts, _context) do
     team_id = query.arguments.team_id
 
+    case Map.get(query.arguments, :search) do
+      search when is_binary(search) and search not in ["", "-"] ->
+        search(team_id, search)
+
+      _ ->
+        all(team_id)
+    end
+  end
+
+  defp search(team_id, search) do
+    variables = %{"teamId" => team_id, "filter" => project_filter(search)}
+
+    with {:ok, projects} <- fetch(@search_document, variables) do
+      if projects == [], do: all(team_id), else: {:ok, projects}
+    end
+  end
+
+  defp all(team_id), do: page(team_id, nil, [])
+
+  defp page(team_id, after_cursor, acc) do
+    variables =
+      if after_cursor,
+        do: %{"teamId" => team_id, "after" => after_cursor},
+        else: %{"teamId" => team_id}
+
+    with {:ok, %{"team" => %{"projects" => projects}}} <- Api.call(@document, variables) do
+      acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
+
+      case projects["pageInfo"] do
+        %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) ->
+          page(team_id, cursor, acc)
+
+        _ ->
+          {:ok, acc}
+      end
+    end
+  end
+
+  defp fetch(document, variables) do
     with {:ok, %{"team" => %{"projects" => %{"nodes" => nodes}}}} <-
-           Api.call(@document, %{"teamId" => team_id}) do
+           Api.call(document, variables) do
       {:ok, Enum.map(nodes, &Project.from_map/1)}
     end
+  end
+
+  defp project_filter(search) do
+    reference = project_reference(search)
+    {name, slug_id} = reference_terms(reference)
+
+    [
+      project_id_filter(search),
+      %{"name" => %{"containsIgnoreCase" => search}},
+      %{"name" => %{"containsIgnoreCase" => name}},
+      %{"slugId" => %{"eqIgnoreCase" => slug_id}}
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> then(&%{"or" => &1})
+  end
+
+  defp project_reference(search) do
+    case Regex.run(~r{/project/([^/]+)}, search, capture: :all_but_first) do
+      [reference] -> reference
+      _ -> search
+    end
+  end
+
+  defp reference_terms(reference) do
+    case Regex.run(@slugged_reference, reference, capture: :all_but_first) do
+      [slug, slug_id] -> {String.replace(slug, "-", " "), slug_id}
+      _ -> {String.replace(reference, "-", " "), reference}
+    end
+  end
+
+  defp project_id_filter(search) do
+    if Regex.match?(@uuid, search), do: %{"id" => %{"eq" => search}}
   end
 end
 

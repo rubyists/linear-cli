@@ -156,7 +156,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
           String.contains?(query, "team(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"team" => team_map("CRY")}})
 
-          String.contains?(query, "projects(first: 100)") ->
+          String.contains?(query, "projects(first: 100") ->
             Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
 
           String.contains?(query, "issues(filter") ->
@@ -197,7 +197,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
           String.contains?(query, "team(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"team" => team_map("ENG")}})
 
-          String.contains?(query, "projects(first: 100)") ->
+          String.contains?(query, "projects(first: 100") ->
             Req.Test.json(conn, team_projects([project_map("p2", "Platform Cleanup")]))
 
           String.contains?(query, "issues(filter") ->
@@ -544,7 +544,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
           String.contains?(query, "issueLabels") ->
             Req.Test.json(conn, label_response(["urgent"]))
 
-          String.contains?(query, "projects(first: 100)") ->
+          String.contains?(query, "projects(first: 100") ->
             Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
 
           String.contains?(query, "issueCreate") ->
@@ -593,7 +593,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
           String.contains?(query, "issueLabels") ->
             Req.Test.json(conn, label_response(["urgent"]))
 
-          String.contains?(query, "projects(first: 100)") ->
+          String.contains?(query, "projects(first: 100") ->
             Req.Test.json(conn, team_projects([]))
 
           String.contains?(query, "issueCreate") ->
