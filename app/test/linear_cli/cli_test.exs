@@ -413,7 +413,8 @@ defmodule LinearCli.CLITest do
             "data" => %{
               "team" => %{
                 "projects" => %{
-                  "nodes" => [%{"id" => "p2", "name" => "Roadmap", "url" => "https://x/p2"}]
+                  "nodes" => [%{"id" => "p2", "name" => "Roadmap", "url" => "https://x/p2"}],
+                  "pageInfo" => %{"hasNextPage" => false}
                 }
               }
             }

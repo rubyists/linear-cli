@@ -226,7 +226,10 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   defp all(team_id), do: page(team_id, nil, [])
 
   defp page(team_id, after_cursor, acc) do
-    variables = %{"teamId" => team_id, "after" => after_cursor}
+    variables =
+      if after_cursor,
+        do: %{"teamId" => team_id, "after" => after_cursor},
+        else: %{"teamId" => team_id}
 
     with {:ok, %{"team" => %{"projects" => projects}}} <- Api.call(@document, variables) do
       acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
