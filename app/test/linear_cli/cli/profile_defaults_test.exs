@@ -153,8 +153,11 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         query = decoded["query"]
 
         cond do
-          String.contains?(query, "projects(first: $first") ->
-            Req.Test.json(conn, all_projects([project_map("p1", "Manhattan Rollout")]))
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map("CRY")}})
+
+          String.contains?(query, "projects(first: 100)") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
 
           String.contains?(query, "issues(filter") ->
             send(test_pid, {:filter, decoded["variables"]["filter"]})
@@ -191,8 +194,11 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         query = decoded["query"]
 
         cond do
-          String.contains?(query, "projects(first: $first") ->
-            Req.Test.json(conn, all_projects([project_map("p2", "Platform Cleanup")]))
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map("ENG")}})
+
+          String.contains?(query, "projects(first: 100)") ->
+            Req.Test.json(conn, team_projects([project_map("p2", "Platform Cleanup")]))
 
           String.contains?(query, "issues(filter") ->
             send(test_pid, {:filter, decoded["variables"]["filter"]})

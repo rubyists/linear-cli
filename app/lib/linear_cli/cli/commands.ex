@@ -239,7 +239,7 @@ defmodule LinearCli.CLI.Commands do
     project_source =
       options.project || unless no_profile, do: Profiles.default_project()
 
-    with {:ok, project_id} <- resolve_project_id(project_source) do
+    with {:ok, project_id} <- resolve_project_id(project_source, team_key) do
       input = %{
         ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
         mine: !flags.no_mine,
@@ -257,9 +257,19 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
-  defp resolve_project_id(nil), do: {:ok, nil}
+  defp resolve_project_id(nil, _team_key), do: {:ok, nil}
 
-  defp resolve_project_id(search) do
+  defp resolve_project_id(search, team_key) when is_binary(team_key) do
+    with {:ok, team} <- Linear.find_team(team_key),
+         {:ok, projects} <- Linear.projects_by_team(team.id) do
+      case Projects.project_for(projects, search) do
+        nil -> {:ok, nil}
+        project -> {:ok, project.id}
+      end
+    end
+  end
+
+  defp resolve_project_id(search, _team_key) do
     with {:ok, projects} <- Linear.projects() do
       case Projects.project_for(projects, search) do
         nil -> {:ok, nil}
