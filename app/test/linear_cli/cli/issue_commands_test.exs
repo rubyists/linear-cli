@@ -186,6 +186,50 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p1"}}}}
     end
 
+    test "--project with --team resolves against team-scoped projects only" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            raise "--project with --team must not query all-workspace projects"
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100)") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "list",
+                     "--team",
+                     "ENG",
+                     "--project",
+                     "Manhattan Rollout"
+                   ])
+        end)
+
+      assert output =~ "CRY-1"
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p1"}}}}
+    end
+
     test "bare issue list applies no project filter and never queries projects at all" do
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
