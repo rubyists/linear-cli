@@ -8,6 +8,8 @@ defmodule LinearCli.Api do
   the Ruby `Issue#add_comment` path.
   """
 
+  require Logger
+
   @base_url "https://api.linear.app/graphql"
 
   @doc """
@@ -50,6 +52,22 @@ defmodule LinearCli.Api do
   # Guard: only match when data is a map (the expected shape). A null top-level
   # "data" means the entire operation failed; in that case the errors clause
   # below provides the more informative result.
+  #
+  # The more-specific partial-success clause (both keys present) runs first so
+  # the field-level errors are logged before the data is returned. The general
+  # data-only clause follows as a fallback.
+  defp handle_response(
+         {:ok,
+          %Req.Response{status: 200, body: %{"data" => data, "errors" => [_ | _] = errors}}}
+       )
+       when is_map(data) do
+    Logger.warning(
+      "Linear API partial-success: #{length(errors)} field error(s) discarded, data returned"
+    )
+
+    {:ok, data}
+  end
+
   defp handle_response({:ok, %Req.Response{status: 200, body: %{"data" => data}}})
        when is_map(data) do
     {:ok, data}
