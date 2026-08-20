@@ -332,16 +332,12 @@ defmodule LinearCli.CLITest do
     assert output =~ "Start or update development status of an issue"
   end
 
-  test "a catch-all error halts with exit code 88" do
+  test "an unexpected_response error halts with exit code 88 and a specific message" do
     # A malformed API response (neither "data" nor "errors") makes
     # LinearCli.Api return {:error, {:unexpected_response, body}}, which Ash
-    # wraps into a generic %Ash.Error.Unknown{} matching neither the
-    # not-found nor smells_bad handle_error/3 clauses - it should fall
-    # through to the catch-all. This module is async: true, so (unlike an
-    # env-var-based approach, which would race with every other
-    # concurrently-running test file that needs LINEAR_API_KEY present -
-    # exactly the class of bug this codebase already hit and fixed once)
-    # a stubbed response is the safe way to trigger this path.
+    # wraps and the explicit unexpected_response handle_error/3 clause catches.
+    # This module is async: true, so a stubbed response is the safe way to
+    # trigger this path (avoids races on LINEAR_API_KEY).
     Req.Test.stub(LinearCli.Api, fn conn -> Req.Test.json(conn, %{"wat" => true}) end)
 
     test_pid = self()
@@ -353,8 +349,70 @@ defmodule LinearCli.CLITest do
       end)
 
     assert_received {:halted, 88}
-    assert output =~ "What the heck is this?"
-    assert output =~ "** WTH? Cannot Continue **"
+    assert output =~ "Linear API returned an unexpected response."
+    assert output =~ "** API Error, Cannot Continue **"
+  end
+
+  test "an HTTP 401/403 error halts with exit code 77 and an auth-specific message" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      conn |> Plug.Conn.put_status(401) |> Req.Test.json(%{"error" => "unauthorized"})
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(:stderr, fn -> LinearCli.CLI.main(["whoami"], halt) end)
+
+    assert_received {:halted, 77}
+    assert output =~ "Linear API authentication failed (HTTP 401)"
+    assert output =~ "Check that LINEAR_API_KEY is valid."
+  end
+
+  test "an HTTP 403 error halts with exit code 77" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      conn |> Plug.Conn.put_status(403) |> Req.Test.json(%{"error" => "forbidden"})
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(:stderr, fn -> LinearCli.CLI.main(["whoami"], halt) end)
+
+    assert_received {:halted, 77}
+    assert output =~ "Linear API authentication failed (HTTP 403)"
+  end
+
+  test "a non-auth HTTP error halts with exit code 88 and includes the status code" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      conn |> Plug.Conn.put_status(500) |> Req.Test.json(%{"error" => "internal"})
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(:stderr, fn -> LinearCli.CLI.main(["whoami"], halt) end)
+
+    assert_received {:halted, 88}
+    assert output =~ "Linear API returned HTTP 500"
+    assert output =~ "** API Error, Cannot Continue **"
+  end
+
+  test "a transport error halts with exit code 69 and a network-specific message" do
+    # Req.Test.transport_error/2 simulates a transport failure (connection
+    # refused, DNS failure, etc.) - Req wraps it as {:error, %Req.TransportError{}}
+    # which Api.call converts to {:error, {:transport_error, exception}}.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.transport_error(conn, :econnrefused)
+    end)
+
+    test_pid = self()
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    output = capture_io(:stderr, fn -> LinearCli.CLI.main(["whoami"], halt) end)
+
+    assert_received {:halted, 69}
+    assert output =~ "Could not reach the Linear API."
+    assert output =~ "** Network error, cannot continue **"
   end
 
   test "a bare parent command (no leaf subcommand) shows that path's help and exits 1" do
@@ -374,15 +432,26 @@ defmodule LinearCli.CLITest do
   end
 
   test "an unexpected raise (not a returned error) still degrades to exit 88, not a raw crash" do
-    # A malformed API response (no "viewer" key at all) makes the manual
-    # read return {:ok, %{}} instead of {:ok, [records]}, which Ash's own
-    # manual-action-return validation *raises* on - a genuine exception, not
-    # a {:error, reason} tuple. run/3's handle_error/3 only ever sees
-    # returned values; this proves the main/1-level rescue (Ruby's
-    # Caller#call had a blanket `rescue StandardError` - ours previously
-    # only caught returned errors, not actual crashes) catches real bugs
-    # too, not just this one known case.
-    Req.Test.stub(LinearCli.Api, fn conn -> Req.Test.json(conn, %{"data" => %{}}) end)
+    # A response that passes User.Read.Me's shape checks (viewer is a map)
+    # but contains a nil teams node causes Team.from_map(nil) to raise a
+    # Protocol.UndefinedError inside User.from_map - a genuine exception, not
+    # a {:error, reason} tuple. This proves the main/1-level rescue catches
+    # real code bugs too, not just the known {:error, reason} paths.
+    # "nodes" is a string, not a list — Enum.map/2 raises Protocol.UndefinedError
+    # because String doesn't implement Enumerable. (nil nodes don't raise: nil["id"]
+    # returns nil in Elixir since Atom implements Access.)
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{
+        "data" => %{
+          "viewer" => %{
+            "id" => "u1",
+            "name" => "Ada",
+            "email" => "ada@example.com",
+            "teams" => %{"nodes" => "not_a_list"}
+          }
+        }
+      })
+    end)
 
     test_pid = self()
     halt = fn code -> send(test_pid, {:halted, code}) end

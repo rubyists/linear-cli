@@ -119,6 +119,18 @@ defmodule LinearCli.Linear.IssueTest do
     assert issue.state.name == "Done"
   end
 
+  test "issues/0 returns an unexpected_response error when the connection field is absent" do
+    # Paginate.all/5 used to crash with KeyError when the expected "issues"
+    # field was missing from the API response. fetch_connection/2 now converts
+    # that to {:error, {:unexpected_response, ...}} instead.
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"something_else" => %{}}})
+    end)
+
+    assert {:error, %Ash.Error.Unknown{errors: [%{value: [{:unexpected_response, _}]}]}} =
+             Linear.issues()
+  end
+
   test "issues/1 with an unknown id returns a not_found error" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{"data" => %{"issue" => nil}})
