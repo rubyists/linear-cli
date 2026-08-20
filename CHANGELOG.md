@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/rubyists/linear-cli/compare/v2.0.0...v2.0.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* bypass burrito proxy writer when output is to a terminal ([#166](https://github.com/rubyists/linear-cli/issues/166)) ([070a1d6](https://github.com/rubyists/linear-cli/commit/070a1d68ec6d8487a9bf5542b1beb891bcf42367))
+
 ## [2.0.0](https://github.com/rubyists/linear-cli/compare/v1.16.0...v2.0.0) (2026-08-20)
 
 
