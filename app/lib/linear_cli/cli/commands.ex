@@ -18,9 +18,12 @@ defmodule LinearCli.CLI.Commands do
   @doc """
   Ported from commands/version.rb, extended to respect the global
   `--output json` option like every other command does - previously
-  ignored it and always printed plain text.
+  ignored it and always printed plain text. The hidden Markdown render makes
+  this command a complete release smoke test for mdex_native's NIF as well as
+  the application boot path.
   """
   def version(%{options: options}) do
+    verify_markdown_runtime!()
     version = to_string(Application.spec(:linear_cli, :vsn))
 
     if options.output == "json" do
@@ -29,6 +32,11 @@ defmodule LinearCli.CLI.Commands do
       IO.puts(version)
     end
 
+    :ok
+  end
+
+  defp verify_markdown_runtime! do
+    _rendered = Marcli.render("runtime check", escape_sequences: false)
     :ok
   end
 
