@@ -63,9 +63,18 @@ defmodule LinearCli.Linear.Label.Read.ByNames do
   def read(query, _ecto_query, _opts, _context) do
     names = query.arguments.names
 
-    with {:ok, %{"issueLabels" => %{"edges" => edges}}} <-
-           Api.call(@document, %{"names" => names}) do
-      {:ok, Enum.map(edges, &Label.from_map(&1["node"]))}
+    case Api.call(@document, %{"names" => names}) do
+      {:ok, %{"issueLabels" => %{"edges" => edges}}} ->
+        {:ok, Enum.map(edges, &Label.from_map(&1["node"]))}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end
@@ -104,14 +113,23 @@ defmodule LinearCli.Linear.Label.Read.ByTeam do
   def read(query, _ecto_query, _opts, _context) do
     team_id = query.arguments.team_id
 
-    with {:ok, %{"team" => %{"labels" => %{"nodes" => nodes}}}} <-
-           Api.call(@document, %{"teamId" => team_id}) do
-      labels =
-        nodes
-        |> Enum.reject(&(&1["isGroup"] || &1["parent"]))
-        |> Enum.map(&Label.from_map/1)
+    case Api.call(@document, %{"teamId" => team_id}) do
+      {:ok, %{"team" => %{"labels" => %{"nodes" => nodes}}}} ->
+        labels =
+          nodes
+          |> Enum.reject(&(&1["isGroup"] || &1["parent"]))
+          |> Enum.map(&Label.from_map/1)
 
-      {:ok, labels}
+        {:ok, labels}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

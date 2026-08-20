@@ -231,23 +231,42 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
         do: %{"teamId" => team_id, "after" => after_cursor},
         else: %{"teamId" => team_id}
 
-    with {:ok, %{"team" => %{"projects" => projects}}} <- Api.call(@document, variables) do
-      acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
+    case Api.call(@document, variables) do
+      {:ok, %{"team" => %{"projects" => projects}}} ->
+        acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
 
-      case projects["pageInfo"] do
-        %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) ->
-          page(team_id, cursor, acc)
+        case projects["pageInfo"] do
+          %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) ->
+            page(team_id, cursor, acc)
 
-        _ ->
-          {:ok, acc}
-      end
+          _ ->
+            {:ok, acc}
+        end
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
   defp fetch(document, variables) do
-    with {:ok, %{"team" => %{"projects" => %{"nodes" => nodes}}}} <-
-           Api.call(document, variables) do
-      {:ok, Enum.map(nodes, &Project.from_map/1)}
+    case Api.call(document, variables) do
+      {:ok, %{"team" => %{"projects" => %{"nodes" => nodes}}}} ->
+        {:ok, Enum.map(nodes, &Project.from_map/1)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -295,9 +314,18 @@ defmodule LinearCli.Linear.Project.Read.ByName do
   def read(query, _ecto_query, _opts, _context) do
     name = query.arguments.name
 
-    with {:ok, %{"projects" => %{"nodes" => nodes}}} <-
-           Api.call(document(), %{"name" => name}) do
-      {:ok, Enum.map(nodes, &Project.from_map/1)}
+    case Api.call(document(), %{"name" => name}) do
+      {:ok, %{"projects" => %{"nodes" => nodes}}} ->
+        {:ok, Enum.map(nodes, &Project.from_map/1)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

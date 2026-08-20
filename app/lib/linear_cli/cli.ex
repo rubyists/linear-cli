@@ -353,6 +353,63 @@ defmodule LinearCli.CLI do
     halt.(88)
   end
 
+  # LinearCli.Api.call/2's {:error, {:http_error, status, body}} for 401/403 -
+  # bad or expired API key. Give a targeted message instead of dumping the raw
+  # error structure. ManualRead else clauses normalize the 3-tuple to 2-tuple
+  # {:http_error, status} so Ash (via Splode) stores it in value: [{:http_error, status}].
+  defp handle_error(
+         %Ash.Error.Unknown{errors: [%{value: [{:http_error, status}]} | _]},
+         debug,
+         halt
+       )
+       when status in [401, 403] do
+    IO.puts(:stderr, "Linear API authentication failed (HTTP #{status}).")
+    IO.puts(:stderr, "Check that LINEAR_API_KEY is valid.")
+    IO.puts(:stderr, "** Authentication error, cannot continue **")
+    maybe_print_backtrace(debug)
+    halt.(77)
+  end
+
+  # LinearCli.Api.call/2's {:error, {:http_error, status, body}} for any other
+  # non-200 status (rate-limit 429, server errors 5xx, etc.).
+  defp handle_error(
+         %Ash.Error.Unknown{errors: [%{value: [{:http_error, status}]} | _]},
+         debug,
+         halt
+       ) do
+    IO.puts(:stderr, "Linear API returned HTTP #{status}.")
+    IO.puts(:stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug)
+    halt.(88)
+  end
+
+  # LinearCli.Api.call/2's {:error, {:transport_error, exception}} - DNS failure,
+  # timeout, connection refused, etc. Ash wraps as %{value: [{:transport_error, ...}]}.
+  defp handle_error(
+         %Ash.Error.Unknown{errors: [%{value: [{:transport_error, _exception}]} | _]},
+         debug,
+         halt
+       ) do
+    IO.puts(:stderr, "Could not reach the Linear API.")
+    IO.puts(:stderr, "** Network error, cannot continue **")
+    maybe_print_backtrace(debug)
+    halt.(69)
+  end
+
+  # LinearCli.Api.call/2's {:error, {:unexpected_response, body}} - a 200 with
+  # neither "data" nor "errors", or a caller that received an unexpected data shape.
+  # More specific than the catch-all so users get a targeted message.
+  defp handle_error(
+         %Ash.Error.Unknown{errors: [%{value: [{:unexpected_response, _body}]} | _]},
+         debug,
+         halt
+       ) do
+    IO.puts(:stderr, "Linear API returned an unexpected response.")
+    IO.puts(:stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug)
+    halt.(88)
+  end
+
   # Ported from CLI::Caller#call's catch-all `rescue StandardError` clause.
   defp handle_error(error, debug, halt) do
     IO.puts(:stderr, "What the heck is this? #{Exception.format_banner(:error, error)}")

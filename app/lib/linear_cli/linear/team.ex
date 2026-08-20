@@ -94,11 +94,21 @@ defmodule LinearCli.Linear.Team.Read.Find do
   def read(query, _ecto_query, _opts, _context) do
     id = query.arguments.id
 
-    with {:ok, %{"team" => team_map}} <- Api.call(document(), %{"id" => id}) do
-      case team_map do
-        nil -> {:ok, []}
-        _ -> {:ok, [Team.from_map(team_map)]}
-      end
+    case Api.call(document(), %{"id" => id}) do
+      {:ok, %{"team" => nil}} ->
+        {:ok, []}
+
+      {:ok, %{"team" => team_map}} ->
+        {:ok, [Team.from_map(team_map)]}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
