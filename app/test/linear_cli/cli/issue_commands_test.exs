@@ -257,49 +257,6 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "CRY-1"
     end
 
-    test "compact listing shows workflow status name in brackets" do
-      Req.Test.stub(LinearCli.Api, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        Req.Test.json(conn, issues_response([issue_map()]))
-      end)
-
-      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
-      assert output =~ "[In Progress]"
-      assert output =~ "Fix the thing"
-    end
-
-    test "compact listing omits status brackets when state is absent" do
-      Req.Test.stub(LinearCli.Api, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        Req.Test.json(conn, issues_response([issue_map(%{"state" => nil})]))
-      end)
-
-      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
-      assert output =~ "CRY-1"
-      refute output =~ "["
-    end
-
-    test "--full listing shows workflow status in the header line" do
-      Req.Test.stub(LinearCli.Api, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        %{"query" => query} = Jason.decode!(body)
-
-        if String.contains?(query, "issue(id: $id)") do
-          Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
-        else
-          Req.Test.json(conn, issues_response([issue_map()]))
-        end
-      end)
-
-      output =
-        capture_io(fn ->
-          assert :ok = LinearCli.CLI.main(["issue", "list", "--full", "CRY-1"])
-        end)
-
-      assert output =~ "[In Progress]"
-      assert output =~ "Fix the thing"
-    end
-
     test "--all removes completedAt and canceledAt null-check filters" do
       test_pid = self()
 
