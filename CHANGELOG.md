@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/rubyists/linear-cli/compare/v1.16.0...v2.0.0) (2026-08-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **linux:** bundle an mdex musl libgcc runtime ([#164](https://github.com/rubyists/linear-cli/issues/164))
+
+### Bug Fixes
+
+* **linux:** bundle an mdex musl libgcc runtime ([#164](https://github.com/rubyists/linear-cli/issues/164)) ([377c1d9](https://github.com/rubyists/linear-cli/commit/377c1d92da1303c9d258ceaad22d7d02e358ab11))
+
 ## [1.16.0](https://github.com/rubyists/linear-cli/compare/v1.15.2...v1.16.0) (2026-08-20)
 
 
