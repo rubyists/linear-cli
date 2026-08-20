@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.16.0](https://github.com/rubyists/linear-cli/compare/v1.15.2...v1.16.0) (2026-08-20)
+
+
+### Features
+
+* **EXT-5:** show workflow status in compact and full issue listings ([#162](https://github.com/rubyists/linear-cli/issues/162)) ([acf35e5](https://github.com/rubyists/linear-cli/commit/acf35e5483d5312ab1bd43db9cf6901e6c9d26d2))
+
+
+### Bug Fixes
+
+* **EXT-4:** handle GraphQL error and partial-data responses explicitly ([#160](https://github.com/rubyists/linear-cli/issues/160)) ([31359ef](https://github.com/rubyists/linear-cli/commit/31359effcc63b7e8472a3f1158a54bea77882d83))
+* **EXT-7:** bundle musl NIF for Linux Burrito releases and container ([#163](https://github.com/rubyists/linear-cli/issues/163)) ([3172d4e](https://github.com/rubyists/linear-cli/commit/3172d4ef88f786be18eedbb334232bc8b805a575))
+
 ## [1.15.2](https://github.com/rubyists/linear-cli/compare/v1.15.1...v1.15.2) (2026-08-19)
 
 
