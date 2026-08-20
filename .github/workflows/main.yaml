@@ -66,7 +66,10 @@ jobs:
       # (used by mdex_native) downloads the correct precompiled NIF for the
       # target platform. Cross-compiling from Ubuntu caused the Linux NIF to
       # be bundled into macOS/Windows releases, making MDEx unavailable at
-      # runtime (see CRY-40).
+      # runtime (see CRY-40). Linux targets also get a pre-compile step that
+      # forces the musl NIF variant, since Ubuntu runners auto-select the
+      # glibc NIF but Burrito Linux binaries run on musl-based systems (see
+      # EXT-7).
       matrix:
         include:
           - target: macos_aarch64
@@ -104,6 +107,27 @@ jobs:
           version: "0.16.0"
       -
         run: mix deps.get
+      -
+        # rustler_precompiled resolves the NIF target at compile time from
+        # :erlang.system_info(:system_architecture), which is always glibc on
+        # Ubuntu runners. Burrito bundles its own musl runtime for Linux and
+        # the container runs Alpine - both need the musl NIF, not glibc.
+        # TARGET_ABI=musl tells rustler_precompiled to download the musl
+        # variant. cc_precompiler (used by exqlite) also reads TARGET_ABI, but
+        # is safe here for two reasons: (a) the env: block is step-scoped, so
+        # mix release in the next step does not inherit TARGET_ABI, and (b) mix
+        # deps.compile only compiles the named deps, not exqlite, so
+        # cc_precompiler never runs during this step. mix release sees mdex_native already
+        # compiled and skips it, bundling the musl .so from _build/prod.
+        # rustler_precompiled is listed first because mix deps.compile only
+        # compiles the named deps (not their transitive deps), and mdex_native
+        # uses it via `use RustlerPrecompiled` at compile time. See EXT-7.
+        if: startsWith(matrix.target, 'linux_')
+        name: Pre-compile mdex_native with the musl NIF
+        env:
+          MIX_ENV: prod
+          TARGET_ABI: musl
+        run: mix deps.compile rustler_precompiled mdex_native
       -
         name: Build the ${{ matrix.target }} target
         run: MIX_ENV=prod BURRITO_TARGET=${{ matrix.target }} mix release lc
@@ -317,6 +341,17 @@ jobs:
         run: mix deps.get
         working-directory: app
       -
+        # Same reasoning as the burrito-build pre-compile step: Ubuntu runners
+        # default to the glibc NIF, but the container image runs Alpine (musl).
+        # rustler_precompiled listed first for the same reason as there. See
+        # EXT-7.
+        name: Pre-compile mdex_native with the musl NIF
+        env:
+          MIX_ENV: prod
+          TARGET_ABI: musl
+        run: mix deps.compile rustler_precompiled mdex_native
+        working-directory: app
+      -
         name: Build the linux_x86_64 target (container's payload)
         run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
         working-directory: app
@@ -325,6 +360,22 @@ jobs:
         env:
           APP_VERSION: ${{ needs.burrito-package.outputs.tag_name }}
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
+      -
+        # Verify the musl NIF actually loads on Alpine before publishing.
+        # Analogous to the linux_aarch64 native smoke test in burrito-build:
+        # `lc version` boots the OTP app, loads all NIFs (exqlite via
+        # elixir_make/Zig, mdex_native via rustler_precompiled with the musl
+        # NIF bundled by the pre-compile step above), prints the version, and
+        # exits 0. No API key or network needed. ci/build_image.sh prefers
+        # Podman, so the image lives in Podman's local storage; we run it
+        # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
+        # overridden to false (the image bakes in true so the default CMD
+        # starts the daemon; without this override the app ignores `version`
+        # and stays alive as a daemon, timing out the step). See EXT-7.
+        name: Smoke-test the container image boots and NIFs load on Alpine/musl
+        timeout-minutes: 1
+        run: |
+          podman run --rm -e LINEAR_CLI_DAEMON=false "linear-cli:${{ needs.burrito-package.outputs.tag_name }}" lc version
       -
         # ci/build_image.sh prefers Podman over Docker (both are present on
         # GitHub-hosted runners), so the image above lives only in Podman's
