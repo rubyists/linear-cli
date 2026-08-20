@@ -57,8 +57,7 @@ defmodule LinearCli.Api do
   # the field-level errors are logged before the data is returned. The general
   # data-only clause follows as a fallback.
   defp handle_response(
-         {:ok,
-          %Req.Response{status: 200, body: %{"data" => data, "errors" => [_ | _] = errors}}}
+         {:ok, %Req.Response{status: 200, body: %{"data" => data, "errors" => [_ | _] = errors}}}
        )
        when is_map(data) do
     Logger.warning(

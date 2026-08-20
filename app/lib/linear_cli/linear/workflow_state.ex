@@ -59,13 +59,18 @@ defmodule LinearCli.Linear.WorkflowState.Read.ByTeam do
   def read(query, _ecto_query, _opts, _context) do
     team_id = query.arguments.team_id
 
-    with {:ok, %{"team" => %{"states" => %{"nodes" => nodes}}}} <-
-           Api.call(@document, %{"teamId" => team_id}) do
-      {:ok, Enum.map(nodes, &WorkflowState.from_map/1)}
-    else
-      {:ok, other} -> {:error, {:unexpected_response, other}}
-      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
-      {:error, reason} -> {:error, reason}
+    case Api.call(@document, %{"teamId" => team_id}) do
+      {:ok, %{"team" => %{"states" => %{"nodes" => nodes}}}} ->
+        {:ok, Enum.map(nodes, &WorkflowState.from_map/1)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end
