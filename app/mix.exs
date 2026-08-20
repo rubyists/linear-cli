@@ -5,7 +5,7 @@ defmodule LinearCli.MixProject do
     [
       app: :linear_cli,
       # x-release-please-start-version
-      version: "1.15.2",
+      version: "1.16.0",
       # x-release-please-end
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
