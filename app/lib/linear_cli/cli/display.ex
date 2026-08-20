@@ -68,7 +68,8 @@ defmodule LinearCli.CLI.Display do
   end
 
   defp issue_line(issue) do
-    basic = "#{String.pad_trailing(issue.identifier || "", 12)} #{issue.title}"
+    state = if issue.state, do: "[#{issue.state.name}] ", else: ""
+    basic = "#{String.pad_trailing(issue.identifier || "", 12)} #{state}#{issue.title}"
     if issue.assignee, do: "#{basic} (#{issue.assignee.name})", else: basic
   end
 
