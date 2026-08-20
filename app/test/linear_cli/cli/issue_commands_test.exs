@@ -73,6 +73,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
         "branchName" => "cry-1-fix-the-thing",
         "description" => "It is broken",
         "assignee" => nil,
+        "state" => %{"id" => "s1", "name" => "In Progress", "type" => "started"},
         "team" => team_map(),
         "comments" => %{"nodes" => []}
       },
@@ -256,6 +257,49 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "CRY-1"
     end
 
+    test "compact listing shows workflow status name in brackets" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+      assert output =~ "[In Progress]"
+      assert output =~ "Fix the thing"
+    end
+
+    test "compact listing omits status brackets when state is absent" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        Req.Test.json(conn, issues_response([issue_map(%{"state" => nil})]))
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+      assert output =~ "CRY-1"
+      refute output =~ "["
+    end
+
+    test "--full listing shows workflow status in the header line" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        if String.contains?(query, "issue(id: $id)") do
+          Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+        else
+          Req.Test.json(conn, issues_response([issue_map()]))
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--full", "CRY-1"])
+        end)
+
+      assert output =~ "[In Progress]"
+      assert output =~ "Fix the thing"
+    end
+
     test "--all removes completedAt and canceledAt null-check filters" do
       test_pid = self()
 
@@ -378,6 +422,62 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       end
 
       assert_received {:halted, 1}
+    end
+
+    test "compact listing includes workflow state name in brackets" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        if String.contains?(query, "projects(") do
+          raise "issue list must not query projects when --project wasn't given"
+        end
+
+        Req.Test.json(
+          conn,
+          issues_response([
+            issue_map(%{"state" => %{"id" => "s2", "name" => "In Review", "type" => "started"}})
+          ])
+        )
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+      assert output =~ "[In Review]"
+      assert output =~ "Fix the thing"
+    end
+
+    test "compact listing omits state bracket when state is nil" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+        Req.Test.json(conn, issues_response([issue_map(%{"state" => nil})]))
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+      assert output =~ "CRY-1"
+      refute output =~ "["
+    end
+
+    test "--full listing includes workflow state name in header" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" =>
+              issue_map(%{"state" => %{"id" => "s3", "name" => "Done", "type" => "completed"}})
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--full", "CRY-1"])
+        end)
+
+      assert output =~ "[Done]"
+      assert output =~ "Fix the thing"
     end
   end
 

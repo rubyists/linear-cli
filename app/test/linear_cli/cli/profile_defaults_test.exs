@@ -73,6 +73,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         "branchName" => "cry-1-fix-the-thing",
         "description" => "It is broken",
         "assignee" => nil,
+        "state" => %{"id" => "s1", "name" => "In Progress", "type" => "started"},
         "team" => team_map("ENG"),
         "comments" => %{"nodes" => []}
       },
