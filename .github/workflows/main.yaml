@@ -113,11 +113,11 @@ jobs:
         # Ubuntu runners. Burrito bundles its own musl runtime for Linux and
         # the container runs Alpine - both need the musl NIF, not glibc.
         # TARGET_ABI=musl tells rustler_precompiled to download the musl
-        # variant. cc_precompiler (used by exqlite) also reads TARGET_ABI but
-        # only activates the override when TARGET_ARCH and TARGET_OS are ALSO
-        # set, so setting TARGET_ABI alone here is safe. Pre-compiling just
-        # this dep (not running mix release with the env) keeps exqlite's own
-        # compile path unaffected. mix release sees mdex_native already
+        # variant. cc_precompiler (used by exqlite) also reads TARGET_ABI, but
+        # is safe here for two reasons: (a) the env: block is step-scoped, so
+        # mix release in the next step does not inherit TARGET_ABI, and (b) mix
+        # deps.compile only compiles the named deps, not exqlite, so
+        # cc_precompiler never runs during this step. mix release sees mdex_native already
         # compiled and skips it, bundling the musl .so from _build/prod.
         # rustler_precompiled is listed first because mix deps.compile only
         # compiles the named deps (not their transitive deps), and mdex_native
