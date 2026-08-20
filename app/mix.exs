@@ -1,3 +1,5 @@
+Code.require_file("release/burrito_patches.exs", __DIR__)
+
 defmodule LinearCli.MixProject do
   use Mix.Project
 
@@ -27,7 +29,7 @@ defmodule LinearCli.MixProject do
   defp releases do
     [
       lc: [
-        steps: [:assemble, &Burrito.wrap/1],
+        steps: [:assemble, &LinearCli.Release.BurritoPatches.patch_release/1, &Burrito.wrap/1],
         burrito: [
           targets: [
             macos_aarch64: [os: :darwin, cpu: :aarch64],
