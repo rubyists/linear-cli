@@ -117,8 +117,9 @@ jobs:
         # is safe here for two reasons: (a) the env: block is step-scoped, so
         # mix release in the next step does not inherit TARGET_ABI, and (b) mix
         # deps.compile only compiles the named deps, not exqlite, so
-        # cc_precompiler never runs during this step. mix release sees mdex_native already
-        # compiled and skips it, bundling the musl .so from _build/prod.
+        # cc_precompiler never runs during this step. mix release sees
+        # mdex_native already compiled and skips it, bundling the musl .so
+        # from _build/prod.
         # rustler_precompiled is listed first because mix deps.compile only
         # compiles the named deps (not their transitive deps), and mdex_native
         # uses it via `use RustlerPrecompiled` at compile time. See EXT-7.
@@ -128,6 +129,14 @@ jobs:
           MIX_ENV: prod
           TARGET_ABI: musl
         run: mix deps.compile rustler_precompiled mdex_native
+      -
+        # mdex_native's precompiled musl NIF dynamically needs libgcc_s.
+        # Burrito's musl loader otherwise finds the Ubuntu host's glibc copy
+        # first and rejects it at runtime. Bundle Alpine's compatible runtime
+        # under a unique name and patch the NIF to select it deterministically.
+        if: startsWith(matrix.target, 'linux_')
+        name: Bundle mdex_native's musl libgcc runtime
+        run: ../ci/bundle_mdex_musl_libgcc.sh
       -
         name: Build the ${{ matrix.target }} target
         run: MIX_ENV=prod BURRITO_TARGET=${{ matrix.target }} mix release lc
@@ -157,19 +166,16 @@ jobs:
               fi
           fi
       -
-        # Smoke-test the linux_aarch64 binary on the native ARM64 runner:
-        # proves the binary executes (right architecture), the OTP app boots,
-        # and all NIFs (exqlite via elixir_make/Zig, mdex_native via
-        # rustler_precompiled) load correctly. `lc version` runs in
-        # interactive mode (no LINEAR_CLI_DAEMON=true), starts an empty
-        # supervisor, prints the version, and exits 0 - no API key or network
-        # needed. Only runs for linux_aarch64 because that's the only target
-        # whose runner architecture matches the binary (macos/Windows smoke
-        # tests are out of scope for CRY-48).
-        if: matrix.target == 'linux_aarch64'
-        name: Smoke-test the linux_aarch64 binary boots and NIFs load
+        # Both Linux targets build on native matching runners. `lc version`
+        # boots the application and performs a hidden Marcli render, forcing
+        # mdex_native and its NIF to load before the command can exit 0. No API
+        # key or network is needed. macOS/Windows runtime smoke tests remain
+        # out of scope because their hosted runners are not all native to the
+        # configured Burrito targets.
+        if: startsWith(matrix.target, 'linux_')
+        name: Smoke-test the ${{ matrix.target }} binary and Markdown NIF
         timeout-minutes: 1
-        run: ./burrito_out/lc_linux_aarch64 version
+        run: ./burrito_out/lc_${{ matrix.target }} version
       -
         # Handed off to burrito-package below, which needs every target's
         # binary gathered back into one place before it can build the
@@ -352,6 +358,12 @@ jobs:
         run: mix deps.compile rustler_precompiled mdex_native
         working-directory: app
       -
+        # Apply the same musl libgcc repair as the standalone Linux binaries;
+        # this release is copied into the Alpine container image below.
+        name: Bundle mdex_native's musl libgcc runtime
+        run: ../ci/bundle_mdex_musl_libgcc.sh
+        working-directory: app
+      -
         name: Build the linux_x86_64 target (container's payload)
         run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
         working-directory: app
@@ -362,11 +374,10 @@ jobs:
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Verify the musl NIF actually loads on Alpine before publishing.
-        # Analogous to the linux_aarch64 native smoke test in burrito-build:
-        # `lc version` boots the OTP app, loads all NIFs (exqlite via
-        # elixir_make/Zig, mdex_native via rustler_precompiled with the musl
-        # NIF bundled by the pre-compile step above), prints the version, and
-        # exits 0. No API key or network needed. ci/build_image.sh prefers
+        # `lc version` boots the OTP app and performs a hidden Markdown render,
+        # forcing mdex_native's NIF and its bundled libgcc runtime to load.
+        # It then prints the version and exits 0; no API key or network is
+        # needed. ci/build_image.sh prefers
         # Podman, so the image lives in Podman's local storage; we run it
         # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
         # overridden to false (the image bakes in true so the default CMD
