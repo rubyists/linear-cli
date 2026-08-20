@@ -3,6 +3,26 @@ defmodule LinearCli.Release.BurritoPatchesTest do
 
   alias LinearCli.Release.BurritoPatches
 
+  @unpatched_launcher ~S"""
+      // On Unix: pipe child stdout through us so we can detect EPIPE from
+      // the downstream consumer (e.g. `app cmd | head -5`). When the consumer
+      // exits and breaks the pipe, the copy thread kills the BEAM child.
+      // On Windows: inherit stdout directly — std.c.read blocks on Windows
+      // pipes, and the EPIPE group-leader hang is Unix-specific anyway.
+      var child: std.process.Child = undefined;
+      var copy_thread: ?std.Thread = null;
+
+      if (builtin.os.tag != .windows) {
+          // The rest of the spawn block is irrelevant to the source patch.
+      }
+
+      const term = if (builtin.os.tag != .windows)
+          child.wait(io) catch {
+              copy_thread.?.join();
+              std.process.exit(0);
+          }
+  """
+
   test "inherits stdout directly when Burrito is connected to a terminal" do
     launcher_path = Path.expand("../../../deps/burrito/src/erlang_launcher.zig", __DIR__)
     source = File.read!(launcher_path)
@@ -20,5 +40,34 @@ defmodule LinearCli.Release.BurritoPatchesTest do
     assert_raise RuntimeError, ~r/no longer matches the expected source/, fn ->
       BurritoPatches.patch_source!("a different upstream implementation")
     end
+  end
+
+  test "matches LF Burrito source when the release hook was checked out with CRLF" do
+    patch_module_path = Path.expand("../../../release/burrito_patches.exs", __DIR__)
+
+    crlf_module_source =
+      patch_module_path
+      |> File.read!()
+      |> String.replace(
+        "defmodule LinearCli.Release.BurritoPatches do",
+        "defmodule LinearCli.Release.BurritoPatchesCRLF do"
+      )
+      |> String.replace(~r/\r?\n/, "\r\n")
+
+    [{crlf_module, _bytecode}] = Code.compile_string(crlf_module_source)
+    patched = crlf_module.patch_source!(@unpatched_launcher)
+
+    assert patched =~ "const stdout_is_tty = Io.File.stdout().isTty(io) catch false;"
+    assert patched =~ "if (builtin.os.tag != .windows and !stdout_is_tty)"
+    refute patched =~ "copy_thread.?.join();"
+  end
+
+  test "preserves CRLF when Burrito's source uses CRLF" do
+    source = String.replace(@unpatched_launcher, "\n", "\r\n")
+    patched = BurritoPatches.patch_source!(source)
+
+    assert patched =~ "\r\n"
+    refute patched =~ ~r/(?<!\r)\n/
+    assert BurritoPatches.patch_source!(patched) == patched
   end
 end

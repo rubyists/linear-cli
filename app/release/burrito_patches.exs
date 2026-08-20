@@ -67,25 +67,44 @@ defmodule LinearCli.Release.BurritoPatches do
 
   @doc false
   def patch_source!(source) when is_binary(source) do
-    cond do
-      contains_both?(source, @tty_aware_proxy, @conditional_error_join) ->
-        source
+    newline = newline_style(source)
+    normalized_source = normalize_newlines(source)
+    always_proxy = normalize_newlines(@always_proxy)
+    tty_aware_proxy = normalize_newlines(@tty_aware_proxy)
+    unconditional_error_join = normalize_newlines(@unconditional_error_join)
+    conditional_error_join = normalize_newlines(@conditional_error_join)
 
-      contains_both?(source, @always_proxy, @unconditional_error_join) ->
-        source
-        |> String.replace(@always_proxy, @tty_aware_proxy)
-        |> String.replace(@unconditional_error_join, @conditional_error_join)
+    patched =
+      cond do
+        contains_both?(normalized_source, tty_aware_proxy, conditional_error_join) ->
+          normalized_source
 
-      true ->
-        raise """
-        Burrito's stdout launcher no longer matches the expected source. Refusing to
-        build without checking whether the terminal inheritance fix is still needed.
-        This temporary patch tracks #{@upstream_pr}.
-        """
-    end
+        contains_both?(normalized_source, always_proxy, unconditional_error_join) ->
+          normalized_source
+          |> String.replace(always_proxy, tty_aware_proxy)
+          |> String.replace(unconditional_error_join, conditional_error_join)
+
+        true ->
+          raise """
+          Burrito's stdout launcher no longer matches the expected source. Refusing to
+          build without checking whether the terminal inheritance fix is still needed.
+          This temporary patch tracks #{@upstream_pr}.
+          """
+      end
+
+    restore_newlines(patched, newline)
   end
 
   defp contains_both?(source, first, second) do
     String.contains?(source, first) and String.contains?(source, second)
   end
+
+  defp newline_style(source) do
+    if String.contains?(source, "\r\n"), do: :crlf, else: :lf
+  end
+
+  defp normalize_newlines(source), do: String.replace(source, "\r\n", "\n")
+
+  defp restore_newlines(source, :crlf), do: String.replace(source, "\n", "\r\n")
+  defp restore_newlines(source, :lf), do: source
 end
