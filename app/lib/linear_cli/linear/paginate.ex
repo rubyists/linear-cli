@@ -23,8 +23,9 @@ defmodule LinearCli.Linear.Paginate do
   end
 
   defp do_all(document, field_name, variables_fun, decode_fun, after_cursor, max, acc) do
-    with {:ok, data} <- Api.call(document, variables_fun.(after_cursor)) do
-      %{"edges" => edges, "pageInfo" => page_info} = Map.fetch!(data, field_name)
+    with {:ok, data} <- Api.call(document, variables_fun.(after_cursor)),
+         {:ok, %{"edges" => edges, "pageInfo" => page_info}} <-
+           fetch_connection(data, field_name) do
       acc = acc ++ Enum.map(edges, &decode_fun.(&1["node"]))
 
       if length(acc) >= max or !page_info["hasNextPage"] do
@@ -32,6 +33,25 @@ defmodule LinearCli.Linear.Paginate do
       else
         do_all(document, field_name, variables_fun, decode_fun, page_info["endCursor"], max, acc)
       end
+    else
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  # Safely extracts the named connection from the response data. Returns
+  # {:error, {:unexpected_response, ...}} instead of crashing with KeyError
+  # when the field is absent or not the expected connection shape.
+  defp fetch_connection(data, field_name) do
+    case data do
+      %{^field_name => %{"edges" => _, "pageInfo" => _} = connection} ->
+        {:ok, connection}
+
+      %{^field_name => other} ->
+        {:error, {:unexpected_response, other}}
+
+      _ ->
+        {:error, {:unexpected_response, data}}
     end
   end
 end

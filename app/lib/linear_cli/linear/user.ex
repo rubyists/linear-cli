@@ -55,8 +55,12 @@ defmodule LinearCli.Linear.User.Read.Me do
   def read(_query, _ecto_query, _opts, _context) do
     document = "{ viewer { #{User.fields_with_teams()} } }"
 
-    with {:ok, %{"viewer" => viewer}} <- Api.call(document) do
+    with {:ok, %{"viewer" => viewer}} when is_map(viewer) <- Api.call(document) do
       {:ok, [User.from_map(viewer)]}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 end

@@ -99,6 +99,10 @@ defmodule LinearCli.Linear.Team.Read.Find do
         nil -> {:ok, []}
         _ -> {:ok, [Team.from_map(team_map)]}
       end
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 

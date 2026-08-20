@@ -62,6 +62,10 @@ defmodule LinearCli.Linear.WorkflowState.Read.ByTeam do
     with {:ok, %{"team" => %{"states" => %{"nodes" => nodes}}}} <-
            Api.call(@document, %{"teamId" => team_id}) do
       {:ok, Enum.map(nodes, &WorkflowState.from_map/1)}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 end

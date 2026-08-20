@@ -241,6 +241,10 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
         _ ->
           {:ok, acc}
       end
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -248,6 +252,10 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
     with {:ok, %{"team" => %{"projects" => %{"nodes" => nodes}}}} <-
            Api.call(document, variables) do
       {:ok, Enum.map(nodes, &Project.from_map/1)}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -298,6 +306,10 @@ defmodule LinearCli.Linear.Project.Read.ByName do
     with {:ok, %{"projects" => %{"nodes" => nodes}}} <-
            Api.call(document(), %{"name" => name}) do
       {:ok, Enum.map(nodes, &Project.from_map/1)}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 

@@ -66,6 +66,10 @@ defmodule LinearCli.Linear.Label.Read.ByNames do
     with {:ok, %{"issueLabels" => %{"edges" => edges}}} <-
            Api.call(@document, %{"names" => names}) do
       {:ok, Enum.map(edges, &Label.from_map(&1["node"]))}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 end
@@ -112,6 +116,10 @@ defmodule LinearCli.Linear.Label.Read.ByTeam do
         |> Enum.map(&Label.from_map/1)
 
       {:ok, labels}
+    else
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
     end
   end
 end
