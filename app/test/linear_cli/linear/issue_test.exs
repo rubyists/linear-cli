@@ -371,34 +371,46 @@ defmodule LinearCli.Linear.IssueTest do
       assert updated.state.name == "Done"
     end
 
-    test "sends trashed: true when given via opts" do
+    test "transitions the issue before trashing it with issueArchive" do
       issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+      test_pid = self()
 
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
-        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+        %{"query" => query, "variables" => variables} = Jason.decode!(body)
 
-        assert input == %{"stateId" => "s1", "trashed" => true}
+        if String.contains?(query, "issueUpdate") do
+          assert variables["input"] == %{"stateId" => "s1"}
+          send(test_pid, :transitioned)
 
-        Req.Test.json(conn, %{
-          "data" => %{
-            "issueUpdate" => %{
-              "issue" => %{
-                "id" => "i1",
-                "identifier" => "CRY-1",
-                "title" => "Fix it",
-                "branchName" => "cry-1-fix-it",
-                "description" => nil,
-                "assignee" => nil,
-                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
-                "comments" => %{"nodes" => []}
+          Req.Test.json(conn, %{
+            "data" => %{
+              "issueUpdate" => %{
+                "issue" => %{
+                  "id" => "i1",
+                  "identifier" => "CRY-1",
+                  "title" => "Fix it",
+                  "branchName" => "cry-1-fix-it",
+                  "description" => nil,
+                  "assignee" => nil,
+                  "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                  "comments" => %{"nodes" => []}
+                }
               }
             }
-          }
-        })
+          })
+        else
+          assert query =~ "issueArchive(id: $id, trash: true)"
+          assert variables == %{"id" => "i1"}
+          send(test_pid, :trashed)
+
+          Req.Test.json(conn, %{"data" => %{"issueArchive" => %{"success" => true}}})
+        end
       end)
 
       assert {:ok, _updated} = Linear.close_issue(issue, "s1", %{trash: true})
+      assert_receive :transitioned
+      assert_receive :trashed
     end
 
     test "surfaces a GraphQL error" do

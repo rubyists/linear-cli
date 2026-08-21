@@ -365,14 +365,31 @@ defmodule LinearCli.Linear.Issue.Update.Close do
   @moduledoc false
   use Ash.Resource.ManualUpdate
 
+  alias LinearCli.Api
   alias LinearCli.Linear.Issue
 
   def update(changeset, _opts, _context) do
     args = changeset.arguments
-    input = %{"stateId" => args.state_id}
-    input = if args.trash, do: Map.put(input, "trashed", true), else: input
 
-    Issue.Update.run(changeset.data.identifier, input)
+    with {:ok, issue} <-
+           Issue.Update.run(changeset.data.identifier, %{"stateId" => args.state_id}),
+         :ok <- maybe_trash(changeset.data.id, args.trash) do
+      {:ok, issue}
+    end
+  end
+
+  defp maybe_trash(_id, false), do: :ok
+
+  defp maybe_trash(id, true) do
+    case Api.call(trash_document(), %{"id" => id}) do
+      {:ok, %{"issueArchive" => %{"success" => true}}} -> :ok
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp trash_document do
+    "mutation($id: String!) { issueArchive(id: $id, trash: true) { success } }"
   end
 end
 
