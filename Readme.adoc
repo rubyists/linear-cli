@@ -267,8 +267,8 @@ All of the update options can work on multiple issues at a time.
 [source,sh]
 ----
 $ lc issue update --comment "Here is a comment" CRY-1234 <1>
-$ lc issue update --close --reason "I do not like you" CRY-14 CRY-15 <2>
-$ lc issue update --cancel --trash --reason "I have no idea why you are here" CRY-16 CRY-17 <3>
+$ lc issue update --close --status Done --reason "I do not like you" CRY-14 CRY-15 <2>
+$ lc issue update --cancel --status Cancelled --trash --reason "I have no idea why you are here" CRY-16 CRY-17 <3>
 $ lc issue update --comment - CRY-14 CRY-15 <4>
 $ lcomment CRY-1234 CRY-3 <5>
 ----
@@ -280,9 +280,13 @@ $ lcomment CRY-1234 CRY-3 <5>
 
 ===== Close one or many issues
 
+Use `--status`/`-s` to choose the completed or cancelled workflow state by
+case-insensitive name or unique prefix. Omit it to select interactively when
+the team has more than one matching state.
+
 [source,sh]
 ----
-$ lc issue update --close --reason "These were closable" CRY-1234 CRY-2
+$ lc issue update --close --status Done --reason "These were closable" CRY-1234 CRY-2
 ----
 
 ==== Default team/project (profiles)

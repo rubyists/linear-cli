@@ -500,6 +500,7 @@ defmodule LinearCli.CLI.Commands do
         cancel: flags.cancel,
         close: flags.close,
         reason: options.reason,
+        status: Map.get(options, :status),
         trash: flags.trash
       ]
 
