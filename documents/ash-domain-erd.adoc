@@ -340,7 +340,8 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:close`
 | update
 | `Linear.Issue.Update.Close`
-| `issueUpdate(id:, input: { stateId, trashed? })` via `Issue.Update.run/2`
+| `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`, then
+`issueArchive(id:, trash: true)` when requested
 
 | `Issue`
 | `set_issue_status`
