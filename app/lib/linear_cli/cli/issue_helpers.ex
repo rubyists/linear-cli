@@ -112,10 +112,11 @@ defmodule LinearCli.CLI.IssueHelpers do
   Cancels `issue`: comments with a resolved reason, then transitions it to
   its team's cancelled workflow state.
 
-  `opts` (Ruby's `**options`):
+  `opts` (Ruby's `**options`, plus this port's `:status`):
 
     * `:reason` - passed through to `LinearCli.CLI.WhatFor.reason_for/2`
-    * `:trash` - forwarded to the `issueUpdate` mutation's `trashed:` input
+    * `:status` - cancelled workflow state name (exact or unique prefix)
+    * `:trash` - trashes the transitioned issue through `issueArchive`
 
   Ported from `CLI::Issue#cancel_issue`.
   """
@@ -129,7 +130,7 @@ defmodule LinearCli.CLI.IssueHelpers do
         WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
 
       with {:ok, _comment} <- issue_comment(issue, reason),
-           {:ok, cancel_state} <- cancelled_state_for(issue),
+           {:ok, cancel_state} <- cancelled_state_for(issue, opts[:status]),
            {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
         Prompt.ok("#{issue.identifier} was cancelled")
         {:ok, updated}
@@ -141,8 +142,8 @@ defmodule LinearCli.CLI.IssueHelpers do
   Closes (or, if `opts[:cancel]` is truthy, cancels) `issue`: comments with
   a resolved reason, then transitions it to the appropriate workflow state.
 
-  `opts` (Ruby's `**options`): `:cancel`, `:reason`, `:trash` - same meaning
-  as `cancel_issue/2`'s.
+  `opts` (Ruby's `**options`, plus this port's `:status`): `:cancel`,
+  `:reason`, `:status`, `:trash` - same meaning as `cancel_issue/2`'s.
 
   Ported from `CLI::Issue#close_issue`. Note this has its own internal
   cancelled/completed branch (mirroring Ruby exactly) even though
@@ -166,7 +167,7 @@ defmodule LinearCli.CLI.IssueHelpers do
         WhatFor.reason_for(opts[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
 
       with {:ok, _comment} <- issue_comment(issue, reason),
-           {:ok, workflow_state} <- state_for(cancelled, issue),
+           {:ok, workflow_state} <- state_for(cancelled, issue, opts[:status]),
            {:ok, updated} <-
              Linear.close_issue(issue, workflow_state.id, %{trash: !!opts[:trash]}) do
         Prompt.ok("#{issue.identifier} was #{done}")
@@ -175,13 +176,13 @@ defmodule LinearCli.CLI.IssueHelpers do
     end
   end
 
-  defp state_for(cancelled, issue) do
-    if cancelled, do: cancelled_state_for(issue), else: completed_state_for(issue)
-  end
+  defp state_for(true, issue, status), do: cancelled_state_for(issue, status)
+  defp state_for(_cancelled, issue, status), do: completed_state_for(issue, status)
 
   @doc """
   Resolves `issue`'s team's single cancelled workflow state directly, or
-  prompts (`LinearCli.CLI.Prompt.select/2`) among several.
+  prompts (`LinearCli.CLI.Prompt.select/2`) among several. When `status` is
+  given, selects by case-insensitive exact name or unique prefix instead.
 
   Ported from the combination of Ruby's `BaseModel#cancelled_states`
   (`workflow_states.select { |ws| CANCELLED_STATES.include? ws.type }`) and
@@ -190,14 +191,15 @@ defmodule LinearCli.CLI.IssueHelpers do
   *no* cancelled-type workflow state - Ruby has no equivalent guard (its own
   `states.first` on an empty array is silently `nil`).
   """
-  @spec cancelled_state_for(%Linear.Issue{}) ::
+  @spec cancelled_state_for(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.WorkflowState{}} | {:error, term()}
-  def cancelled_state_for(issue),
-    do: workflow_state_for(issue, ["cancelled", "canceled"], "cancelled")
+  def cancelled_state_for(issue, status \\ nil),
+    do: workflow_state_for(issue, ["cancelled", "canceled"], "cancelled", status)
 
   @doc """
   Resolves `issue`'s team's single completed workflow state directly, or
-  prompts (`LinearCli.CLI.Prompt.select/2`) among several.
+  prompts (`LinearCli.CLI.Prompt.select/2`) among several. When `status` is
+  given, selects by case-insensitive exact name or unique prefix instead.
 
   Ported from the combination of Ruby's `BaseModel#completed_states`
   (`workflow_states.select { |ws| ws.type == 'completed' }`) and
@@ -205,25 +207,31 @@ defmodule LinearCli.CLI.IssueHelpers do
   `{:error, {:smells_bad, message}}` if the team has no completed-type
   workflow state.
   """
-  @spec completed_state_for(%Linear.Issue{}) ::
+  @spec completed_state_for(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.WorkflowState{}} | {:error, term()}
-  def completed_state_for(issue), do: workflow_state_for(issue, ["completed"], "completed")
+  def completed_state_for(issue, status \\ nil),
+    do: workflow_state_for(issue, ["completed"], "completed", status)
 
-  defp workflow_state_for(issue, types, label) do
+  defp workflow_state_for(issue, types, label, status) do
     with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id) do
-      case Enum.filter(states, &(&1.type in types)) do
-        [state] ->
-          {:ok, state}
-
-        [] ->
-          smells_bad(
-            "No #{label} workflow states found for team #{issue.team.key || issue.team.id}"
-          )
-
-        many ->
-          {:ok, Prompt.select("Choose a #{label} state", Enum.map(many, &{&1.name, &1}))}
-      end
+      states
+      |> Enum.filter(&(&1.type in types))
+      |> select_workflow_state(issue, label, status)
     end
+  end
+
+  defp select_workflow_state([], issue, label, _status) do
+    smells_bad("No #{label} workflow states found for team #{issue.team.key || issue.team.id}")
+  end
+
+  defp select_workflow_state([state], _issue, _label, nil), do: {:ok, state}
+
+  defp select_workflow_state(states, _issue, label, nil) do
+    {:ok, Prompt.select("Choose a #{label} state", Enum.map(states, &{&1.name, &1}))}
+  end
+
+  defp select_workflow_state(states, _issue, _label, status) do
+    resolve_workflow_state(states, status)
   end
 
   @doc """

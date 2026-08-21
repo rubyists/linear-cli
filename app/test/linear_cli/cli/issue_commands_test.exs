@@ -1060,25 +1060,64 @@ defmodule LinearCli.CLI.IssueCommandsTest do
   end
 
   describe "issue update (Ruby: commands/issue/update.rb)" do
-    test "--close comments with the given reason, then closes the issue" do
-      stub_responses([
-        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}},
-        {"commentCreate", comment_created()},
-        {"states {",
-         workflow_states([
-           %{"id" => "s1", "name" => "Done", "position" => 1.0, "type" => "completed"}
-         ])},
-        {"issueUpdate", issue_updated()}
-      ])
+    test "--close --status selects a completed state without prompting" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "commentCreate") ->
+            Req.Test.json(conn, comment_created())
+
+          String.contains?(query, "states {") ->
+            Req.Test.json(
+              conn,
+              workflow_states([
+                %{"id" => "s1", "name" => "Done", "position" => 1.0, "type" => "completed"},
+                %{
+                  "id" => "s2",
+                  "name" => "Shipped",
+                  "position" => 2.0,
+                  "type" => "completed"
+                }
+              ])
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            assert decoded["variables"]["input"] == %{"stateId" => "s2"}
+            send(test_pid, :closed_as_shipped)
+            Req.Test.json(conn, issue_updated())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
 
       output =
         capture_io(fn ->
           assert :ok =
-                   LinearCli.CLI.main(["issue", "update", "--close", "--reason", "Done", "CRY-1"])
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "--close",
+                     "--status",
+                     "ship",
+                     "--reason",
+                     "Done",
+                     "CRY-1"
+                   ])
         end)
 
       assert output =~ "Comment added to CRY-1"
       assert output =~ "CRY-1 was closed"
+      refute output =~ "Choose a completed state"
+      assert_received :closed_as_shipped
     end
 
     test "--description updates the issue description via the issueUpdate mutation" do
