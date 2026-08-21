@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.2](https://github.com/rubyists/linear-cli/compare/v2.0.1...v2.0.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* guard release PR relabel during manual dispatch ([#169](https://github.com/rubyists/linear-cli/issues/169)) ([cf66935](https://github.com/rubyists/linear-cli/commit/cf66935d1d06d9cbf5e6dc49aac220d857759523))
+* retrigger release-please after label repair ([#170](https://github.com/rubyists/linear-cli/issues/170)) ([cfe1fbd](https://github.com/rubyists/linear-cli/commit/cfe1fbd1fd24a8789e9f079a5be9c1a21228195d))
+
 ## [2.0.1](https://github.com/rubyists/linear-cli/compare/v2.0.0...v2.0.1) (2026-08-20)
 
 
