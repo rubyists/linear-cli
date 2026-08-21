@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.0](https://github.com/rubyists/linear-cli/compare/v2.1.1...v2.2.0) (2026-08-21)
+
+
+### Features
+
+* add status option to the issue close / cancel commands ([#176](https://github.com/rubyists/linear-cli/issues/176)) ([c6d6792](https://github.com/rubyists/linear-cli/commit/c6d6792119e39197d96da73747a99eb8fd5fc233))
+
 ## [2.1.1](https://github.com/rubyists/linear-cli/compare/v2.1.0...v2.1.1) (2026-08-21)
 
 
