@@ -314,6 +314,7 @@ jobs:
         # open any future release PR ("There are untagged, merged release
         # PRs outstanding - aborting").
         name: Mark the release PR as tagged
+        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
