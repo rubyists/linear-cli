@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/rubyists/linear-cli/compare/v2.0.2...v2.1.0) (2026-08-21)
+
+
+### Features
+
+* add syntax highlighting to markdown renderer ([#172](https://github.com/rubyists/linear-cli/issues/172)) ([8640ebc](https://github.com/rubyists/linear-cli/commit/8640ebc62d288ba71295783003c5ed76580467ab))
+
 ## [2.0.2](https://github.com/rubyists/linear-cli/compare/v2.0.1...v2.0.2) (2026-08-21)
 
 
