@@ -25,6 +25,7 @@ jobs:
     needs: [validate]
     # Every push to main (not a release-PR merge itself) - keeps the
     # pending "chore(main): release X.Y.Z" PR current as commits land.
+    # A later push also retries release-please after label state is repaired.
     if: github.event_name == 'push'
     name: Open/update the release PR
     runs-on: ubuntu-latest
