@@ -168,13 +168,13 @@ jobs:
           fi
       -
         # Both Linux targets build on native matching runners. `lc version`
-        # boots the application and performs a hidden Marcli render, forcing
-        # mdex_native and its NIF to load before the command can exit 0. No API
-        # key or network is needed. macOS/Windows runtime smoke tests remain
-        # out of scope because their hosted runners are not all native to the
-        # configured Burrito targets.
+        # boots the application and performs a hidden syntax-highlighted Marcli
+        # render, forcing mdex_native, its NIF, Makeup, and the Elixir lexer to
+        # load before the command can exit 0. No API key or network is needed.
+        # macOS/Windows runtime smoke tests remain out of scope because their
+        # hosted runners are not all native to the configured Burrito targets.
         if: startsWith(matrix.target, 'linux_')
-        name: Smoke-test the ${{ matrix.target }} binary and Markdown NIF
+        name: Smoke-test the ${{ matrix.target }} binary and Markdown runtime
         timeout-minutes: 1
         run: ./burrito_out/lc_${{ matrix.target }} version
       -
@@ -376,16 +376,16 @@ jobs:
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Verify the musl NIF actually loads on Alpine before publishing.
-        # `lc version` boots the OTP app and performs a hidden Markdown render,
-        # forcing mdex_native's NIF and its bundled libgcc runtime to load.
-        # It then prints the version and exits 0; no API key or network is
-        # needed. ci/build_image.sh prefers
+        # `lc version` boots the OTP app and performs a hidden syntax-highlighted
+        # Markdown render, forcing mdex_native's NIF, its bundled libgcc runtime,
+        # Makeup, and the Elixir lexer to load. It then prints the version and
+        # exits 0; no API key or network is needed. ci/build_image.sh prefers
         # Podman, so the image lives in Podman's local storage; we run it
         # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
         # overridden to false (the image bakes in true so the default CMD
         # starts the daemon; without this override the app ignores `version`
         # and stays alive as a daemon, timing out the step). See EXT-7.
-        name: Smoke-test the container image boots and NIFs load on Alpine/musl
+        name: Smoke-test the container image Markdown runtime on Alpine/musl
         timeout-minutes: 1
         run: |
           podman run --rm -e LINEAR_CLI_DAEMON=false "linear-cli:${{ needs.burrito-package.outputs.tag_name }}" lc version

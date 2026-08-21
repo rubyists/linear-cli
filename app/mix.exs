@@ -61,6 +61,7 @@ defmodule LinearCli.MixProject do
   defp deps do
     [
       {:marcli, "~> 0.3"},
+      {:makeup_elixir, "~> 1.0"},
       {:owl, "~> 0.13"},
       {:optimus, "~> 0.6"},
       {:req, "~> 0.7"},
