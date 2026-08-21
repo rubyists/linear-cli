@@ -7,6 +7,8 @@ defmodule LinearCli.CLI.Commands do
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
+  @max_concurrent_issue_updates 20
+
   @doc "Ported from commands/whoami.rb."
   def whoami(%{flags: flags, options: options}) do
     with {:ok, user} <- Linear.me() do
@@ -525,7 +527,8 @@ defmodule LinearCli.CLI.Commands do
   workflow states (case-insensitive exact, then unique prefix). Without it,
   prompts interactively via `LinearCli.CLI.Prompt.select/2`.
 
-  With `--comment`/`-m`, adds a comment to the issue before transitioning.
+  With `--comment`/`-m`, adds a comment to each issue before transitioning it.
+  Mutations for separate issues run concurrently with a limit of 20 in flight.
   """
   @spec issue_status(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_status(%{unknown: issue_ids, options: options}) do
@@ -551,17 +554,36 @@ defmodule LinearCli.CLI.Commands do
     |> reverse_status_updates()
   end
 
+  defp apply_status_updates([], _comment), do: {:ok, []}
+
   defp apply_status_updates(planned_updates, comment) do
     planned_updates
-    |> Enum.reduce_while({:ok, []}, fn {issue, target_state}, {:ok, updates} ->
-      with :ok <- maybe_add_status_comment(issue, comment),
-           {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
-        {:cont, {:ok, [{updated, target_state} | updates]}}
-      else
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
+    |> Task.async_stream(
+      fn {issue, target_state} ->
+        apply_status_update(issue, target_state, comment)
+      end,
+      max_concurrency: min(length(planned_updates), @max_concurrent_issue_updates),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, update}}, {:ok, updates} ->
+        {:cont, {:ok, [update | updates]}}
+
+      {:ok, {:error, reason}}, {:ok, _updates} ->
+        {:halt, {:error, reason}}
+
+      {:exit, reason}, {:ok, _updates} ->
+        {:halt, {:error, {:task_exit, reason}}}
     end)
     |> reverse_status_updates()
+  end
+
+  defp apply_status_update(issue, target_state, comment) do
+    with :ok <- maybe_add_status_comment(issue, comment),
+         {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
+      {:ok, {updated, target_state}}
+    end
   end
 
   defp reverse_status_updates({:ok, updates}), do: {:ok, Enum.reverse(updates)}

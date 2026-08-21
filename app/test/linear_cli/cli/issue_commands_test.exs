@@ -775,7 +775,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "status set to Done"
     end
 
-    test "--status updates multiple issue IDs and emits a JSON array" do
+    test "--status updates multiple issue IDs concurrently and emits a JSON array" do
       test_pid = self()
 
       issue_details = fn
@@ -815,7 +815,14 @@ defmodule LinearCli.CLI.IssueCommandsTest do
             identifier = variables["id"]
             state_id = variables["input"]["stateId"]
             {id, team_id, team_key, team_name, ^state_id} = issue_details.(identifier)
-            send(test_pid, {:status_updated, identifier, state_id})
+            update_pid = self()
+            send(test_pid, {:status_update_started, identifier, state_id, update_pid})
+
+            receive do
+              :finish_status_update -> :ok
+            after
+              2_000 -> raise "status update was not released by the concurrency assertion"
+            end
 
             Req.Test.json(conn, %{
               "data" => %{
@@ -836,25 +843,32 @@ defmodule LinearCli.CLI.IssueCommandsTest do
         end
       end)
 
-      output =
-        capture_io(fn ->
-          assert :ok =
-                   LinearCli.CLI.main([
-                     "issue",
-                     "status",
-                     "--status",
-                     "Done",
-                     "--output",
-                     "json",
-                     "CRY-1",
-                     "CRY-2"
-                   ])
+      command =
+        Task.async(fn ->
+          capture_io(fn ->
+            assert :ok =
+                     LinearCli.CLI.main([
+                       "issue",
+                       "status",
+                       "--status",
+                       "Done",
+                       "--output",
+                       "json",
+                       "CRY-1",
+                       "CRY-2"
+                     ])
+          end)
         end)
+
+      assert_receive {:status_update_started, "CRY-1", "s-eng-done", first_update}, 1_000
+      assert_receive {:status_update_started, "CRY-2", "s-ops-done", second_update}, 1_000
+      send(first_update, :finish_status_update)
+      send(second_update, :finish_status_update)
+
+      output = Task.await(command)
 
       assert_received {:states_queried, "t1"}
       assert_received {:states_queried, "t2"}
-      assert_received {:status_updated, "CRY-1", "s-eng-done"}
-      assert_received {:status_updated, "CRY-2", "s-ops-done"}
 
       assert {:ok, decoded} = Jason.decode(output)
       assert Enum.map(decoded, & &1["identifier"]) == ["CRY-1", "CRY-2"]
