@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/rubyists/linear-cli/compare/v2.2.0...v2.3.0) (2026-08-21)
+
+
+### Features
+
+* adds -N shortcut for --no-mine, and --status/--state filters ([#178](https://github.com/rubyists/linear-cli/issues/178)) ([7790545](https://github.com/rubyists/linear-cli/commit/77905452724d5985acab26035c2914c3e303412e))
+
 ## [2.2.0](https://github.com/rubyists/linear-cli/compare/v2.1.1...v2.2.0) (2026-08-21)
 
 
