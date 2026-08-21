@@ -20,9 +20,9 @@ defmodule LinearCli.CLI.Commands do
   @doc """
   Ported from commands/version.rb, extended to respect the global
   `--output json` option like every other command does - previously
-  ignored it and always printed plain text. The hidden Markdown render makes
-  this command a complete release smoke test for mdex_native's NIF, Marcli's
-  syntax-highlighting lexer, and the application boot path.
+  ignored it and always printed plain text. The hidden Markdown renders make
+  this command a complete release smoke test for the MDEx and Syntect NIFs,
+  Marcli's syntax-highlighting integration, and the application boot path.
   """
   def version(%{options: options}) do
     verify_markdown_runtime!()
@@ -39,10 +39,13 @@ defmodule LinearCli.CLI.Commands do
 
   defp verify_markdown_runtime! do
     theme = Marcli.Theme.default()
-    rendered = Marcli.render("```elixir\ndef smoke, do: :ok\n```")
-    highlighted_keyword = theme.syntax.keyword_declaration <> "def" <> theme.reset
+    elixir = Marcli.render("```elixir\ndef smoke, do: :ok\n```")
+    ruby = Marcli.render("```ruby\ndef smoke; :ok; end\n```")
 
-    unless String.contains?(rendered, highlighted_keyword) do
+    elixir_keyword = theme.syntax.keyword_declaration <> "def" <> theme.reset
+    ruby_keyword = theme.syntax.keyword_type <> "def" <> theme.reset
+
+    unless String.contains?(elixir, elixir_keyword) and String.contains?(ruby, ruby_keyword) do
       raise "Markdown syntax-highlighting runtime is unavailable"
     end
 

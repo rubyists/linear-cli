@@ -64,13 +64,12 @@ jobs:
       # a release with a target missing.
       #
       # Each target runs on its matching OS runner so rustler_precompiled
-      # (used by mdex_native) downloads the correct precompiled NIF for the
-      # target platform. Cross-compiling from Ubuntu caused the Linux NIF to
-      # be bundled into macOS/Windows releases, making MDEx unavailable at
-      # runtime (see CRY-40). Linux targets also get a pre-compile step that
-      # forces the musl NIF variant, since Ubuntu runners auto-select the
-      # glibc NIF but Burrito Linux binaries run on musl-based systems (see
-      # EXT-7).
+      # (used by mdex_native and makeup_syntect) downloads the correct
+      # precompiled NIF for the target platform. Cross-compiling from Ubuntu
+      # caused Linux NIFs to be bundled into macOS/Windows releases, making
+      # them unavailable at runtime (see CRY-40). Linux targets additionally
+      # prepare musl variants, since Ubuntu runners select glibc while Burrito
+      # Linux binaries run on musl-based systems (see EXT-7).
       matrix:
         include:
           - target: macos_aarch64
@@ -109,35 +108,35 @@ jobs:
       -
         run: mix deps.get
       -
-        # rustler_precompiled resolves the NIF target at compile time from
-        # :erlang.system_info(:system_architecture), which is always glibc on
-        # Ubuntu runners. Burrito bundles its own musl runtime for Linux and
-        # the container runs Alpine - both need the musl NIF, not glibc.
-        # TARGET_ABI=musl tells rustler_precompiled to download the musl
-        # variant. cc_precompiler (used by exqlite) also reads TARGET_ABI, but
-        # is safe here for two reasons: (a) the env: block is step-scoped, so
-        # mix release in the next step does not inherit TARGET_ABI, and (b) mix
-        # deps.compile only compiles the named deps, not exqlite, so
-        # cc_precompiler never runs during this step. mix release sees
-        # mdex_native already compiled and skips it, bundling the musl .so
-        # from _build/prod.
-        # rustler_precompiled is listed first because mix deps.compile only
-        # compiles the named deps (not their transitive deps), and mdex_native
-        # uses it via `use RustlerPrecompiled` at compile time. See EXT-7.
         if: startsWith(matrix.target, 'linux_')
-        name: Pre-compile mdex_native with the musl NIF
+        # makeup_syntect calls its NIF while compiling generated module docs,
+        # so it cannot compile against a musl artifact on the glibc runner.
+        # Compile it for the host first; prepare_musl_nifs.sh replaces only
+        # the packaged NIF after compilation. castore must be named before
+        # rustler_precompiled 0.8.x because deps.compile does not compile
+        # transitive dependencies automatically.
+        name: Compile makeup_syntect with its host NIF
+        env:
+          MIX_ENV: prod
+        run: mix deps.compile castore rustler_precompiled makeup_syntect
+      -
+        # rustler_precompiled resolves the NIF target at compile time from the
+        # Ubuntu host unless TARGET_ABI overrides it. This is safe as a
+        # step-scoped variable: cc_precompiler (used by exqlite) never sees it.
+        # mix release then reuses the completed dependency in _build/prod.
+        if: startsWith(matrix.target, 'linux_')
+        name: Pre-compile mdex_native with its musl NIF
         env:
           MIX_ENV: prod
           TARGET_ABI: musl
-        run: mix deps.compile rustler_precompiled mdex_native
+        run: mix deps.compile mdex_native
       -
-        # mdex_native's precompiled musl NIF dynamically needs libgcc_s.
-        # Burrito's musl loader otherwise finds the Ubuntu host's glibc copy
-        # first and rejects it at runtime. Bundle Alpine's compatible runtime
-        # under a unique name and patch the NIF to select it deterministically.
+        # Replace makeup_syntect's host NIF with its checksummed musl artifact,
+        # then bundle and select Alpine's compatible libgcc runtime for both
+        # Rust NIFs. Burrito's musl loader otherwise finds Ubuntu's glibc copy.
         if: startsWith(matrix.target, 'linux_')
-        name: Bundle mdex_native's musl libgcc runtime
-        run: ../ci/bundle_mdex_musl_libgcc.sh
+        name: Install and repair the musl NIFs
+        run: ../ci/prepare_musl_nifs.sh
       -
         name: Build the ${{ matrix.target }} target
         run: MIX_ENV=prod BURRITO_TARGET=${{ matrix.target }} mix release lc
@@ -168,9 +167,10 @@ jobs:
           fi
       -
         # Both Linux targets build on native matching runners. `lc version`
-        # boots the application and performs a hidden syntax-highlighted Marcli
-        # render, forcing mdex_native, its NIF, Makeup, and the Elixir lexer to
-        # load before the command can exit 0. No API key or network is needed.
+        # boots the application and performs hidden syntax-highlighted Marcli
+        # renders for both Elixir and Ruby, forcing mdex_native, makeup_syntect,
+        # both NIFs, Makeup, and both lexers to load before the command can
+        # exit 0. No API key or network is needed.
         # macOS/Windows runtime smoke tests remain out of scope because their
         # hosted runners are not all native to the configured Burrito targets.
         if: startsWith(matrix.target, 'linux_')
@@ -349,21 +349,26 @@ jobs:
         run: mix deps.get
         working-directory: app
       -
-        # Same reasoning as the burrito-build pre-compile step: Ubuntu runners
-        # default to the glibc NIF, but the container image runs Alpine (musl).
-        # rustler_precompiled listed first for the same reason as there. See
-        # EXT-7.
-        name: Pre-compile mdex_native with the musl NIF
+        # Same two-stage preparation as the Linux burrito-build legs: Syntect
+        # must finish compiling with its host NIF before that artifact can be
+        # replaced with the musl build.
+        name: Compile makeup_syntect with its host NIF
+        env:
+          MIX_ENV: prod
+        run: mix deps.compile castore rustler_precompiled makeup_syntect
+        working-directory: app
+      -
+        name: Pre-compile mdex_native with its musl NIF
         env:
           MIX_ENV: prod
           TARGET_ABI: musl
-        run: mix deps.compile rustler_precompiled mdex_native
+        run: mix deps.compile mdex_native
         working-directory: app
       -
-        # Apply the same musl libgcc repair as the standalone Linux binaries;
-        # this release is copied into the Alpine container image below.
-        name: Bundle mdex_native's musl libgcc runtime
-        run: ../ci/bundle_mdex_musl_libgcc.sh
+        # Install Syntect's musl artifact and apply the same libgcc repair to
+        # both Rust NIFs as the standalone Linux binaries.
+        name: Install and repair the musl NIFs
+        run: ../ci/prepare_musl_nifs.sh
         working-directory: app
       -
         name: Build the linux_x86_64 target (container's payload)
@@ -376,10 +381,11 @@ jobs:
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Verify the musl NIF actually loads on Alpine before publishing.
-        # `lc version` boots the OTP app and performs a hidden syntax-highlighted
-        # Markdown render, forcing mdex_native's NIF, its bundled libgcc runtime,
-        # Makeup, and the Elixir lexer to load. It then prints the version and
-        # exits 0; no API key or network is needed. ci/build_image.sh prefers
+        # `lc version` boots the OTP app and performs hidden syntax-highlighted
+        # Markdown renders, forcing the MDEx and Syntect NIFs, their bundled
+        # libgcc runtimes, Makeup, and the Elixir/Ruby lexers to load. It then
+        # prints the version and exits 0; no API key or network is needed.
+        # ci/build_image.sh prefers
         # Podman, so the image lives in Podman's local storage; we run it
         # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
         # overridden to false (the image bakes in true so the default CMD
