@@ -775,6 +775,107 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "status set to Done"
     end
 
+    test "--status updates multiple issue IDs and emits a JSON array" do
+      test_pid = self()
+
+      issue_details = fn
+        "CRY-1" -> {"i1", "t1", "ENG", "Engineering", "s-eng-done"}
+        "CRY-2" -> {"i2", "t2", "OPS", "Operations", "s-ops-done"}
+      end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+        variables = decoded["variables"] || %{}
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            identifier = variables["id"]
+            {id, team_id, team_key, team_name, _state_id} = issue_details.(identifier)
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" =>
+                  issue_map(%{
+                    "id" => id,
+                    "identifier" => identifier,
+                    "team" => %{"id" => team_id, "key" => team_key, "name" => team_name}
+                  })
+              }
+            })
+
+          String.contains?(query, "states {") ->
+            team_id = variables["teamId"]
+            state_id = if team_id == "t1", do: "s-eng-done", else: "s-ops-done"
+            send(test_pid, {:states_queried, team_id})
+            Req.Test.json(conn, workflow_states([state_map(state_id, "Done", 1.0, "completed")]))
+
+          String.contains?(query, "issueUpdate") ->
+            identifier = variables["id"]
+            state_id = variables["input"]["stateId"]
+            {id, team_id, team_key, team_name, ^state_id} = issue_details.(identifier)
+            send(test_pid, {:status_updated, identifier, state_id})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueUpdate" => %{
+                  "issue" =>
+                    issue_map(%{
+                      "id" => id,
+                      "identifier" => identifier,
+                      "team" => %{"id" => team_id, "key" => team_key, "name" => team_name},
+                      "state" => %{"id" => state_id, "name" => "Done", "type" => "completed"}
+                    })
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "status",
+                     "--status",
+                     "Done",
+                     "--output",
+                     "json",
+                     "CRY-1",
+                     "CRY-2"
+                   ])
+        end)
+
+      assert_received {:states_queried, "t1"}
+      assert_received {:states_queried, "t2"}
+      assert_received {:status_updated, "CRY-1", "s-eng-done"}
+      assert_received {:status_updated, "CRY-2", "s-ops-done"}
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert Enum.map(decoded, & &1["identifier"]) == ["CRY-1", "CRY-2"]
+    end
+
+    test "variadic issue IDs do not swallow unrecognized options" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            ["issue", "status", "--statuz", "Done", "CRY-1", "CRY-2"],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "unrecognized option(s): --statuz"
+    end
+
     test "-s short flag also sets the workflow state" do
       test_pid = self()
 

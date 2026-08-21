@@ -518,7 +518,8 @@ defmodule LinearCli.CLI.Commands do
   defp validate_issue_ids(_issue_ids), do: :ok
 
   @doc """
-  Changes the workflow state of an issue.
+  Changes the workflow state of one or more issues. Optimus captures the IDs in
+  `unknown`, since it has no variadic positional-argument type.
 
   With `--status`/`-s`, matches the given name against the issue's team's
   workflow states (case-insensitive exact, then unique prefix). Without it,
@@ -527,22 +528,60 @@ defmodule LinearCli.CLI.Commands do
   With `--comment`/`-m`, adds a comment to the issue before transitioning.
   """
   @spec issue_status(Optimus.ParseResult.t()) :: :ok | {:error, term()}
-  def issue_status(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
-
-    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
-         {:ok, states} <- Linear.workflow_states_by_team(issue.team.id),
-         {:ok, target_state} <- resolve_target_state(states, options.status),
-         :ok <- maybe_add_status_comment(issue, options.comment),
-         {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
-      Display.show(updated, %{output: options.output})
-
-      if options.output != "json",
-        do: Prompt.ok("#{updated.identifier} status set to #{target_state.name}")
-
-      :ok
+  def issue_status(%{unknown: issue_ids, options: options}) do
+    with :ok <- validate_issue_ids(issue_ids),
+         {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+         {:ok, planned_updates} <- plan_status_updates(issues, options.status),
+         {:ok, completed_updates} <- apply_status_updates(planned_updates, options.comment) do
+      show_status_updates(completed_updates, options.output)
     end
   end
+
+  defp plan_status_updates(issues, status) do
+    issues
+    |> Enum.reduce_while({:ok, []}, fn issue, {:ok, updates} ->
+      with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id),
+           {:ok, target_state} <- resolve_target_state(states, status) do
+        {:cont, {:ok, [{issue, target_state} | updates]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> reverse_status_updates()
+  end
+
+  defp apply_status_updates(planned_updates, comment) do
+    planned_updates
+    |> Enum.reduce_while({:ok, []}, fn {issue, target_state}, {:ok, updates} ->
+      with :ok <- maybe_add_status_comment(issue, comment),
+           {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
+        {:cont, {:ok, [{updated, target_state} | updates]}}
+      else
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> reverse_status_updates()
+  end
+
+  defp reverse_status_updates({:ok, updates}), do: {:ok, Enum.reverse(updates)}
+  defp reverse_status_updates(error), do: error
+
+  defp show_status_updates(completed_updates, output) do
+    updated_issues = Enum.map(completed_updates, &elem(&1, 0))
+    Display.show(one_or_many(updated_issues), %{output: output})
+
+    if output != "json" do
+      Enum.each(completed_updates, fn {updated, target_state} ->
+        Prompt.ok("#{updated.identifier} status set to #{target_state.name}")
+      end)
+    end
+
+    :ok
+  end
+
+  defp one_or_many([one]), do: one
+  defp one_or_many(many), do: many
 
   defp resolve_target_state(states, nil) do
     choices = Enum.sort_by(states, & &1.position) |> Enum.map(&{&1.name, &1})

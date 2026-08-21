@@ -246,7 +246,7 @@ defmodule LinearCli.CLI do
     end
   end
 
-  # `issue list`/`take`/`update` all set `allow_unknown_args: true` so bare
+  # `issue list`/`take`/`status`/`update` all set `allow_unknown_args: true` so bare
   # tokens (e.g. `CRY-1`) can be captured as issue ids via `result.unknown`
   # rather than a declared positional arg (Optimus has no `type: :array`
   # equivalent - see their subcommand specs below). That same bucket also
@@ -256,7 +256,7 @@ defmodule LinearCli.CLI do
   # clearly. Every other subcommand has `allow_unknown_args: false` (the
   # default), where Optimus itself already rejects unknown args before we
   # ever see a parse_result - so `result.unknown` is only ever non-empty here
-  # for those three subcommands, and only ever contains genuine bare ids
+  # for those four subcommands, and only ever contains genuine bare ids
   # once this filters out anything flag-shaped.
   defp reject_unknown_flags(unknown_tokens) do
     case Enum.filter(unknown_tokens, &String.starts_with?(&1, "-")) do
@@ -737,10 +737,8 @@ defmodule LinearCli.CLI do
             ],
             status: [
               name: "status",
-              about: "Change the workflow state of an issue",
-              args: [
-                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
-              ],
+              about: "Change workflow state (ISSUE_ID...)",
+              allow_unknown_args: true,
               options: [
                 status: [
                   short: "-s",
