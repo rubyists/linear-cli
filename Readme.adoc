@@ -200,7 +200,15 @@ $ lc whoami --teams <1>
 $ lcls
 $ lcls --full
 $ lcls -f CRY-1
+$ lcls -N <1>
+$ lcls --state started <2>
+$ lcls --status "Human Review" <3>
+$ lcls --state started --status "Human Review,Gate Approved" <4>
 ----
+<1> Include issues not assigned to you (short for `--no-mine`)
+<2> Filter by Linear's internal workflow state type
+<3> Filter by a friendly workflow status name (case-insensitive)
+<4> Combine state and status filters; both must match
 
 ==== Assign one or more issues to yourself (take em!)
 

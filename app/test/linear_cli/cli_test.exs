@@ -98,8 +98,8 @@ defmodule LinearCli.CLITest do
     assert capture_io(fn -> LinearCli.CLI.main(["team", "list"]) end) =~ "Engineering"
   end
 
-  test "team list --no-mine lists all teams" do
-    assert capture_io(fn -> LinearCli.CLI.main(["team", "list", "--no-mine"]) end) =~ "Ops"
+  test "team list -N aliases --no-mine" do
+    assert capture_io(fn -> LinearCli.CLI.main(["team", "list", "-N"]) end) =~ "Ops"
   end
 
   test "project list defaults to all projects (Ruby: --mine defaults false)" do
