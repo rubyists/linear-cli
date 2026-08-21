@@ -312,7 +312,9 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:list`
 | read
 | `Linear.Issue.Read.List`
-| `issues(filter:, first:, after:)` paginated (base) or `issue(id:)` per id (full, fanned concurrently)
+| `issues(filter:, first:, after:)` paginated (base), with `state` filtering
+  workflow-state types and `status` filtering friendly workflow-state names; or
+  `issue(id:)` per id (full, fanned concurrently)
 
 | `Issue`
 | `create_issue`

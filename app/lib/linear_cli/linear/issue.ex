@@ -14,6 +14,7 @@ defmodule LinearCli.Linear.Issue do
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
       argument :all, :boolean, default: false
+      argument :state, {:array, :string}, default: []
       argument :status, {:array, :string}, default: []
       manual LinearCli.Linear.Issue.Read.List
     end
@@ -188,9 +189,9 @@ defmodule LinearCli.Linear.Issue.Read.List do
   # Ported from Rubyists::Linear::Operations::Issue::List#build_filter. `unassigned`
   # is checked after `mine` here too, so it wins if both are set - same as Ruby.
   # `all: true` removes the completedAt/canceledAt null-checks so closed/cancelled
-  # issues are included. `status` injects a state.type filter; when it includes
-  # "completed" or "cancelled"/"canceled", the corresponding date null-checks are
-  # also dropped so those issues aren't filtered out before the type filter applies.
+  # issues are included. A type filter only removes the date guard for the closed
+  # state it requests. A friendly-name filter removes both guards because its type
+  # is unknown until Linear evaluates it.
   defp build_filter(args) do
     %{}
     |> maybe_put_date_filters(args)
@@ -201,30 +202,30 @@ defmodule LinearCli.Linear.Issue.Read.List do
   end
 
   @completed_types ~w(completed)
-  @cancelled_types ~w(cancelled canceled)
+  @cancelled_types ~w(cancelled canceled duplicate)
 
   defp maybe_put_date_filters(filter, %{all: true}), do: filter
 
-  defp maybe_put_date_filters(filter, %{status: status}) when status != [] do
+  defp maybe_put_date_filters(filter, %{state: [_ | _] = states}) do
     filter
-    |> maybe_put_completed_date_filter(status)
-    |> maybe_put_cancelled_date_filter(status)
+    |> maybe_put_completed_date_filter(states)
+    |> maybe_put_cancelled_date_filter(states)
   end
+
+  defp maybe_put_date_filters(filter, %{status: [_ | _]}), do: filter
 
   defp maybe_put_date_filters(filter, _args) do
     Map.merge(filter, %{"completedAt" => %{"null" => true}, "canceledAt" => %{"null" => true}})
   end
 
-  # Suppress the completedAt null-check only when the status list doesn't ask for completed.
-  defp maybe_put_completed_date_filter(filter, status) do
-    if Enum.any?(status, &(&1 in @completed_types)),
+  defp maybe_put_completed_date_filter(filter, states) do
+    if Enum.any?(states, &(&1 in @completed_types)),
       do: filter,
       else: Map.put(filter, "completedAt", %{"null" => true})
   end
 
-  # Suppress the canceledAt null-check only when the status list doesn't ask for cancelled.
-  defp maybe_put_cancelled_date_filter(filter, status) do
-    if Enum.any?(status, &(&1 in @cancelled_types)),
+  defp maybe_put_cancelled_date_filter(filter, states) do
+    if Enum.any?(states, &(&1 in @cancelled_types)),
       do: filter,
       else: Map.put(filter, "canceledAt", %{"null" => true})
   end
@@ -251,11 +252,33 @@ defmodule LinearCli.Linear.Issue.Read.List do
 
   defp maybe_put_project_filter(filter, _args), do: filter
 
-  defp maybe_put_state_filter(filter, %{status: [_ | _] = types}) do
-    Map.put(filter, "state", %{"type" => %{"in" => types}})
+  defp maybe_put_state_filter(filter, %{state: [], status: []}), do: filter
+
+  defp maybe_put_state_filter(filter, %{state: states, status: statuses}) do
+    state_filter =
+      %{}
+      |> maybe_put_state_types(states)
+      |> maybe_put_status_names(statuses)
+
+    Map.put(filter, "state", state_filter)
   end
 
-  defp maybe_put_state_filter(filter, _args), do: filter
+  defp maybe_put_state_types(filter, []), do: filter
+
+  defp maybe_put_state_types(filter, states) do
+    Map.put(filter, "type", %{"in" => states})
+  end
+
+  defp maybe_put_status_names(filter, []), do: filter
+
+  defp maybe_put_status_names(filter, [status]) do
+    Map.put(filter, "name", %{"eqIgnoreCase" => status})
+  end
+
+  defp maybe_put_status_names(filter, statuses) do
+    names = Enum.map(statuses, &%{"name" => %{"eqIgnoreCase" => &1}})
+    Map.put(filter, "or", names)
+  end
 end
 
 defmodule LinearCli.Linear.Issue.Create do

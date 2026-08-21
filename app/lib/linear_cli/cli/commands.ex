@@ -270,6 +270,7 @@ defmodule LinearCli.CLI.Commands do
         team_key: team_key,
         project_id: project_id,
         all: Map.get(flags, :all, false),
+        state: Map.get(options, :state) || [],
         status: Map.get(options, :status) || []
       }
 

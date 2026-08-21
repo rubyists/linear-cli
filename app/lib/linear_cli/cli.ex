@@ -9,6 +9,8 @@ defmodule LinearCli.CLI do
 
   alias LinearCli.CLI.Commands
 
+  @workflow_state_types ~w(triage backlog unstarted started completed canceled duplicate)
+
   def main(argv, halt \\ &System.halt/1) do
     argv =
       argv
@@ -424,6 +426,34 @@ defmodule LinearCli.CLI do
 
   defp maybe_print_backtrace(_debug), do: :ok
 
+  defp parse_states(value) do
+    states =
+      value
+      |> split_filter_values()
+      |> Enum.map(&normalize_state/1)
+
+    case Enum.find(states, &(&1 not in @workflow_state_types)) do
+      nil ->
+        {:ok, states}
+
+      state ->
+        {:error,
+         "unknown state #{inspect(state)}, must be one of: #{Enum.join(@workflow_state_types, ", ")}"}
+    end
+  end
+
+  defp parse_statuses(value), do: {:ok, split_filter_values(value)}
+
+  defp split_filter_values(value) do
+    value
+    |> String.split(",", trim: true)
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+  end
+
+  defp normalize_state("cancelled"), do: "canceled"
+  defp normalize_state(state), do: String.downcase(state)
+
   def spec do
     Optimus.new!(
       name: "lc",
@@ -473,7 +503,11 @@ defmodule LinearCli.CLI do
               name: "list",
               about: "List teams",
               flags: [
-                no_mine: [long: "--no-mine", help: "List all teams, not just your own"],
+                no_mine: [
+                  short: "-N",
+                  long: "--no-mine",
+                  help: "List all teams, not just your own"
+                ],
                 all: [long: "--all", help: "Ignore favorites (doesn't affect --no-mine)"]
               ]
             ],
@@ -607,6 +641,7 @@ defmodule LinearCli.CLI do
                   help: "Show unassigned issues only"
                 ],
                 no_mine: [
+                  short: "-N",
                   long: "--no-mine",
                   help: "List the most recent issues, not just your own"
                 ],
@@ -628,24 +663,17 @@ defmodule LinearCli.CLI do
                   help:
                     "Show issues for only this project. Can be name, URL, ID, or - to select from a list"
                 ],
+                state: [
+                  long: "--state",
+                  help:
+                    "Filter by workflow state type(s): triage, backlog, unstarted, started, completed, canceled, duplicate (comma-separated)",
+                  parser: &parse_states/1
+                ],
                 status: [
                   short: "-s",
                   long: "--status",
-                  help:
-                    "Filter by workflow state type(s): triage, backlog, unstarted, started, completed, cancelled (comma-separated)",
-                  parser: fn v ->
-                    valid = ~w(triage backlog unstarted started completed cancelled canceled)
-                    types = String.split(v, ",", trim: true)
-
-                    case Enum.find(types, &(&1 not in valid)) do
-                      nil ->
-                        {:ok, types}
-
-                      bad ->
-                        {:error,
-                         "unknown status #{inspect(bad)}, must be one of: #{Enum.join(valid, ", ")}"}
-                    end
-                  end
+                  help: "Filter by friendly workflow status name(s) (comma-separated)",
+                  parser: &parse_statuses/1
                 ]
               ]
             ],
