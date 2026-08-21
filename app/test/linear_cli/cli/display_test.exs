@@ -29,4 +29,30 @@ defmodule LinearCli.CLI.DisplayTest do
     assert output =~ theme.syntax.number <> "42" <> theme.reset
     refute output =~ theme.code_text <> "defmodule"
   end
+
+  test "full issue output syntax-highlights fenced Ruby code through Syntect" do
+    issue = %Issue{
+      id: "issue-1",
+      identifier: "EXT-1",
+      title: "Highlight Ruby markdown",
+      description: """
+      ```ruby
+      class Greeter
+        def hello(name)
+          puts "Hello!"
+        end
+      end
+      ```
+      """,
+      comments: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{full: true}) end)
+    theme = Marcli.Theme.default()
+
+    assert output =~ theme.syntax.keyword_type <> "class" <> theme.reset
+    assert output =~ theme.syntax.name_class <> "Greeter" <> theme.reset
+    assert output =~ theme.syntax.name_function <> "hello" <> theme.reset
+    refute output =~ theme.code_text <> "class Greeter"
+  end
 end
