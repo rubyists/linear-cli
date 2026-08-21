@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/rubyists/linear-cli/compare/v2.1.0...v2.1.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* correct api call for --trash ([#174](https://github.com/rubyists/linear-cli/issues/174)) ([2eac29e](https://github.com/rubyists/linear-cli/commit/2eac29eab743f4932dd385380b9eff924a0e934f))
+
 ## [2.1.0](https://github.com/rubyists/linear-cli/compare/v2.0.2...v2.1.0) (2026-08-21)
 
 
