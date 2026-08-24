@@ -319,8 +319,9 @@ $ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
 
 ==== Move issues to a project
 
-Moves one or more issues to a different Linear project. Prompts for the target
-project when `--project`/`-p` is omitted.
+Two modes: move specific issues by ID, or bulk-move an entire project's backlog.
+
+*By ID* — moves the listed issues to a target project:
 
 [source,sh]
 ----
@@ -335,6 +336,22 @@ $ lc issue move --project Manhattan --team ENG CRY-1 <5>
 <3> Preview the planned moves without executing any mutations
 <4> Skip the confirmation prompt
 <5> Scope project search to the `ENG` team
+
+*Bulk project-to-project* (`--from`/`--to`) — moves all open issues from one
+project to another. Useful for retiring a project or consolidating backlogs.
+Issues keep their original team.
+
+[source,sh]
+----
+$ lc issue move --from Retired --to Active <1>
+$ lc issue move --from Retired --to Active --all <2>
+$ lc issue move --from p-uuid-1 --to p-uuid-2 <3>
+$ lc issue move --from Retired --to Active --dry-run <4>
+----
+<1> Moves all open issues from "Retired" to "Active", prompts for confirmation
+<2> Includes completed and cancelled issues too
+<3> Move by project UUID — the way to target a project in another team
+<4> Preview without mutating
 
 ==== Default team/project (profiles)
 
