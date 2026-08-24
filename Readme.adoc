@@ -156,6 +156,8 @@ so you don't have to type the full name every time:
 |`issue create` |`c`, `new`, `add`
 |`issue develop` |`d`, `dev`
 |`issue list` |`l`, `ls`
+|`issue status` |`s`, `st`, `stat`
+|`issue assign` |`a`
 |`issue update` |`u`
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
@@ -296,6 +298,23 @@ the team has more than one matching state.
 ----
 $ lc issue update --close --status Done --reason "These were closable" CRY-1234 CRY-2
 ----
+
+==== Move an issue to a different workflow state
+
+Changes the workflow state of one or more issues. Prompts interactively when
+`--status`/`-s` is omitted.
+
+[source,sh]
+----
+$ lc issue status CRY-1234 <1>
+$ lc issue status CRY-1234 -s "In Progress" <2>
+$ lc issue status CRY-1 CRY-2 CRY-3 -s Done <3>
+$ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
+----
+<1> Prompts interactively to pick a state
+<2> Move to a named workflow state (case-insensitive, unique-prefix match)
+<3> Move multiple issues at once — updates run concurrently
+<4> Add a comment alongside the state change
 
 ==== Default team/project (profiles)
 
