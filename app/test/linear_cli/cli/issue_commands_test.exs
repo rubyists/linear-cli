@@ -2973,5 +2973,60 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
       assert_received {:halted, 22}
     end
+
+    test "--from/--to user declines prints 'Move cancelled'" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        case Enum.find(bulk_stub_pairs(), fn {match, _} -> String.contains?(query, match) end) do
+          {_match, response} -> Req.Test.json(conn, response)
+          nil -> raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--from",
+                     "Source Project",
+                     "--to",
+                     "Target Project",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert output =~ "Move cancelled"
+    end
+
+    test "--from without --to exits 22 with a clear error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "move", "--from", "Source Project"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--from and --to must both be given"
+    end
+
+    test "--to without --from exits 22 with a clear error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "move", "--to", "Target Project"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--from and --to must both be given"
+    end
   end
 end

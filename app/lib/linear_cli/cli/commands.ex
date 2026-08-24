@@ -536,10 +536,16 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_move(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_move(%{unknown: issue_ids, options: options, flags: flags}) do
-    if options.from && options.to do
-      move_issues_by_project(options, flags)
-    else
-      move_issues_by_id(issue_ids, options, flags)
+    cond do
+      options.from && options.to ->
+        move_issues_by_project(options, flags)
+
+      options.from || options.to ->
+        {:error,
+         {:smells_bad, "--from and --to must both be given for bulk project-to-project mode"}}
+
+      true ->
+        move_issues_by_id(issue_ids, options, flags)
     end
   end
 
@@ -654,7 +660,7 @@ defmodule LinearCli.CLI.Commands do
             not Prompt.yes?(
               "Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"
             ) ->
-          :ok
+          Prompt.warn("Move cancelled")
 
         true ->
           with {:ok, pairs} <- apply_project_moves(issues, target) do
@@ -666,7 +672,8 @@ defmodule LinearCli.CLI.Commands do
 
   defp resolve_bulk_project(value, team_fn) do
     if Regex.match?(@uuid_regex, value) do
-      {:ok, struct(LinearCli.Linear.Project, %{id: value, name: value})}
+      short_name = String.slice(value, 0, 8) <> "…"
+      {:ok, struct(LinearCli.Linear.Project, %{id: value, name: short_name})}
     else
       team = team_fn.()
 
