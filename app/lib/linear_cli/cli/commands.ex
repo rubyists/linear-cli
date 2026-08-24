@@ -546,12 +546,14 @@ defmodule LinearCli.CLI.Commands do
   defp resolve_move_project(issues, options) do
     with {:ok, tid} <- resolve_move_team_id(options.team || Profiles.default_team(), issues),
          {:ok, projects} <- Linear.projects_by_team(tid, %{search: options.project}) do
-      case Projects.project_for(projects, options.project) do
-        nil -> {:error, {:smells_bad, "No project found matching #{inspect(options.project)}"}}
-        project -> {:ok, project}
-      end
+      project_result(Projects.project_for(projects, options.project), options.project)
     end
   end
+
+  defp project_result(nil, search),
+    do: {:error, {:smells_bad, "No project found matching #{inspect(search)}"}}
+
+  defp project_result(project, _search), do: {:ok, project}
 
   defp resolve_move_team_id(nil, issues), do: {:ok, hd(issues).team.id}
 
@@ -565,10 +567,9 @@ defmodule LinearCli.CLI.Commands do
     do: apply_moves(issues, project, output)
 
   defp execute_moves_if_confirmed(issues, project, _flags, output) do
-    case Prompt.yes?("Proceed with move?") do
-      true -> apply_moves(issues, project, output)
-      false -> Prompt.warn("Move cancelled")
-    end
+    if Prompt.yes?("Proceed with move?"),
+      do: apply_moves(issues, project, output),
+      else: Prompt.warn("Move cancelled")
   end
 
   defp print_move_plan(issues, project, output) when output != "json" do
