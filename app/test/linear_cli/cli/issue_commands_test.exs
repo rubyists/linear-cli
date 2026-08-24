@@ -2285,4 +2285,405 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert input["stateId"] == "s-ip"
     end
   end
+
+  describe "issue move" do
+    defp move_project_map(id \\ "p1", name \\ "Manhattan") do
+      %{
+        "id" => id,
+        "name" => name,
+        "content" => nil,
+        "slugId" => "abc",
+        "description" => nil,
+        "url" => "https://linear.app/x/project/#{id}"
+      }
+    end
+
+    defp move_team_projects(projects \\ nil) do
+      nodes = projects || [move_project_map()]
+      %{"data" => %{"team" => %{"projects" => %{"nodes" => nodes}}}}
+    end
+
+    defp issue_moved(project_map \\ nil) do
+      project = project_map || move_project_map()
+      %{"data" => %{"issueUpdate" => %{"issue" => issue_map(%{"project" => project})}}}
+    end
+
+    test "--project moves a single issue with --yes (no prompt)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:project_id, decoded["variables"]["input"]["projectId"]})
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "--yes",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received {:project_id, "p1"}
+      assert output =~ "CRY-1 -> Manhattan"
+      assert output =~ "CRY-1 moved to Manhattan"
+    end
+
+    test "--dry-run prints the plan but does not call issueUpdate" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutation_called)
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "--dry-run",
+                     "CRY-1"
+                   ])
+        end)
+
+      refute_received :mutation_called
+      assert output =~ "CRY-1 -> Manhattan"
+      refute output =~ "moved to"
+    end
+
+    test "user declines confirmation, no mutation called" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutation_called)
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "CRY-1"
+                   ])
+        end)
+
+      refute_received :mutation_called
+      assert output =~ "CRY-1 -> Manhattan"
+      assert output =~ "Move cancelled"
+    end
+
+    test "user confirms, mutation is called" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutation_called)
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "y\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "move",
+                   "--project",
+                   "Manhattan",
+                   "CRY-1"
+                 ])
+      end)
+
+      assert_received :mutation_called
+    end
+
+    test "moves multiple issues concurrently with --yes" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            identifier = decoded["variables"]["id"]
+
+            issue =
+              issue_map(%{
+                "identifier" => identifier,
+                "id" => "i-#{identifier}"
+              })
+
+            Req.Test.json(conn, %{"data" => %{"issue" => issue}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            identifier = decoded["variables"]["id"]
+            send(test_pid, {:moved, identifier})
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "--yes",
+                     "CRY-1",
+                     "CRY-2"
+                   ])
+        end)
+
+      assert_received {:moved, "CRY-1"}
+      assert_received {:moved, "CRY-2"}
+      assert output =~ "CRY-1 -> Manhattan"
+      assert output =~ "CRY-2 -> Manhattan"
+    end
+
+    test "--output json emits issue JSON without confirmation messages" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "--yes",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      # Plan line precedes JSON output; extract the JSON portion
+      json_part = output |> String.split("\n", parts: 2) |> List.last() |> String.trim()
+      assert {:ok, decoded} = Jason.decode(json_part)
+      assert decoded["identifier"] == "CRY-1"
+      refute output =~ "moved to"
+    end
+
+    test "with no issue ids, exits 22 (smells bad)" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "move", "--project", "Manhattan"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No issue IDs provided!"
+    end
+
+    test "alias 'm' routes to issue move" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :moved)
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["issue", "m", "--project", "Manhattan", "--yes", "CRY-1"])
+      end)
+
+      assert_received :moved
+    end
+
+    test "alias 'mv' routes to issue move" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :moved)
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["issue", "mv", "--project", "Manhattan", "--yes", "CRY-1"])
+      end)
+
+      assert_received :moved
+    end
+
+    test "--team scopes project search to the given team" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          # Team.Read.Find uses "query($id: String!) { team(id: $id) { ... projects ... } }"
+          String.contains?(query, "team(id: $id)") && String.contains?(query, "projects") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            send(test_pid, {:team_id, decoded["variables"]["teamId"]})
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, issue_moved())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "move",
+                   "--project",
+                   "Manhattan",
+                   "--team",
+                   "ENG",
+                   "--yes",
+                   "CRY-1"
+                 ])
+      end)
+
+      assert_received {:team_id, "t1"}
+    end
+  end
 end
