@@ -538,55 +538,46 @@ defmodule LinearCli.CLI.Commands do
          {:ok, issues} <-
            Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
          {:ok, project} <- resolve_move_project(issues, options) do
-      print_move_plan(issues, project)
-
-      if flags.dry_run do
-        :ok
-      else
-        if flags.yes || Prompt.yes?("Proceed with move?") do
-          apply_moves(issues, project, options.output)
-        else
-          Prompt.warn("Move cancelled")
-          :ok
-        end
-      end
+      print_move_plan(issues, project, options.output)
+      execute_moves_if_confirmed(issues, project, flags, options.output)
     end
   end
 
   defp resolve_move_project(issues, options) do
-    team_key = options.team || Profiles.default_team()
-
-    team_id =
-      if team_key do
-        case Linear.find_team(team_key) do
-          {:ok, team} -> team.id
-          {:error, reason} -> {:error, reason}
-        end
-      else
-        hd(issues).team.id
+    with {:ok, tid} <- resolve_move_team_id(options.team || Profiles.default_team(), issues),
+         {:ok, projects} <- Linear.projects_by_team(tid, %{search: options.project}) do
+      case Projects.project_for(projects, options.project) do
+        nil -> {:error, {:smells_bad, "No project found matching #{inspect(options.project)}"}}
+        project -> {:ok, project}
       end
-
-    case team_id do
-      {:error, reason} ->
-        {:error, reason}
-
-      tid ->
-        search = options.project
-
-        with {:ok, projects} <- Linear.projects_by_team(tid, %{search: search}) do
-          case Projects.project_for(projects, search) do
-            nil -> {:error, {:smells_bad, "No project found matching #{inspect(search)}"}}
-            project -> {:ok, project}
-          end
-        end
     end
   end
 
-  defp print_move_plan(issues, project) do
+  defp resolve_move_team_id(nil, issues), do: {:ok, hd(issues).team.id}
+
+  defp resolve_move_team_id(key, _issues) do
+    with {:ok, team} <- Linear.find_team(key), do: {:ok, team.id}
+  end
+
+  defp execute_moves_if_confirmed(_issues, _project, %{dry_run: true}, _output), do: :ok
+
+  defp execute_moves_if_confirmed(issues, project, %{yes: true}, output),
+    do: apply_moves(issues, project, output)
+
+  defp execute_moves_if_confirmed(issues, project, _flags, output) do
+    case Prompt.yes?("Proceed with move?") do
+      true -> apply_moves(issues, project, output)
+      false -> Prompt.warn("Move cancelled")
+    end
+  end
+
+  defp print_move_plan(issues, project, output) when output != "json" do
     Enum.each(issues, fn issue ->
       Prompt.say("#{issue.identifier} -> #{project.name}")
     end)
   end
+
+  defp print_move_plan(_issues, _project, _output), do: :ok
 
   defp apply_moves(issues, project, output) do
     issues

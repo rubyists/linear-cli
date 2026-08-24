@@ -158,6 +158,7 @@ so you don't have to type the full name every time:
 |`issue list` |`l`, `ls`
 |`issue status` |`s`, `st`, `stat`
 |`issue assign` |`a`
+|`issue move` |`m`, `mv`
 |`issue update` |`u`
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
@@ -315,6 +316,25 @@ $ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
 <2> Move to a named workflow state (case-insensitive, unique-prefix match)
 <3> Move multiple issues at once — updates run concurrently
 <4> Add a comment alongside the state change
+
+==== Move issues to a project
+
+Moves one or more issues to a different Linear project. Prompts for the target
+project when `--project`/`-p` is omitted.
+
+[source,sh]
+----
+$ lc issue move --project Manhattan CRY-1 <1>
+$ lc issue move -p Manhattan CRY-1 CRY-2 CRY-3 <2>
+$ lc issue move --project Manhattan --dry-run CRY-1 <3>
+$ lc issue move --project Manhattan --yes CRY-1 <4>
+$ lc issue move --project Manhattan --team ENG CRY-1 <5>
+----
+<1> Move a single issue; prompts for confirmation before executing
+<2> Move multiple issues at once — updates run concurrently
+<3> Preview the planned moves without executing any mutations
+<4> Skip the confirmation prompt
+<5> Scope project search to the `ENG` team
 
 ==== Default team/project (profiles)
 

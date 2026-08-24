@@ -2559,11 +2559,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
                    ])
         end)
 
-      # Plan line precedes JSON output; extract the JSON portion
-      json_part = output |> String.split("\n", parts: 2) |> List.last() |> String.trim()
-      assert {:ok, decoded} = Jason.decode(json_part)
+      assert {:ok, decoded} = Jason.decode(String.trim(output))
       assert decoded["identifier"] == "CRY-1"
       refute output =~ "moved to"
+      refute output =~ "->"
     end
 
     test "with no issue ids, exits 22 (smells bad)" do
