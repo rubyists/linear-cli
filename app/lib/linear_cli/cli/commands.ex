@@ -520,20 +520,30 @@ defmodule LinearCli.CLI.Commands do
   end
 
   @doc """
-  Moves one or more issues to a target project.
+  Moves issues to a target project.
 
-  Issue IDs are captured via `allow_unknown_args: true` (same pattern as
-  `issue_take/2`/`issue_status/1`/`issue_update/1`). The target project is
-  resolved from `--project` (fuzzy-match against the team's projects via
-  `LinearCli.CLI.Projects.project_for/2`) or interactively if omitted.
-  Team is derived from `--team`, the active profile, or the first fetched
-  issue's team (to avoid a separate team prompt).
+  Two modes:
+  - **ID-based** (EXT-9): `ISSUE_ID... --project P [--team T]` — moves the
+    listed issues to the named project, resolved per-issue from the issue's
+    own team or the given `--team`. Concurrent apply, same pattern as
+    `issue_status/1`.
+  - **Bulk project-to-project** (Phase 12): `--from P --to P [--team T]` —
+    lists all open issues (or all with `--all`) from the source project and
+    fans out mutations to the target project concurrently.
 
-  With `--dry-run`, prints the planned moves without executing any mutations.
+  With `--dry-run`, prints the planned moves without mutating.
   Without `--yes`, asks for confirmation before applying.
   """
   @spec issue_move(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_move(%{unknown: issue_ids, options: options, flags: flags}) do
+    if options.from && options.to do
+      move_issues_by_project(options, flags)
+    else
+      move_issues_by_id(issue_ids, options, flags)
+    end
+  end
+
+  defp move_issues_by_id(issue_ids, options, flags) do
     with :ok <- validate_issue_ids(issue_ids),
          {:ok, issues} <-
            Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
@@ -619,6 +629,99 @@ defmodule LinearCli.CLI.Commands do
 
   defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
   defp validate_issue_ids(_issue_ids), do: :ok
+
+  @uuid_regex ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+  defp move_issues_by_project(options, flags) do
+    team_fn = fn -> WhatFor.team_for(options.team || Profiles.default_team()) end
+
+    with {:ok, source} <- resolve_bulk_project(options.from, team_fn),
+         {:ok, target} <- resolve_bulk_project(options.to, team_fn),
+         :ok <- guard_different_projects(source, target),
+         {:ok, issues} <- Linear.issues(%{project_id: source.id, mine: false, all: flags.all}) do
+      cond do
+        issues == [] ->
+          label = if flags.all, do: "issues", else: "open issues"
+          Prompt.ok("No #{label} in #{source.name} to move")
+          :ok
+
+        flags.dry_run ->
+          Display.show(one_or_many(issues), %{output: options.output})
+          Prompt.ok("Would move #{length(issues)} issue(s) from #{source.name} to #{target.name}")
+          :ok
+
+        not flags.yes and
+            not Prompt.yes?(
+              "Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"
+            ) ->
+          :ok
+
+        true ->
+          with {:ok, pairs} <- apply_project_moves(issues, target) do
+            show_move_results(pairs, source, target, options.output)
+          end
+      end
+    end
+  end
+
+  defp resolve_bulk_project(value, team_fn) do
+    if Regex.match?(@uuid_regex, value) do
+      {:ok, struct(LinearCli.Linear.Project, %{id: value, name: value})}
+    else
+      team = team_fn.()
+
+      with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}),
+           project when not is_nil(project) <- Projects.project_for(projects, value) do
+        {:ok, project}
+      else
+        nil -> {:error, {:smells_bad, "No project found matching #{value}"}}
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  defp guard_different_projects(%{id: id}, %{id: id}),
+    do: {:error, {:smells_bad, "source and target are the same project"}}
+
+  defp guard_different_projects(_source, _target), do: :ok
+
+  defp apply_project_moves(issues, target) do
+    issues
+    |> Task.async_stream(
+      fn issue ->
+        case Linear.attach_issue_to_project(issue, target.id) do
+          {:ok, updated} -> {:ok, {issue, updated}}
+          {:error, reason} -> {:error, reason}
+        end
+      end,
+      max_concurrency: min(length(issues), @max_concurrent_issue_updates),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, pair}}, {:ok, acc} -> {:cont, {:ok, [pair | acc]}}
+      {:ok, {:error, reason}}, {:ok, _acc} -> {:halt, {:error, reason}}
+      {:exit, reason}, {:ok, _acc} -> {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> then(fn
+      {:ok, results} -> {:ok, Enum.reverse(results)}
+      error -> error
+    end)
+  end
+
+  defp show_move_results(pairs, source, target, output) do
+    if output == "json" do
+      Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: "json"})
+    else
+      Enum.each(pairs, fn {orig, _updated} ->
+        Prompt.ok("#{orig.identifier} moved to #{target.name}")
+      end)
+
+      Prompt.ok("Moved #{length(pairs)} issue(s) from #{source.name} to #{target.name}")
+    end
+
+    :ok
+  end
 
   @doc """
   Changes the workflow state of one or more issues. Optimus captures the IDs in

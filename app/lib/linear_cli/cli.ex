@@ -769,9 +769,14 @@ defmodule LinearCli.CLI do
             ],
             move: [
               name: "move",
-              about: "Move one or more issues to a project (ISSUE_ID...)",
+              about:
+                "Move issues: by ID (ISSUE_ID... --project P) or bulk project-to-project (--from P --to P)",
               allow_unknown_args: true,
               flags: [
+                all: [
+                  long: "--all",
+                  help: "Move completed and cancelled issues too (--from/--to mode)"
+                ],
                 dry_run: [
                   long: "--dry-run",
                   help: "Preview moves without executing them"
@@ -787,6 +792,15 @@ defmodule LinearCli.CLI do
                   short: "-p",
                   long: "--project",
                   help: "Target project name, URL, ID, or - to select from a list"
+                ],
+                from: [
+                  short: "-f",
+                  long: "--from",
+                  help: "Source project name or ID (bulk mode)"
+                ],
+                to: [
+                  long: "--to",
+                  help: "Target project name or ID (bulk mode)"
                 ],
                 team: [
                   short: "-t",
