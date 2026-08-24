@@ -283,6 +283,28 @@ defmodule LinearCli.CLI.IssueHelpers do
   end
 
   @doc """
+  Moves `issue` to the already-resolved `project`, calling
+  `LinearCli.Linear.attach_issue_to_project/2` and printing a confirmation.
+
+  Unlike `attach_project/2`, this function takes a pre-resolved
+  `%LinearCli.Linear.Project{}` struct rather than a search string. Callers
+  that need to resolve a search string first should use `attach_project/2`,
+  which delegates here after resolution.
+  """
+  @spec move_issue(%Linear.Issue{}, %Linear.Project{}) ::
+          {:ok, %Linear.Issue{}} | {:error, term()}
+  def move_issue(issue, project) do
+    case Linear.attach_issue_to_project(issue, project.id) do
+      {:ok, updated} ->
+        Prompt.ok("#{issue.identifier} was moved to #{project.name}")
+        {:ok, updated}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Attaches `issue` to a project matched against `project_search` among its
   team's projects (`LinearCli.CLI.Projects.project_for/2`, prompting to
   disambiguate if needed).
@@ -291,6 +313,8 @@ defmodule LinearCli.CLI.IssueHelpers do
   `project_search` matching nothing in an empty project list (`project_for`
   returning `nil`) - the same faithfully-ported crash risk Ruby's own
   `nil.id` would hit.
+
+  Resolves the project from the search string, then delegates to `move_issue/2`.
   """
   @spec attach_project(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
@@ -298,15 +322,7 @@ defmodule LinearCli.CLI.IssueHelpers do
     with {:ok, projects} <-
            Linear.projects_by_team(issue.team.id, %{search: project_search}) do
       project = Projects.project_for(projects, project_search)
-
-      case Linear.attach_issue_to_project(issue, project.id) do
-        {:ok, updated} ->
-          Prompt.ok("#{issue.identifier} was attached to #{project.name}")
-          {:ok, updated}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
+      move_issue(issue, project)
     end
   end
 
