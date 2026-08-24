@@ -3,7 +3,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
   import ExUnit.CaptureIO
 
   alias LinearCli.CLI.IssueHelpers
-  alias LinearCli.Linear.{Comment, Issue, Team, User, WorkflowState}
+  alias LinearCli.Linear.{Comment, Issue, Project, Team, User, WorkflowState}
 
   # Every helper under test accepts an already-loaded resource struct (no
   # data-layer fetch happens inside these functions themselves, mirroring
@@ -283,6 +283,28 @@ defmodule LinearCli.CLI.IssueHelpersTest do
     end
   end
 
+  describe "move_issue/2" do
+    test "moves the issue to the resolved project and prints a confirmation" do
+      stub_responses([{"issueUpdate", issue_updated()}])
+
+      project = %Project{id: "p1", name: "Manhattan Rollout"}
+
+      assert capture_io(fn ->
+               assert {:ok, %Issue{}} = IssueHelpers.move_issue(issue(), project)
+             end) =~ "CRY-1 was moved to Manhattan Rollout"
+    end
+
+    test "propagates an API error without printing confirmation" do
+      stub_responses([{"issueUpdate", %{"errors" => [%{"message" => "boom"}]}}])
+
+      project = %Project{id: "p1", name: "Manhattan Rollout"}
+
+      assert capture_io(fn ->
+               assert {:error, %Ash.Error.Invalid{}} = IssueHelpers.move_issue(issue(), project)
+             end) == ""
+    end
+  end
+
   describe "attach_project/2 (Ruby: CLI::Issue#attach_project)" do
     test "resolves the project by name against the team's projects and attaches it" do
       stub_responses([
@@ -303,7 +325,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
       assert capture_io(fn ->
                assert {:ok, %Issue{}} =
                         IssueHelpers.attach_project(issue(), "Manhattan Rollout")
-             end) =~ "CRY-1 was attached to Manhattan Rollout"
+             end) =~ "CRY-1 was moved to Manhattan Rollout"
     end
   end
 
@@ -380,7 +402,7 @@ defmodule LinearCli.CLI.IssueHelpersTest do
           assert :ok = IssueHelpers.update_issue(issue(), project: "Manhattan Rollout")
         end)
 
-      assert output =~ "CRY-1 was attached to Manhattan Rollout"
+      assert output =~ "CRY-1 was moved to Manhattan Rollout"
     end
 
     test "with :description, updates the issue description" do
