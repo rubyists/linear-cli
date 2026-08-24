@@ -519,6 +519,104 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
+  @doc """
+  Moves one or more issues to a target project.
+
+  Issue IDs are captured via `allow_unknown_args: true` (same pattern as
+  `issue_take/2`/`issue_status/1`/`issue_update/1`). The target project is
+  resolved from `--project` (fuzzy-match against the team's projects via
+  `LinearCli.CLI.Projects.project_for/2`) or interactively if omitted.
+  Team is derived from `--team`, the active profile, or the first fetched
+  issue's team (to avoid a separate team prompt).
+
+  With `--dry-run`, prints the planned moves without executing any mutations.
+  Without `--yes`, asks for confirmation before applying.
+  """
+  @spec issue_move(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_move(%{unknown: issue_ids, options: options, flags: flags}) do
+    with :ok <- validate_issue_ids(issue_ids),
+         {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+         {:ok, project} <- resolve_move_project(issues, options) do
+      print_move_plan(issues, project, options.output)
+      execute_moves_if_confirmed(issues, project, flags, options.output)
+    end
+  end
+
+  defp resolve_move_project(issues, options) do
+    with {:ok, tid} <- resolve_move_team_id(options.team || Profiles.default_team(), issues),
+         {:ok, projects} <- Linear.projects_by_team(tid, %{search: options.project}) do
+      project_result(Projects.project_for(projects, options.project), options.project)
+    end
+  end
+
+  defp project_result(nil, search),
+    do: {:error, {:smells_bad, "No project found matching #{inspect(search)}"}}
+
+  defp project_result(project, _search), do: {:ok, project}
+
+  defp resolve_move_team_id(nil, issues), do: {:ok, hd(issues).team.id}
+
+  defp resolve_move_team_id(key, _issues) do
+    with {:ok, team} <- Linear.find_team(key), do: {:ok, team.id}
+  end
+
+  defp execute_moves_if_confirmed(_issues, _project, %{dry_run: true}, _output), do: :ok
+
+  defp execute_moves_if_confirmed(issues, project, %{yes: true}, output),
+    do: apply_moves(issues, project, output)
+
+  defp execute_moves_if_confirmed(issues, project, _flags, output) do
+    if Prompt.yes?("Proceed with move?"),
+      do: apply_moves(issues, project, output),
+      else: Prompt.warn("Move cancelled")
+  end
+
+  defp print_move_plan(issues, project, output) when output != "json" do
+    Enum.each(issues, fn issue ->
+      Prompt.say("#{issue.identifier} -> #{project.name}")
+    end)
+  end
+
+  defp print_move_plan(_issues, _project, _output), do: :ok
+
+  defp apply_moves(issues, project, output) do
+    issues
+    |> Task.async_stream(
+      fn issue -> apply_move(issue, project) end,
+      max_concurrency: min(length(issues), @max_concurrent_issue_updates),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, updated}}, {:ok, acc} -> {:cont, {:ok, [updated | acc]}}
+      {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
+      {:exit, reason}, _acc -> {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> display_moves_result(project, output)
+  end
+
+  defp display_moves_result({:ok, updated_issues}, project, output) do
+    updated_issues = Enum.reverse(updated_issues)
+    Display.show(one_or_many(updated_issues), %{output: output})
+    print_move_results(updated_issues, project, output)
+    :ok
+  end
+
+  defp display_moves_result(error, _project, _output), do: error
+
+  defp print_move_results(updated_issues, project, output) when output != "json" do
+    Enum.each(updated_issues, fn updated ->
+      Prompt.ok("#{updated.identifier} moved to #{project.name}")
+    end)
+  end
+
+  defp print_move_results(_updated_issues, _project, _output), do: :ok
+
+  defp apply_move(issue, project) do
+    Linear.attach_issue_to_project(issue, project.id)
+  end
+
   defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
   defp validate_issue_ids(_issue_ids), do: :ok
 

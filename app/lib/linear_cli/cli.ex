@@ -103,6 +103,8 @@ defmodule LinearCli.CLI do
       "dev" => "develop",
       "l" => "list",
       "ls" => "list",
+      "m" => "move",
+      "mv" => "move",
       "s" => "status",
       "st" => "status",
       "stat" => "status",
@@ -209,6 +211,7 @@ defmodule LinearCli.CLI do
     do: run(&Commands.issue_develop/1, result, halt)
 
   defp dispatch([:issue, :pr], result, halt), do: run(&Commands.issue_pr/1, result, halt)
+  defp dispatch([:issue, :move], result, halt), do: run(&Commands.issue_move/1, result, halt)
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
   defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
@@ -761,6 +764,34 @@ defmodule LinearCli.CLI do
                   short: "-s",
                   long: "--status",
                   help: "Workflow state name to set after self-assigning (e.g. \"In Progress\")"
+                ]
+              ]
+            ],
+            move: [
+              name: "move",
+              about: "Move one or more issues to a project (ISSUE_ID...)",
+              allow_unknown_args: true,
+              flags: [
+                dry_run: [
+                  long: "--dry-run",
+                  help: "Preview moves without executing them"
+                ],
+                yes: [
+                  short: "-y",
+                  long: "--yes",
+                  help: "Skip confirmation prompt"
+                ]
+              ],
+              options: [
+                project: [
+                  short: "-p",
+                  long: "--project",
+                  help: "Target project name, URL, ID, or - to select from a list"
+                ],
+                team: [
+                  short: "-t",
+                  long: "--team",
+                  help: "Scope project search to this team"
                 ]
               ]
             ],
