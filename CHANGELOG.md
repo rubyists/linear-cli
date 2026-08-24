@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.0](https://github.com/rubyists/linear-cli/compare/v2.4.0...v2.5.0) (2026-08-24)
+
+
+### Features
+
+* **issue-helpers:** add move_issue/2 for moving an issue to a resolved project ([#186](https://github.com/rubyists/linear-cli/issues/186)) ([6c43e39](https://github.com/rubyists/linear-cli/commit/6c43e39f46d5d79dba7b9d9af54abda024ff8551))
+* **issue:** add --from/--to bulk project-to-project mode to lc issue move ([#189](https://github.com/rubyists/linear-cli/issues/189)) ([bbb2df3](https://github.com/rubyists/linear-cli/commit/bbb2df3e3608ad5cb69a60271fc2e5069de58763))
+* **issue:** add lc issue move subcommand ([#187](https://github.com/rubyists/linear-cli/issues/187)) ([51cd1f7](https://github.com/rubyists/linear-cli/commit/51cd1f7350e47669ecf01aa78068603c16c3ae9a))
+
 ## [2.4.0](https://github.com/rubyists/linear-cli/compare/v2.3.0...v2.4.0) (2026-08-21)
 
 
