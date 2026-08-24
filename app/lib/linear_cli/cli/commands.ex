@@ -593,23 +593,25 @@ defmodule LinearCli.CLI.Commands do
       {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
       {:exit, reason}, _acc -> {:halt, {:error, {:task_exit, reason}}}
     end)
-    |> case do
-      {:ok, updated_issues} ->
-        updated_issues = Enum.reverse(updated_issues)
-        Display.show(one_or_many(updated_issues), %{output: output})
-
-        if output != "json" do
-          Enum.each(updated_issues, fn updated ->
-            Prompt.ok("#{updated.identifier} moved to #{project.name}")
-          end)
-        end
-
-        :ok
-
-      error ->
-        error
-    end
+    |> display_moves_result(project, output)
   end
+
+  defp display_moves_result({:ok, updated_issues}, project, output) do
+    updated_issues = Enum.reverse(updated_issues)
+    Display.show(one_or_many(updated_issues), %{output: output})
+    print_move_results(updated_issues, project, output)
+    :ok
+  end
+
+  defp display_moves_result(error, _project, _output), do: error
+
+  defp print_move_results(updated_issues, project, output) when output != "json" do
+    Enum.each(updated_issues, fn updated ->
+      Prompt.ok("#{updated.identifier} moved to #{project.name}")
+    end)
+  end
+
+  defp print_move_results(_updated_issues, _project, _output), do: :ok
 
   defp apply_move(issue, project) do
     Linear.attach_issue_to_project(issue, project.id)
