@@ -1,0 +1,222 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 23, 2026
+:my-title: Phase 12 plan: bulk issue move between projects (`lc issue move`)
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Move every issue in one project into another, in one command:
+`lc issue move --from <project> --to <project>`. Today the only way to
+re-parent issues is per-issue (`lc issue update --project X CRY-1 CRY-2 ...`),
+so moving a whole project's backlog means first listing its identifiers and
+then re-typing them. Project-scoped bulk transfer (retired project ->
+successor project, team reorg, mistake correction) is the missing shape.
+
+This phase adds *project-to-project* bulk move only. Explicit-ID moves stay
+where they are (`issue update --project`) and are not touched.
+
+== Decisions (reached in full agreement before implementation)
+
+1. *Open issues only, by default.* Completed and cancelled issues do not
+   move unless `--all` is given. Same flag name and same meaning as
+   `issue list --all` ("Show all issues including completed and cancelled"),
+   passed straight through to the `issues/1` code interface's existing
+   `all:` argument. (User decision, 2026-08-23.)
+2. *No new GraphQL, no new Ash action.* The schema models an issue as having
+   exactly one project (`Issue.project: Project`, "Null if the issue is not
+   part of any project"), so `issueUpdate(input: {projectId: <target>})`
+   *is* a move. The existing `attach_issue_to_project` code interface
+   (action `:attach_to_project`, module
+   `LinearCli.Linear.Issue.Update.AttachToProject`) already sends exactly
+   that input through the shared `issueUpdate` mutation. Bulk move reuses
+   it per issue. The Ash-domain ERD therefore needs no change (no resource,
+   action, code interface, association attribute, or shared helper added,
+   removed, renamed, or materially changed).
+3. *Two phases: list fully, then mutate.* All source issues are fetched up
+   front via `Linear.issues(%{project_id: source_id, mine: false, all: ...})`
+   (the list action already filters by `project.id.eq` and paginates 50/page
+   via `LinearCli.Linear.Paginate.all`), and only then are mutations fanned
+   out. Mutating mid-pagination would invalidate the cursor the list is
+   walking. Side benefit: a partially-completed move self-heals on
+   re-run, because already-moved issues no longer match the source filter.
+4. *Concurrent mutations follow `issue_status/1`* (added by #180):
+   `Task.async_stream/3` with `max_concurrency: min(length, 20)`,
+   `ordered: true`, `timeout: 30_000`, halt on the first
+   `{:error, reason}`. That reason flows to `LinearCli.CLI.run/3`'s
+   existing `handle_error/3` (message + non-zero exit) - no new error
+   machinery.
+5. *A new `issue move` subcommand, not a widening of `issue update`.*
+   Project-scoped bulk transfer is a different verb with different
+   resolution and confirmation needs; `issue update` already does
+   explicit-ID multi-update with `--project`.
+6. *`--from`/`--to` take a project name or a project ID.* A name is
+   resolved within the *source* project's team
+   (`Linear.projects_by_team(source.team_id, %{search: name})` +
+   `Projects.project_for/2`, which prompts on ambiguity, same as
+   `issue update --project`). A value matching a UUID is used directly -
+   this is also the documented way to target a project in *another* team
+   (the global `projects` query in `Project.Read.All` takes no filter, so
+   there is no cross-team name search to build). A `-` (prompt across the
+   source team's projects) is supported for parity with
+   `issue list --project`.
+7. *Confirmation before any mutation.* A count summary
+   ("Move N issue(s) from <source> to <target>?") is asked via the existing
+   `Prompt.yes?/1` unless `--yes` is given. `--dry-run` resolves
+   everything, lists the issues that would move (respecting the open-only
+   default / `--all`), performs zero mutations, and exits successfully.
+8. *Issues keep their team.* `issueUpdate` only touches `projectId`; an
+   issue moved into another team's project stays in its own team. Help
+   text says so; no behavior to implement.
+9. *No `bin/lmove` wrapper in this phase* - revisit after the command has
+   been used (adding one would also require updating `AGENTS.md`'s
+   repo-layout wrapper list).
+
+== Verified
+
+* `schema/LinearAPI.graphql` (`type Issue`, line 12810): the issue type has
+  a single `project: Project` field - no `projects: [Project!]!` list and no
+  `projectIds`. `IssueUpdateInput` (line 16870) offers `projectId: String`
+  with no `removedProjectIds`/`projects` counterpart (contrast the
+  `addedLabelIds`/`removedLabelIds` and `addedReleaseIds`/`removedReleaseIds`
+  triples that *do* exist there). Under a single-project model, setting
+  `projectId` to a new value is the only possible "move" semantics; replace
+  is the only coherent reading. A live smoke test (Sequencing, step 5)
+  still confirms it, because there is no alternative API surface to fall
+  back on if the assumption is wrong.
+* `app/lib/linear_cli/linear/issue.ex`: `Issue.Read.List` builds
+  `project.id.eq` from a `project_id` argument, applies the
+  `completedAt`/`canceledAt` null-guards unless `all: true`, and the
+  `mine` argument defaults to `true` - a project-wide move must pass
+  `mine: false` explicitly or it will silently skip everyone else's issues.
+* `app/lib/linear_cli/linear/issue.ex` (`Issue.Update`): all single-issue
+  project writes already funnel through one `issueUpdate` mutation document
+  that refetches the full issue fragment, which is what `Display.show` and
+  `--output json` will consume.
+* `app/lib/linear_cli/cli/commands.ex` (`issue_status/1`): the
+  list -> plan -> `Task.async_stream` -> per-issue `Prompt.ok` +
+  `Display.show` flow, and `validate_issue_ids/1`'s "nothing to do"
+  handling, are the house pattern this command copies.
+* `app/lib/linear_cli/cli/issue_helpers.ex` (`attach_project/2`): resolves
+  the *search string* against the issue's own team per issue. Bulk move
+  resolves the target *once* into a `Project` record instead, so the new
+  helper takes a resolved project, not a search string.
+* `app/test/linear_cli/cli/issue_commands_test.exs`: the
+  `Req.Test.stub(LinearCli.Api, ...)` harness matches on substrings of the
+  outgoing GraphQL document and drives whole multi-call flows - bulk move
+  (N list pages + N mutations) is testable with stubs, no live API.
+
+== Building blocks
+
+* `LinearCli.CLI` (`app/lib/linear_cli/cli.ex`): new `move` subcommand in
+  the `issue` spec - `--from/-f` (required, project name/ID/`-`),
+  `--to/-t` (required, project name/ID/`-`), `--all` ("Move completed and
+  cancelled issues too"), `--dry-run`, `--yes` - plus the `dispatch/3`
+  clause. (Short flags checked for collisions within the subcommand at
+  implementation time; the subcommand's own `--to/-t` does not clash with
+  anything in its local spec.)
+* `LinearCli.CLI.IssueHelpers.move_issue/2` (new, public): given an issue
+  and an already-resolved target `Project`, calls
+  `Linear.attach_issue_to_project(issue, project.id)`; on success prints
+  `Prompt.ok("#{issue.identifier} moved to #{project.name}")` and returns
+  the updated issue; on failure returns `{:error, reason}`. Mirrors
+  `attach_project/2`'s shape minus the per-issue search resolution.
+* `LinearCli.CLI.Commands.issue_move/1` (new):
+  . resolve source: `--from` value -> UUID used directly, otherwise
+    `Linear.projects_by_team/2` search + `Projects.project_for/2`
+    (prompts on `-`/ambiguity; "No project found matching ..." error,
+    same wording as `project_favorite/1`).
+  . list: `Linear.issues(%{project_id: source.id, mine: false,
+    all: options.all})`.
+  . resolve target: same rules as source (UUID direct, else search in the
+    *source* team); `--from` == `--to` (same project ID) is a
+    smells_bad-style error, "source and target are the same project".
+  . empty list -> `Prompt.ok("No open issues in <source> to move")` (or
+    "No issues in <source> to move" under `--all`), exit successfully,
+    zero mutations.
+  . `--dry-run`: `Display.show` the issues (honoring `--output json`),
+    `Prompt.ok("Would move N issue(s) ...")`, done.
+  . confirm via `Prompt.yes?/1` unless `--yes`; "no" exits cleanly with
+    zero mutations.
+  . apply: `Task.async_stream/3` over the issues calling
+    `IssueHelpers.move_issue/2`, same concurrency/ordered/timeout/halt
+    settings as `apply_status_updates/2`.
+  . report: per-issue `Prompt.ok` lines already printed by the helper;
+    under `--output json`, `Display.show` of the updated issues (issue
+    records come back from the mutation's refetch).
+
+== Tests
+
+All in `app/test/linear_cli/cli/issue_commands_test.exs` unless noted, on
+the existing `Req.Test.stub(LinearCli.Api, ...)` harness (stub pairs keyed
+on document substrings: `issues(filter:` for the list, `issueUpdate` for
+the mutations, `team(id:` / `projects` for project resolution).
+
+* Happy path, 3 open issues: the list document carries
+  `project.id.eq` = source ID *and* the `completedAt`/`canceledAt`
+  null-guards; three `issueUpdate` calls are observed, each with
+  `variables.input.projectId` == target ID and the correct issue id;
+  captured stdout has one "moved to <target>" line per issue; result `:ok`.
+* `--all`: list document carries *no* completed/cancelled guards; mutation
+  count matches.
+* `--dry-run`: issues are listed (including via `--output json`), and no
+  document containing `issueUpdate` is ever sent; result `:ok`.
+* Confirmation: answering "no" to the `Prompt.yes?` prompt results in zero
+  mutation documents; answering "yes" proceeds. `--yes` skips the prompt
+  entirely (no stdin interaction).
+* Error mid-batch: the second `issueUpdate` returns an API error -> the
+  command halts (no further mutation documents), returns `{:error, reason}`
+  so `handle_error/3`'s exit-code path is exercised.
+* Empty source project: friendly message, zero mutation documents, `:ok`.
+* Target resolution: a UUID target sends no project-search query at all; a
+  name resolves within the source team; an ambiguous name reaches the
+  `Projects.project_for/2` prompt (same stubbed-prompt technique the
+  existing resolution tests use); identical source and target IDs error
+  before any issue is listed.
+* `--output json` on a real move: JSON is the array of updated issue maps.
+* `LinearCli.CLI.IssueHelpersTest`: `move_issue/2` success (prompt line +
+  updated issue returned) and error (`{:error, reason}` passed through) -
+  the helper is the only piece worth unit-testing in isolation since the
+  command is fully covered through the stub harness.
+
+== Docs
+
+* `Readme.adoc`: the `issue` command table gains `move` with a one-line
+  description, plus a short example block (`lc issue move --from Retired
+  --to Active`, noting `--all` for closed issues and that issues keep
+  their team).
+* `AGENTS.md`: "The Plan" index gains the Phase 12 entry (this document).
+  No structural-section change (no new top-level directory or major
+  module) and no `ash-domain-erd.adoc` change (Decision 2).
+
+== Sequencing
+
+No dependency on unlanded work - builds on `issue_status`'s (#180)
+established pattern only.
+
+1. `IssueHelpers.move_issue/2` + its unit tests - no call sites wired yet.
+2. Optimus `issue move` spec, `dispatch/3` clause, and
+   `Commands.issue_move/1` through the resolve/list/confirm/`--dry-run`
+   stages + the resolution, empty-list, dry-run, and confirmation tests.
+3. The concurrent apply stage + reporting/JSON + the happy-path, `--all`,
+   error-mid-batch, and JSON tests.
+4. `Readme.adoc` and the `AGENTS.md` plan index.
+5. Manual end-to-end verification against live Linear (dogfooding, per
+   `app/usage-rules.md`): first `--dry-run` on a small project, then a real
+   move of a few issues (confirming replace semantics per the Verified
+   section), one `--all` run including a closed issue, one cross-team move
+   by project ID, and an interrupted move (Ctrl-C / forced error) followed
+   by a re-run that picks up exactly the remaining issues.
+
+Standard workflow from here: file a GitHub issue for this phase, branch
+from it, commit, open the PR - no direct-to-main commits. Conventional
+commit type: `feat`.
