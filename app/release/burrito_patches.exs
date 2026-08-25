@@ -152,15 +152,25 @@ defmodule LinearCli.Release.BurritoPatches do
       var digest: [Sha256.digest_length]u8 = undefined;
       Sha256.hash(musl_bytes, &digest, .{});
       const digest_prefix = std.fmt.bytesToHex(digest[0..16], .lower);
+      const digest_hex = std.fmt.bytesToHex(digest, .lower);
       const loader_name = try std.fmt.allocPrint(arena, "ld-{s}.so", .{digest_prefix});
       const loader_path = try std.fs.path.join(arena, &.{ runtime_dir_path, loader_name });
+      const marker_bytes = try std.fmt.allocPrint(arena, "v1\n{s}\n{s}\n", .{ digest_hex, loader_path });
 
       install_or_validate_loader(io, &runtime_dir, loader_name, musl_bytes, uid, private_permissions) catch |err| {
           logger.err("Refusing to use an untrusted private musl runtime at {s}: {t}", .{ loader_path, err });
           return err;
       };
 
-      try patch_release_interpreters(io, arena, install_dir, build_options.MUSL_RUNTIME_PATH, loader_path);
+      try patch_release_interpreters(
+          io,
+          arena,
+          install_dir,
+          build_options.MUSL_RUNTIME_PATH,
+          loader_path,
+          marker_bytes,
+          uid,
+      );
       log.debug("Using private musl runtime: {s}", .{loader_path});
   }
 
@@ -249,12 +259,27 @@ defmodule LinearCli.Release.BurritoPatches do
       install_dir: []const u8,
       legacy_path: []const u8,
       private_path: []const u8,
+      expected_marker: []const u8,
+      uid: std.os.linux.uid_t,
   ) !void {
+      const marker_name = ".burrito-musl-interpreters-v1";
+      const marker_permissions = Io.File.Permissions.fromMode(@intCast(0o600));
       var release_dir = try Io.Dir.openDirAbsolute(io, install_dir, .{
           .iterate = true,
           .follow_symlinks = false,
       });
       defer release_dir.close(io);
+
+      if (try interpreter_marker_is_valid(
+          io,
+          &release_dir,
+          marker_name,
+          expected_marker,
+          uid,
+      )) {
+          log.debug("The release already uses the private musl runtime.", .{});
+          return;
+      }
 
       var walker = try release_dir.walk(arena);
       defer walker.deinit();
@@ -264,6 +289,54 @@ defmodule LinearCli.Release.BurritoPatches do
               try patch_elf_interpreter(io, entry.dir, entry.basename, legacy_path, private_path);
           }
       }
+
+      var atomic_marker = try release_dir.createFileAtomic(io, marker_name, .{
+          .permissions = marker_permissions,
+          .replace = true,
+      });
+      defer atomic_marker.deinit(io);
+      try atomic_marker.file.writePositionalAll(io, expected_marker, 0);
+      try atomic_marker.file.setPermissions(io, marker_permissions);
+      try atomic_marker.replace(io);
+
+      if (!try interpreter_marker_is_valid(
+          io,
+          &release_dir,
+          marker_name,
+          expected_marker,
+          uid,
+      )) return error.UntrustedMuslRuntime;
+  }
+
+  fn interpreter_marker_is_valid(
+      io: Io,
+      release_dir: *Io.Dir,
+      marker_name: []const u8,
+      expected_bytes: []const u8,
+      uid: std.os.linux.uid_t,
+  ) !bool {
+      const linux = std.os.linux;
+      const marker = release_dir.openFile(io, marker_name, .{
+          .allow_directory = false,
+          .follow_symlinks = false,
+      }) catch |err| switch (err) {
+          error.FileNotFound => return false,
+          else => return err,
+      };
+      defer marker.close(io);
+
+      try validate_owned_node(marker.handle, uid, linux.S.IFREG);
+      const info = try marker.stat(io);
+
+      if (info.permissions.toMode() & 0o777 != 0o600 or info.size != expected_bytes.len) {
+          return false;
+      }
+
+      const actual_bytes = try std.heap.page_allocator.alloc(u8, expected_bytes.len);
+      defer std.heap.page_allocator.free(actual_bytes);
+
+      return try marker.readPositionalAll(io, actual_bytes, 0) == actual_bytes.len and
+          std.mem.eql(u8, actual_bytes, expected_bytes);
   }
 
   fn patch_elf_interpreter(

@@ -52,6 +52,11 @@ defmodule LinearCli.Release.BurritoPatchesTest do
     assert patched =~ ~s|!std.mem.eql(u8, header[0..4], "\\x7fELF")|
     assert patched =~ "std.mem.eql(u8, current_path, legacy_path)"
     assert patched =~ "atomic_file.replace(io)"
+    assert patched =~ ~s|".burrito-musl-interpreters-v1"|
+    assert patched =~ ~s|"v1\\n{s}\\n{s}\\n"|
+    assert patched =~ "interpreter_marker_is_valid"
+    assert patched =~ "atomic_marker.replace(io)"
+    assert patched =~ "info.permissions.toMode() & 0o777 != 0o600"
     refute patched =~ "fn maybe_install_musl_runtime"
     refute patched =~ "createFile(io, build_options.MUSL_RUNTIME_PATH"
     assert BurritoPatches.patch_wrapper_source!(patched) == patched

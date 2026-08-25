@@ -97,40 +97,70 @@ interpreter_for() {
         sed -n 's/.*Requesting program interpreter: \(.*\)]/\1/p'
 }
 
+private_runtime_for() {
+    local user=$1
+    local uid
+
+    uid=$(id -u "$user") || return 1
+    printf '/tmp/.burrito-musl-%s/ld-%s.so\n' "$uid" "${runtime_hash:0:32}"
+}
+
+assert_equal() {
+    local actual=$1
+    local expected=$2
+    local description=$3
+
+    if [ "$actual" != "$expected" ]; then
+        printf '%s mismatch\nexpected: %s\nactual:   %s\n' \
+            "$description" "$expected" "$actual" >&2
+        return 1
+    fi
+}
+
 assert_private_runtime() {
     local user=$1
+    local expected_interpreter=$2
     local uid
     local erlexec
     local beam
     local erlexec_interpreter
     local beam_interpreter
-    local expected_interpreter
+    local runtime_dir_metadata
+    local loader_metadata
+    local loader_hash
 
-    uid=$(id -u "$user")
-    erlexec=$(find_erts_binary "$user" erlexec)
-    beam=$(find_erts_binary "$user" beam.smp)
-    erlexec_interpreter=$(interpreter_for "$erlexec")
-    beam_interpreter=$(interpreter_for "$beam")
-    expected_interpreter="/tmp/.burrito-musl-${uid}/ld-${runtime_hash:0:32}.so"
+    uid=$(id -u "$user") || return 1
+    erlexec=$(find_erts_binary "$user" erlexec) || return 1
+    beam=$(find_erts_binary "$user" beam.smp) || return 1
 
-    test "$erlexec_interpreter" = "$expected_interpreter"
-    test "$beam_interpreter" = "$expected_interpreter"
-    test "$(sudo stat -c '%u:%a:%F' "$(dirname "$expected_interpreter")")" = "$uid:700:directory"
-    test "$(sudo stat -c '%u:%a:%F' "$expected_interpreter")" = "$uid:700:regular file"
-    test "$(sudo sha256sum "$expected_interpreter" | cut -d ' ' -f 1)" = "$runtime_hash"
+    if [ -z "$erlexec" ] || [ -z "$beam" ]; then
+        printf 'Could not find both ERTS executables for %s\n' "$user" >&2
+        return 1
+    fi
 
-    printf '%s\n' "$expected_interpreter"
+    erlexec_interpreter=$(interpreter_for "$erlexec") || return 1
+    beam_interpreter=$(interpreter_for "$beam") || return 1
+    runtime_dir_metadata=$(sudo stat -c '%u:%a:%F' "$(dirname "$expected_interpreter")") || return 1
+    loader_metadata=$(sudo stat -c '%u:%a:%F' "$expected_interpreter") || return 1
+    loader_hash=$(sudo sha256sum "$expected_interpreter" | cut -d ' ' -f 1) || return 1
+
+    assert_equal "$erlexec_interpreter" "$expected_interpreter" "erlexec interpreter" || return 1
+    assert_equal "$beam_interpreter" "$expected_interpreter" "beam.smp interpreter" || return 1
+    assert_equal "$runtime_dir_metadata" "$uid:700:directory" "private runtime directory metadata" || return 1
+    assert_equal "$loader_metadata" "$uid:700:regular file" "private loader metadata" || return 1
+    assert_equal "$loader_hash" "$runtime_hash" "private loader hash" || return 1
 }
 
 run_version "$user_a"
-runtime_a=$(assert_private_runtime "$user_a")
+runtime_a=$(private_runtime_for "$user_a")
+assert_private_runtime "$user_a" "$runtime_a"
 
 # The UID-scoped path is short enough to fit the existing ELF interpreter
 # segment, so its name is deterministic. An attacker may pre-position it, but
 # ownership validation must fail closed without executing the attacker's file.
 uid_b=$(id -u "$user_b")
-attacker_runtime_dir="/tmp/.burrito-musl-${uid_b}"
-attacker_runtime="$attacker_runtime_dir/ld-${runtime_hash:0:32}.so"
+attacker_runtime=$(private_runtime_for "$user_b")
+attacker_runtime_dir=$(dirname "$attacker_runtime")
 sudo -u "$user_a" mkdir -m 0755 -- "$attacker_runtime_dir"
 sudo -u "$user_a" sh -c 'printf %s untrusted-private-loader > "$1"' sh "$attacker_runtime"
 
@@ -143,11 +173,63 @@ grep -Fq UntrustedMuslRuntime "$test_root/prepositioned-private.log"
 sudo rm -rf -- "$attacker_runtime_dir"
 
 run_version "$user_b"
-runtime_b=$(assert_private_runtime "$user_b")
+runtime_b=$(private_runtime_for "$user_b")
+assert_private_runtime "$user_b" "$runtime_b"
 
-test "$runtime_a" != "$runtime_b"
-test "$(sudo cat "$legacy_loader")" = untrusted-prepositioned-loader
-test "$(sudo stat -c '%U:%a' "$legacy_loader")" = "$user_a:754"
+# Prove the assertion helper itself cannot silently succeed after a failed
+# check, including when called from an `if` condition where errexit is disabled.
+sudo chmod 0701 "$runtime_b"
+if assert_private_runtime "$user_b" "$runtime_b" >"$test_root/assertion-negative.log" 2>&1; then
+    printf 'Private-runtime assertions accepted an invalid loader mode\n' >&2
+    exit 1
+fi
+grep -Fq 'private loader metadata mismatch' "$test_root/assertion-negative.log"
+sudo chmod 0700 "$runtime_b"
+assert_private_runtime "$user_b" "$runtime_b"
+
+if [ "$runtime_a" = "$runtime_b" ]; then
+    printf 'Both users selected the same private runtime: %s\n' "$runtime_a" >&2
+    exit 1
+fi
+
+legacy_contents=$(sudo cat "$legacy_loader")
+legacy_metadata=$(sudo stat -c '%U:%a' "$legacy_loader")
+assert_equal "$legacy_contents" untrusted-prepositioned-loader "legacy loader contents"
+assert_equal "$legacy_metadata" "$user_a:754" "legacy loader metadata"
+
+# A valid version/hash/path marker avoids reopening the full extracted release
+# on every warm launch. An unreadable unrelated file proves the fast path is
+# used; corrupting the marker must force a rescan and expose that read error.
+erlexec_b=$(find_erts_binary "$user_b" erlexec)
+erts_bin_dir=$(dirname "$erlexec_b")
+erts_dir=$(dirname "$erts_bin_dir")
+install_dir_b=$(dirname "$erts_dir")
+marker_b="$install_dir_b/.burrito-musl-interpreters-v1"
+marker_metadata=$(sudo stat -c '%u:%a:%F' "$marker_b")
+marker_contents=$(sudo cat "$marker_b")
+expected_marker=$(printf 'v1\n%s\n%s\n' "$runtime_hash" "$runtime_b")
+assert_equal "$marker_metadata" "$uid_b:600:regular file" "interpreter marker metadata"
+assert_equal "$marker_contents" "$expected_marker" "interpreter marker contents"
+
+walk_sentinel="$install_dir_b/unreadable-walk-sentinel"
+sudo -u "$user_b" touch "$walk_sentinel"
+sudo -u "$user_b" chmod 000 "$walk_sentinel"
+run_version "$user_b"
+
+sudo -u "$user_b" sh -c 'printf %s corrupt-marker > "$1"' sh "$marker_b"
+sudo -u "$user_b" chmod 0600 "$marker_b"
+
+if run_version "$user_b" >"$test_root/invalid-marker.log" 2>&1; then
+    printf 'Burrito trusted an invalid interpreter marker\n' >&2
+    exit 1
+fi
+grep -Fq AccessDenied "$test_root/invalid-marker.log"
+
+sudo rm -f -- "$walk_sentinel"
+run_version "$user_b"
+marker_contents=$(sudo cat "$marker_b")
+assert_equal "$marker_contents" "$expected_marker" "repaired interpreter marker contents"
+assert_private_runtime "$user_b" "$runtime_b"
 
 # Replace the hostile object with the real loader bytes in the state left by
 # an affected release: user A owns a valid shared loader at 0754. Reinstalling
@@ -157,14 +239,17 @@ sudo -u "$user_a" cp -- "$runtime_a" "$legacy_loader"
 sudo -u "$user_a" chmod 0754 "$legacy_loader"
 sudo rm -rf -- "$test_root/$user_b/data" "$(dirname "$runtime_b")"
 run_version "$user_b"
-runtime_b=$(assert_private_runtime "$user_b")
-test "$(sudo sha256sum "$legacy_loader" | cut -d ' ' -f 1)" = "$runtime_hash"
-test "$(sudo stat -c '%U:%a' "$legacy_loader")" = "$user_a:754"
+runtime_b=$(private_runtime_for "$user_b")
+assert_private_runtime "$user_b" "$runtime_b"
+legacy_hash=$(sudo sha256sum "$legacy_loader" | cut -d ' ' -f 1)
+legacy_metadata=$(sudo stat -c '%U:%a' "$legacy_loader")
+assert_equal "$legacy_hash" "$runtime_hash" "stale legacy loader hash"
+assert_equal "$legacy_metadata" "$user_a:754" "stale legacy loader metadata"
 
 # `/tmp` can be cleared while Burrito's extracted release remains. The next
 # launch must recreate and revalidate the private loader without re-extracting.
 sudo rm -rf -- "$(dirname "$runtime_b")"
 run_version "$user_b"
-test "$(assert_private_runtime "$user_b")" = "$runtime_b"
+assert_private_runtime "$user_b" "$runtime_b"
 
 printf 'Burrito shared-loader regression passed for %s and %s\n' "$user_a" "$user_b"
