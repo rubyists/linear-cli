@@ -18,7 +18,7 @@ endif::[]
 :image-major-tag: v2
 // x-release-please-end
 // x-release-please-start-version
-:image-pin-example: v2.4.0
+:image-pin-example: v2.5.0
 // x-release-please-end
 
 A command line interface to https://linear.app - list, take, create, develop,
@@ -158,6 +158,7 @@ so you don't have to type the full name every time:
 |`issue list` |`l`, `ls`
 |`issue status` |`s`, `st`, `stat`
 |`issue assign` |`a`
+|`issue move` |`m`, `mv`
 |`issue update` |`u`
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
@@ -315,6 +316,42 @@ $ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
 <2> Move to a named workflow state (case-insensitive, unique-prefix match)
 <3> Move multiple issues at once — updates run concurrently
 <4> Add a comment alongside the state change
+
+==== Move issues to a project
+
+Two modes: move specific issues by ID, or bulk-move an entire project's backlog.
+
+*By ID* — moves the listed issues to a target project:
+
+[source,sh]
+----
+$ lc issue move --project Manhattan CRY-1 <1>
+$ lc issue move -p Manhattan CRY-1 CRY-2 CRY-3 <2>
+$ lc issue move --project Manhattan --dry-run CRY-1 <3>
+$ lc issue move --project Manhattan --yes CRY-1 <4>
+$ lc issue move --project Manhattan --team ENG CRY-1 <5>
+----
+<1> Move a single issue; prompts for confirmation before executing
+<2> Move multiple issues at once — updates run concurrently
+<3> Preview the planned moves without executing any mutations
+<4> Skip the confirmation prompt
+<5> Scope project search to the `ENG` team
+
+*Bulk project-to-project* (`--from`/`--to`) — moves all open issues from one
+project to another. Useful for retiring a project or consolidating backlogs.
+Issues keep their original team.
+
+[source,sh]
+----
+$ lc issue move --from Retired --to Active <1>
+$ lc issue move --from Retired --to Active --all <2>
+$ lc issue move --from p-uuid-1 --to p-uuid-2 <3>
+$ lc issue move --from Retired --to Active --dry-run <4>
+----
+<1> Moves all open issues from "Retired" to "Active", prompts for confirmation
+<2> Includes completed and cancelled issues too
+<3> Move by project UUID — the way to target a project in another team
+<4> Preview without mutating
 
 ==== Default team/project (profiles)
 

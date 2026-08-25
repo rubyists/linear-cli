@@ -103,6 +103,8 @@ defmodule LinearCli.CLI do
       "dev" => "develop",
       "l" => "list",
       "ls" => "list",
+      "m" => "move",
+      "mv" => "move",
       "s" => "status",
       "st" => "status",
       "stat" => "status",
@@ -209,6 +211,7 @@ defmodule LinearCli.CLI do
     do: run(&Commands.issue_develop/1, result, halt)
 
   defp dispatch([:issue, :pr], result, halt), do: run(&Commands.issue_pr/1, result, halt)
+  defp dispatch([:issue, :move], result, halt), do: run(&Commands.issue_move/1, result, halt)
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
   defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
@@ -761,6 +764,48 @@ defmodule LinearCli.CLI do
                   short: "-s",
                   long: "--status",
                   help: "Workflow state name to set after self-assigning (e.g. \"In Progress\")"
+                ]
+              ]
+            ],
+            move: [
+              name: "move",
+              about:
+                "Move issues: by ID (ISSUE_ID... --project P) or bulk project-to-project (--from P --to P)",
+              allow_unknown_args: true,
+              flags: [
+                all: [
+                  long: "--all",
+                  help: "Move completed and cancelled issues too (--from/--to mode)"
+                ],
+                dry_run: [
+                  long: "--dry-run",
+                  help: "Preview moves without executing them"
+                ],
+                yes: [
+                  short: "-y",
+                  long: "--yes",
+                  help: "Skip confirmation prompt"
+                ]
+              ],
+              options: [
+                project: [
+                  short: "-p",
+                  long: "--project",
+                  help: "Target project name, URL, ID, or - to select from a list"
+                ],
+                from: [
+                  short: "-f",
+                  long: "--from",
+                  help: "Source project name or ID (bulk mode)"
+                ],
+                to: [
+                  long: "--to",
+                  help: "Target project name or ID (bulk mode)"
+                ],
+                team: [
+                  short: "-t",
+                  long: "--team",
+                  help: "Scope project search to this team"
                 ]
               ]
             ],
