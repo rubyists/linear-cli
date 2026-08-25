@@ -80,8 +80,7 @@ run_version() {
     local user=$1
     local user_dir="$test_root/$user"
 
-    sudo -u "$user" env \
-        HOME="$user_dir" \
+    sudo -H -u "$user" env \
         XDG_DATA_HOME="$user_dir/data" \
         "$binary_copy" version
 }
