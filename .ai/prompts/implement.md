@@ -18,6 +18,11 @@ No description provided.
 
 Implement the solution, create a PR, and ensure it passes all quality checks.
 
+## Rule
+
+Always sign git commits. If a gpg-agent is not available with a signing key,
+stop and note that on the linear issue, do not create an unsigned commit.
+
 ## First run
 
 1. Read the investigation summary from the Linear comments.

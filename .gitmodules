@@ -27,4 +27,4 @@
 	url = git@github.com:fuelen/owl
 [submodule "vendor/stokowski"]
 	path = vendor/stokowski
-	url = https://github.com/Sugar-Coffee/stokowski
+	url = git@github.com:bougyman/stokowski

@@ -17,6 +17,25 @@ and best practices for agents to follow.
 
 ## Project Structure
 
+### Linear Team and Project
+
+The `Linear CLI` project of the "Elixir Traitors" (`EXT`) team on the
+https://linear.app/the-rubyists[Rubyists Linear Organization] manages
+the project roadmap and issue tracking.
+
+#### Rules for Interacting with Linear
+
+Always only use `mix lc` to interact with linear.app. Do not look for an
+mcp or any other way to interact with issues or the project.
+
+`mix lc --help`
+`mix lc issue --help`
+`mix lc issue list --help`
+`mix lc issue create --help`
+`mix lc issue status --help`
+
+This should be enough to get started
+
 ### Repository layout
 
 This repo uses two Mix projects side-by-side, not nested:
