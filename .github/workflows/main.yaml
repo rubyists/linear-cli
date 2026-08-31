@@ -178,6 +178,14 @@ jobs:
         timeout-minutes: 1
         run: ./burrito_out/lc_${{ matrix.target }} version
       -
+        # Burrito 1.6.0 used one predictable /tmp ELF interpreter for every
+        # user. Exercise the packaged ERTS as two real unprivileged accounts,
+        # with an attacker-owned legacy loader already occupying that path.
+        if: startsWith(matrix.target, 'linux_')
+        name: Test the ${{ matrix.target }} binary across users
+        timeout-minutes: 2
+        run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_${{ matrix.target }}
+      -
         # Handed off to burrito-package below, which needs every target's
         # binary gathered back into one place before it can build the
         # per-platform tarballs/SBOM/release.

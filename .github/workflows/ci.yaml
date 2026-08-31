@@ -52,6 +52,55 @@ jobs:
         run: mix ci
         working-directory: .
 
+  burrito_linux_regression:
+    # ci.yaml is also called by main.yaml after pushes and closed release PRs.
+    # Keep this expensive native build as a pre-merge pull-request gate; the
+    # release workflow builds every target after the release PR merges.
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    name: Burrito Linux shared-loader regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+        shell: bash
+    steps:
+      -
+        uses: actions/checkout@v7
+      -
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
+          disable_problem_matchers: true
+      -
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      -
+        run: mix deps.get
+      -
+        name: Compile makeup_syntect with its host NIF
+        env:
+          MIX_ENV: prod
+        run: mix deps.compile castore rustler_precompiled makeup_syntect
+      -
+        name: Pre-compile mdex_native with its musl NIF
+        env:
+          MIX_ENV: prod
+          TARGET_ABI: musl
+        run: mix deps.compile mdex_native
+      -
+        name: Install and repair the musl NIFs
+        run: ../ci/prepare_musl_nifs.sh
+      -
+        name: Build the native linux_x86_64 target
+        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
+      -
+        name: Test the packaged binary across users
+        timeout-minutes: 2
+        run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_linux_x86_64
+
   conventional_commits:
     if: inputs.skip_commit_validation != true
     name: Validate Commit Subjects
