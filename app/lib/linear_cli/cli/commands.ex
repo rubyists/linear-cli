@@ -520,6 +520,55 @@ defmodule LinearCli.CLI.Commands do
   end
 
   @doc """
+  Adds a comment to a single issue.
+
+  `--comment`/`-m` and `--body-file` are mutually exclusive. `--body-file`
+  reads the body from a file (`-` for stdin) - the way to supply a large
+  multi-line body without building it as a single shell argument, which
+  is what `--comment`, going through
+  `LinearCli.CLI.WhatFor.comment_for/2`'s prompt/editor resolution, does
+  not protect against. Without either option, `comment_for/2`'s existing
+  behavior applies (prompt, or open an editor for `-`).
+
+  Calls `Linear.add_comment/2` directly rather than
+  `LinearCli.CLI.IssueHelpers.issue_comment/2` so the confirmation can be
+  suppressed under `--output json` - matching how `print_move_results/3`
+  suppresses its own confirmation for `issue move --output json`.
+
+  New in this port - Ruby has no equivalent.
+  """
+  @spec issue_comment(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_comment(%{args: %{issue_id: issue_id}, options: options}) do
+    with :ok <- validate_comment_options(options),
+         {:ok, comment_text} <- resolve_comment_body(options),
+         {:ok, [issue]} <- Linear.issues(%{ids: [IssueHelpers.expand_issue_id(issue_id)]}),
+         body = WhatFor.comment_for(issue, comment_text),
+         {:ok, comment} <- Linear.add_comment(issue.identifier, body) do
+      unless options.output == "json", do: Prompt.ok("Comment added to #{issue.identifier}")
+      Display.show(comment, %{output: options.output})
+      :ok
+    end
+  end
+
+  defp validate_comment_options(%{comment: comment, body_file: body_file})
+       when not is_nil(comment) and not is_nil(body_file) do
+    {:error, {:smells_bad, "give --comment or --body-file, not both"}}
+  end
+
+  defp validate_comment_options(_options), do: :ok
+
+  defp resolve_comment_body(%{body_file: nil, comment: comment}), do: {:ok, comment}
+  defp resolve_comment_body(%{body_file: "-"}), do: {:ok, read_stdin()}
+  defp resolve_comment_body(%{body_file: path}), do: File.read(path)
+
+  defp read_stdin do
+    case IO.read(:stdio, :eof) do
+      :eof -> ""
+      data -> data
+    end
+  end
+
+  @doc """
   Moves issues to a target project.
 
   Two modes:

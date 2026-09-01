@@ -3029,4 +3029,127 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "--from and --to must both be given"
     end
   end
+
+  describe "issue comment" do
+    defp stub_lookup_and(pairs) do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          match = Enum.find(pairs, fn {substr, _resp} -> String.contains?(query, substr) end) ->
+            {_substr, resp} = match
+            Req.Test.json(conn, (is_function(resp, 1) && resp.(decoded)) || resp)
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+    end
+
+    test "creates a new comment" do
+      stub_lookup_and([{"commentCreate", comment_created()}])
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "comment", "CRY-1", "-m", "lgtm"])
+        end)
+
+      assert output =~ "Comment added to CRY-1"
+    end
+
+    test "--body-file reads the body from a file verbatim" do
+      path = tmp_path("body_file")
+      # Deliberately includes a literal backslash-n and a $VAR-looking string -
+      # exactly the content that broke when built as an inline shell argument
+      # (see documents/phase-13-plan.adoc's Goal section).
+      File.write!(path, "## Investigation\n\nliteral \\n and $SOME_VAR survive verbatim")
+      on_exit(fn -> File.rm(path) end)
+
+      test_pid = self()
+
+      stub_lookup_and([
+        {"commentCreate",
+         fn decoded ->
+           send(test_pid, {:sent_body, decoded["variables"]["body"]})
+           comment_created()
+         end}
+      ])
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "comment", "CRY-1", "--body-file", path])
+      end)
+
+      assert_received {:sent_body,
+                       "## Investigation\n\nliteral \\n and $SOME_VAR survive verbatim"}
+    end
+
+    test "--body-file - reads the body from stdin verbatim" do
+      test_pid = self()
+
+      stub_lookup_and([
+        {"commentCreate",
+         fn decoded ->
+           send(test_pid, {:sent_body, decoded["variables"]["body"]})
+           comment_created()
+         end}
+      ])
+
+      capture_io("piped from stdin\nwith a real newline", fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "comment", "CRY-1", "--body-file", "-"])
+      end)
+
+      assert_received {:sent_body, "piped from stdin\nwith a real newline"}
+    end
+
+    test "--comment and --body-file together is a smells_bad error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            ["issue", "comment", "CRY-1", "-m", "text", "--body-file", "somefile"],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "give --comment or --body-file, not both"
+    end
+
+    test "an unreadable --body-file surfaces an error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(
+          ["issue", "comment", "CRY-1", "--body-file", "/nonexistent/path/does-not-exist"],
+          halt
+        )
+      end)
+
+      assert_received {:halted, _code}
+    end
+
+    test "--output json prints the resulting comment as JSON" do
+      stub_lookup_and([{"commentCreate", comment_created()}])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "comment", "CRY-1", "-m", "lgtm", "-o", "json"])
+        end)
+
+      assert %{"id" => "c1"} = Jason.decode!(output)
+    end
+  end
 end

@@ -14,6 +14,8 @@ and best practices for agents to follow.
 - Phase 9 Plan: documents/phase-9-plan.adoc
 - Phase 10 Plan: documents/phase-10-plan.adoc
 - Phase 11 Plan: documents/phase-11-plan.adoc
+- Phase 12 Plan: documents/phase-12-plan.adoc
+- Phase 13 Plan: documents/phase-13-plan.adoc
 
 ## Project Structure
 
@@ -33,6 +35,7 @@ mcp or any other way to interact with issues or the project.
 `mix lc issue list --help`
 `mix lc issue create --help`
 `mix lc issue status --help`
+`mix lc issue comment --help`
 
 This should be enough to get started
 
