@@ -603,6 +603,188 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "Set upstream to origin/cry-2-new-thing"
       assert output =~ "Ready to develop!"
     end
+
+    test "--body-file reads the description from a file verbatim" do
+      path = tmp_path("body_file")
+      # Includes a literal backslash-n and a $VAR-looking string — the same
+      # content that broke when built as an inline shell argument (EXT-17 incident).
+      File.write!(path, "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim")
+      on_exit(fn -> File.rm(path) end)
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issueLabels") ->
+            Req.Test.json(conn, label_response(["docs"]))
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:sent_description, decoded["variables"]["input"]["description"]})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" => issue_map(%{"identifier" => "CRY-2", "title" => "T"})
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "n\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "create",
+                   "--body-file",
+                   path,
+                   "--title",
+                   "T",
+                   "--team",
+                   "ENG",
+                   "-l",
+                   "docs"
+                 ])
+      end)
+
+      assert_received {:sent_description,
+                       "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim"}
+    end
+
+    test "--body-file - reads the description from stdin" do
+      # Uses Commands.issue_create directly so that IO.read(:stdio, :eof) only
+      # consumes the piped content (not the yes/no prompt input too). The
+      # maybe_take prompt gets EOF after stdin is consumed; Owl.IO.confirm with
+      # default: true returns true, so gimme_da_issue! runs and finds the issue
+      # already assigned to `me`, short-circuiting without a second mutation.
+      test_pid = self()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issueLabels") ->
+            Req.Test.json(conn, label_response([]))
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:sent_description, decoded["variables"]["input"]["description"]})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" => issue_map(%{"id" => "i2", "identifier" => "CRY-2", "title" => "T"})
+                }
+              }
+            })
+
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" =>
+                  issue_map(%{"id" => "i2", "identifier" => "CRY-2", "assignee" => me_map()})
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        options: %{
+          title: "T",
+          body_file: "-",
+          description: nil,
+          team: "ENG",
+          labels: [],
+          project: nil,
+          output: "text"
+        },
+        flags: %{develop: false}
+      }
+
+      capture_io("piped from stdin\nwith a real newline", fn ->
+        assert :ok = Commands.issue_create(result, me: me)
+      end)
+
+      assert_received {:sent_description, "piped from stdin\nwith a real newline"}
+    end
+
+    test "--description and --body-file together is a smells_bad error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "create",
+              "--title",
+              "T",
+              "--team",
+              "ENG",
+              "-d",
+              "some desc",
+              "--body-file",
+              "somefile"
+            ],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "give --description or --body-file, not both"
+    end
+
+    test "an unreadable --body-file surfaces an error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(
+          [
+            "issue",
+            "create",
+            "--body-file",
+            "/nonexistent/path/does-not-exist",
+            "--title",
+            "T",
+            "--team",
+            "ENG"
+          ],
+          halt
+        )
+      end)
+
+      assert_received {:halted, _code}
+    end
   end
 
   describe "issue develop (Ruby: commands/issue/develop.rb)" do
