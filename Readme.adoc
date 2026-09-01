@@ -160,6 +160,7 @@ so you don't have to type the full name every time:
 |`issue assign` |`a`
 |`issue move` |`m`, `mv`
 |`issue update` |`u`
+|`issue view` |`v`
 |`issue comment` |
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
@@ -213,6 +214,19 @@ $ lcls --state started --status "Human Review,Gate Approved" <4>
 <2> Filter by Linear's internal workflow state type
 <3> Filter by a friendly workflow status name (case-insensitive)
 <4> Combine state and status filters; both must match
+
+==== View an Issue
+
+Show full details for a single issue (title, description, and all comments):
+
+[source,sh]
+----
+$ lc issue view CRY-1234
+$ lc i v CRY-1234 <1>
+$ lc issue view CRY-1234 --output json <2>
+----
+<1> Short alias: `i` for `issue`, `v` for `view`
+<2> Output as JSON
 
 ==== Assign one or more issues to yourself (take em!)
 

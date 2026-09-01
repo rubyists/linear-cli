@@ -109,6 +109,7 @@ defmodule LinearCli.CLI do
       "st" => "status",
       "stat" => "status",
       "u" => "update",
+      "v" => "view",
       "pull-request" => "pr"
     },
     "team" => %{"l" => "list", "ls" => "list"},
@@ -204,6 +205,7 @@ defmodule LinearCli.CLI do
     do: run(&Commands.profile_clear/1, result, halt)
 
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
+  defp dispatch([:issue, :view], result, halt), do: run(&Commands.issue_view/1, result, halt)
   defp dispatch([:issue, :assign], result, halt), do: run(&Commands.issue_assign/1, result, halt)
   defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
 
@@ -682,6 +684,13 @@ defmodule LinearCli.CLI do
                   help: "Filter by friendly workflow status name(s) (comma-separated)",
                   parser: &parse_statuses/1
                 ]
+              ]
+            ],
+            view: [
+              name: "view",
+              about: "Show full details for a single issue",
+              args: [
+                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
               ]
             ],
             assign: [
