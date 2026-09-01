@@ -1,0 +1,272 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Aug 31, 2026
+:my-title: Phase 13 plan: safe multi-line comments for Stokowski (`lc issue comment`)
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+[NOTE]
+====
+Revision note: this phase originally shipped a find-or-update-by-marker
+comment *upsert* (a single persistent "workpad" comment, appended to on
+every call). That design is gone. Live verification turned up that
+`commentUpdate` needs a scope this project's Linear API key doesn't
+reliably carry, distinct from `commentCreate` (see Verified below) - and
+separately, matching an existing comment by "body starts with a string"
+is exactly the kind of fuzzy, indeterminate lookup that caused problems
+in the first place (User decision, 2026-08-31). The guidance and the
+command are both simpler now: post a new comment per milestone, never
+update one. Everything below describes the *current*, shipped design;
+the upsert history lives only in this note and in git history.
+====
+
+== Goal
+
+`AGENTS.md` says "Always only use `mix lc` to interact with linear.app.
+Do not look for an mcp or any other way." That rule is right, but nothing
+in `mix lc` made it easy to follow for a large, multi-line comment body -
+the only option was `--comment "text"` (a single shell argument) or
+`--comment -` (an interactive editor, useless headless).
+
+This gap is not theoretical. On EXT-17's `code-review` run 4, the review
+agent (real Claude Opus, not a degraded model - see the session
+transcript at
+`~/.claude/projects/-home-bougybot--local-share-stokowski-workspaces-linear-cli-EXT-17/55e18e70-*.jsonl`,
+lines 121 and 125) needed to post a multi-line status comment and, finding
+no safe `mix lc` way to do it, hand-rolled a direct `curl`/GraphQL call
+instead. That ad hoc script had two bugs of its own (a single-quoted bash
+string with literal `\n` instead of real newlines, and a variable
+reference inside a *quoted* heredoc delimiter that never expanded) -
+exactly the class of failure "always use `mix lc`" exists to prevent.
+
+This phase adds a `lc issue comment` subcommand whose only real job is
+`--body-file`: read the comment body from a file (or stdin), so a caller
+never has to build a multi-line body as a single shell argument. It does
+not touch `issue update --comment`/`issue status --comment` (plain
+create, already correct and well-tested) or `bin/lcomment` (a
+human-interactive wrapper, out of scope here).
+
+== Decisions (reached in full agreement before implementation)
+
+1. *A new `lc issue comment` subcommand, not a widening of `issue
+   update`.* Even reduced to plain create, it's a distinct, single-issue,
+   comment-only verb worth its own name and help text, matching Phase
+   12's `issue move` reasoning for a similarly-shaped new command.
+2. *Always creates a new comment. No update, no upsert, no marker
+   matching.* `commentUpdate` requires a scope this project's Linear API
+   key doesn't reliably carry (Verified below) - even a key described as
+   having "full access" failed it consistently, including against a
+   comment created moments earlier by that same key, ruling out an
+   ownership explanation. Independent of that, matching an existing
+   comment by "body starts with this string" is an indeterminate lookup:
+   two different sections can collide on a prefix, and a caller has no
+   way to know which comment will match before it happens (User
+   decision, 2026-08-31). Removing the mechanism removes both problems at
+   once.
+3. *`--body-file PATH` is the actual point of this command.* `PATH` of
+   `-` reads stdin; anything else is read as a file. This is what kills
+   the incident's bug class: a multi-line body never has to survive a
+   single shell argument's quoting rules. `--comment`/`-m` still exists
+   for a short one-line body (and keeps `WhatFor.comment_for/2`'s
+   existing `"-"`-opens-an-editor convention); `--comment` and
+   `--body-file` are mutually exclusive (both given is a `smells_bad`
+   error). Generalizing `--body-file` to `--description`/`--reason`/etc.
+   is deliberately deferred - those aren't the pattern that broke, and
+   widening `WhatFor.ask_or_edit/3`'s shared contract for every caller is
+   a bigger, separate change than this phase needs.
+4. *`bin/lcomment` and `issue update --comment`/`issue status --comment`
+   are untouched.* They're the human/quick-comment path (always creates,
+   `-` always opens an editor) and remain exactly as they are.
+5. *No subcommand alias in this phase.* The obvious short alias (`c`) is
+   already `issue create`'s; picking a different one isn't worth guessing
+   at before the command has seen real use (same reasoning as Phase 12
+   deferring a `bin/` wrapper).
+6. *Guidance changes too: post one comment per milestone, never a single
+   running comment.* `.ai/prompts/global.md` and the per-stage prompts
+   (`investigate.md`, `implement.md`, `merge.md`) previously told agents
+   to maintain and append to a single "workpad" comment. That's gone -
+   each stage posts its own comment describing just that step
+   (investigation findings, implementation results, merge confirmation,
+   etc.), matching how `review.md`'s `## Code Review` already worked
+   (a fresh comment per run, never edited) and requiring no
+   `commentUpdate` capability at all.
+
+== Verified
+
+* `app/lib/linear_cli/linear/comment.ex`: `Comment.base_fields/0`
+  already selects everything a create response needs (`id body url
+  user {...}`) - no fragment change required for plain create.
+* `app/lib/linear_cli/cli/issue_helpers.ex` (`issue_comment/2`,
+  `update_issue/2`/`maybe_comment/2`/`dispatch_update/2`): confirms
+  `issue update --comment "text"` with no other flag is *already*
+  comment-only (the `opts[:comment] -> :ok` branch in `dispatch_update/2`
+  fires only after `close`/`cancel`/`pr`/`project`/`description` all
+  miss, so no extra `issueUpdate` mutation is sent) - kept exactly as
+  is; `lc issue comment` doesn't call it (see Building blocks) so its
+  `--output json` confirmation-suppression need doesn't force a
+  signature change onto that shared function.
+* `app/lib/linear_cli/cli/what_for.ex` (`ask_or_edit/3`, `comment_for/2`):
+  `thing && thing != "-"` returns `thing` unchanged - already idempotent
+  for a body that arrived fully resolved from `--body-file`, so routing
+  every body (file-sourced or not) through `comment_for/2` is safe and
+  keeps one resolution path.
+* `app/lib/linear_cli/cli/commands.ex` (`apply_move/2` /
+  `print_move_results/3`): the house pattern for "call the domain
+  interface directly instead of the `IssueHelpers` wrapper, so the
+  confirmation print can be gated on `--output json`" - `issue_comment/1`
+  follows the same pattern against `Linear.add_comment/2` directly
+  rather than `IssueHelpers.issue_comment/2`.
+* Incident evidence: the two malformed EXT-17 comments (session
+  `55e18e70-2e53-437f-ad0d-722332190839`, lines 121 and 125) are a
+  single-quoted `REVIEW_BODY='...\n\n...'` bash string (literal
+  backslash-n, not a newline) and a `<<'ENDOFBODY'` *quoted* heredoc whose
+  `$WORKPAD_BODY` reference therefore never expanded - both are exactly
+  the shell-quoting failure modes `--body-file` (write the body to a real
+  file, reference it by path, no inline multi-line shell argument at all)
+  removes.
+* Live, against real Linear (`EXT-17`), with a key later primed for
+  write access: `mix lc issue comment EXT-17 -m "## Phase 13
+  Verification\n\n..."` and a follow-up `--marker`-matched call (from the
+  now-abandoned design) both succeeded as plain `commentCreate` calls
+  (`comment-3bf46109`, `comment-7be28072`, `comment-00c123db`), each
+  returning a real comment URL. The follow-up `commentUpdate` call against
+  the very comment just created by that same key was rejected twice:
+  `403 FORBIDDEN: Invalid scope: 'write' required`. `mix lc whoami`
+  succeeds with the same key; `commentCreate` succeeds; only
+  `commentUpdate` doesn't - confirming the scope gap this decision is
+  based on, not a code defect or an ownership restriction.
+* `--body-file -` piped a body containing a literal `\n` (backslash-n)
+  and a `$WORKPAD_BODY`-looking string plus one real newline
+  (`comment-ad185412`); reading it back via `--output json` and
+  `repr()`-ing the raw string confirmed both the literal two-character
+  sequence and the `$VAR`-looking text survived byte-for-byte, and the
+  real newline was a distinct `U+000A` - the exact incident bug class,
+  now provably absent.
+* Test artifacts left on `EXT-17` as a result of the above (harmless, on
+  an already-messy `Done` issue; `lc` has no comment-delete capability to
+  clean them up): several comments from these verification runs.
+
+== Building blocks
+
+* `app/lib/linear_cli/cli.ex`: `comment:` entry in the `issue` subcommand
+  tree - `args: [issue_id: [value_name: "ISSUE_ID", help: "The Issue
+  (i.e. CRY-1)", required: true]]`, `options: [comment: [short: "-m",
+  long: "--comment", help: "Comment text. - opens an editor"],
+  body_file: [long: "--body-file", help: "Read the comment body from
+  this file (- for stdin) instead of --comment"]]`. `defp dispatch
+  ([:issue, :comment], result, halt), do: run(&Commands.issue_comment/1,
+  result, halt)` alongside the existing `:move`/`:status`/`:update`
+  clauses.
+* `app/lib/linear_cli/cli/commands.ex`: new `issue_comment/1`:
+  . `--comment` and `--body-file` both given -> `{:error, {:smells_bad,
+    "give --comment or --body-file, not both"}}`, checked before
+    anything else.
+  . `--body-file` given: `"-"` reads `IO.read(:stdio, :eof)` (`:eof` on
+    empty input normalized to `""`; `IO.binread/2`, tried first, crashes
+    `ExUnit.CaptureIO`'s `StringIO`-backed device on this Elixir/OTP
+    version and is best avoided for that reason alone), anything else
+    `File.read/1`; a read error surfaces as `{:error, reason}` through
+    the normal `handle_error/3` path (no new error shape needed -
+    `File.read/1`'s `{:error, posix}` already round-trips fine as a
+    system-failure `reason`).
+  . resolve the single issue via `Linear.issues(%{ids:
+    [IssueHelpers.expand_issue_id(issue_id)]})` (same call `issue_update`/
+    `issue_status` already make), erroring the same way on zero results.
+  . `body = WhatFor.comment_for(issue, comment_text)`, then
+    `Linear.add_comment(issue.identifier, body)` directly (not
+    `IssueHelpers.issue_comment/2` - see Verified above); prints
+    `Prompt.ok("Comment added to #{issue.identifier}")` unless
+    `options.output == "json"`, then `Display.show(comment, %{output:
+    options.output})`.
+* `app/lib/linear_cli/cli/display.ex`: found during implementation, not
+  anticipated above - `puts_text/2` (text-mode rendering) had no
+  `%Comment{}` clause at all (`Comment` was previously only ever shown
+  nested inside `issue ls --full`'s own rendering, never standalone), so
+  calling `Display.show` on a bare comment raised `FunctionClauseError`,
+  which `LinearCli.CLI.main/2`'s top-level `rescue` turns into a real
+  `System.halt/1` call - not a test-only problem, a genuine crash any
+  real invocation of this command would have hit. New clause: `IO.puts
+  (comment.url || "(no URL returned)")`, mirroring `ProjectUpdate`'s own
+  "link back to what was just posted" convention. JSON mode was already
+  fine (`to_plain/1`'s generic `%_struct{}` clause covers any resource).
+* No changes to `app/lib/linear_cli/linear/comment.ex`,
+  `app/lib/linear_cli/linear.ex`, or `documents/ash-domain-erd.adoc` -
+  `add_comment`/`commentCreate` is the only mutation this command needs,
+  and it already existed before this phase.
+
+== Tests
+
+All in `app/test/linear_cli/cli/issue_commands_test.exs` (full-command
+layer - not a new `issue_comment_test.exs` file; every other
+`Commands.issue_*` function's tests, including `issue_move`'s, live in
+that one consolidated file, and `issue_comment` follows the same
+convention), on the existing `Req.Test.stub(LinearCli.Api, ...)` harness.
+New `describe "issue comment"`:
+
+* Plain create: sends `commentCreate`; stdout shows "Comment added to
+  ...".
+* `--body-file <path>`: file contents (including embedded literal
+  backslash-n or `$VAR`-looking text, proving no shell ever touches the
+  content) become the comment body verbatim.
+* `--body-file -`: stdin contents become the body verbatim.
+* `--comment` and `--body-file` together: no GraphQL call is sent at all;
+  `{:error, {:smells_bad, _}}` surfaces through `handle_error/3`'s exit
+  path.
+* Unreadable `--body-file` path: `{:error, reason}` surfaces the same
+  way, no GraphQL call is sent.
+* `--output json`: JSON is the comment map, with no `Prompt.ok`
+  confirmation text mixed into stdout.
+
+== Docs
+
+* `AGENTS.md`: "The Plan" index gains the Phase 12 and Phase 13 entries
+  (Phase 12's was missing too); "Rules for Interacting with Linear" gains
+  `mix lc issue comment --help` alongside the existing example commands.
+* `Readme.adoc`: `issue` command table gains a `comment` row (no alias,
+  per Decision 5); a short example block under the existing `issue
+  update`/`issue status` examples showing plain create and
+  `--body-file`.
+* `.ai/prompts/global.md`: the old "Linear workpad" section (a single
+  persistent comment, found and appended to by marker) is replaced with
+  "Linear progress updates" - post a new comment per milestone via `mix
+  lc issue comment --body-file <path>`, each one covering only that
+  step's findings/decisions/results; read prior comments for context but
+  never try to edit one. The "Rework awareness" list's "Prior workpad
+  content (append to it, do not overwrite)" bullet becomes "Prior
+  progress comments (read them for context; post a new comment for this
+  run rather than editing an old one)".
+* `.ai/prompts/investigate.md`, `implement.md`, `merge.md`: every
+  "update/append to the workpad" instruction becomes "post a Linear
+  comment" - `investigate.md`'s rework step now says to post a new `##
+  Investigation (rework)` comment instead of "updating" the prior one.
+  `review.md` needed no change - its rework step already said "Post an
+  updated `## Code Review` comment" (a new comment, not an edit), which
+  is the pattern every stage now follows.
+
+== Sequencing
+
+No dependency on unlanded work.
+
+1. Optimus `issue comment` spec, `dispatch/3` clause, and
+   `Commands.issue_comment/1` (body-file/mutual-exclusion handling
+   first, then plain create) + the full CLI test file.
+2. `AGENTS.md`, `Readme.adoc`, `.ai/prompts/global.md`,
+   `.ai/prompts/investigate.md`, `.ai/prompts/implement.md`,
+   `.ai/prompts/merge.md`.
+3. Manual end-to-end verification against live Linear (dogfooding, per
+   `app/usage-rules.md`) - done; see Verified above: plain create and
+   `--body-file` (file and stdin) both confirmed against real Linear,
+   including the literal-backslash-n/`$VAR`-survives-verbatim proof that
+   directly closes the incident's bug class.
+
+Standard workflow from here: file a GitHub issue for this phase, branch
+from it, commit, open the PR - no direct-to-main commits. Conventional
+commit type: `feat`.

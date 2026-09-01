@@ -160,6 +160,7 @@ so you don't have to type the full name every time:
 |`issue assign` |`a`
 |`issue move` |`m`, `mv`
 |`issue update` |`u`
+|`issue comment` |
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
 |`project list` |`l`, `ls`
@@ -288,6 +289,22 @@ $ lcomment CRY-1234 CRY-3 <5>
 <3> Cancels multiple issues without prompting and moves them to the trash (reason is added as a comment)
 <4> Opens your editor for the comment (use `-` to prompt)
 <5> Always prompts for a comment (`lcomment` is a wrapper for `lc issue update --comment -`)
+
+===== Add a comment from a file (`issue comment`)
+
+Same plain create as `issue update --comment`/`lcomment`, plus
+`--body-file` — the way to supply a large multi-line body without
+building it as a single shell argument.
+
+[source,sh]
+----
+$ lc issue comment CRY-1234 -m "Here is a comment" <1>
+$ lc issue comment CRY-1234 --body-file notes.md <2>
+$ lc issue comment CRY-1234 --body-file - <3>
+----
+<1> Plain create, same as `issue update --comment`
+<2> Reads the body from a file
+<3> Reads the body from stdin
 
 ===== Close one or many issues
 

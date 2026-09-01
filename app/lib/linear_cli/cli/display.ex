@@ -7,7 +7,7 @@ defmodule LinearCli.CLI.Display do
   own `#to_s`/`#full`/`#display` methods.
   """
 
-  alias LinearCli.Linear.{Issue, Project, ProjectUpdate, Team, User}
+  alias LinearCli.Linear.{Comment, Issue, Project, ProjectUpdate, Team, User}
   alias LinearCli.Profiles.Profile
 
   @ash_internal_fields ~w(__meta__ __metadata__ __order__ __lateral_join_source__ aggregates calculations)a
@@ -35,6 +35,15 @@ defmodule LinearCli.CLI.Display do
   defp puts_text(%ProjectUpdate{} = update, _opts) do
     health = if update.health, do: " (#{update.health})", else: ""
     IO.puts("Posted#{health}: #{update.url}")
+  end
+
+  # New in this port - Ruby has no equivalent (no bare `Comment` command
+  # existed to display one). `LinearCli.CLI.IssueHelpers.issue_comment/2`/
+  # `upsert_comment/4` already print a "Comment added to.../updated on..."
+  # confirmation via `Prompt.ok/1` before this runs, so this only needs to
+  # add the one thing that isn't in that line: a link to the comment.
+  defp puts_text(%Comment{} = comment, _opts) do
+    IO.puts(comment.url || "(no URL returned)")
   end
 
   defp puts_text(%Profile{} = profile, _opts) do

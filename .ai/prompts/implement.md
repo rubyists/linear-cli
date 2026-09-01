@@ -18,6 +18,11 @@ No description provided.
 
 Implement the solution, create a PR, and ensure it passes all quality checks.
 
+## Rule
+
+Always sign git commits. If a gpg-agent is not available with a signing key,
+stop and note that on the linear issue, do not create an unsigned commit.
+
 ## First run
 
 1. Read the investigation summary from the Linear comments.
@@ -36,7 +41,7 @@ Implement the solution, create a PR, and ensure it passes all quality checks.
    gh pr create --title "{{ issue.identifier }}: <concise title>" --body "<description>"
    ```
 8. Link the PR to the Linear issue.
-9. Update the workpad with: what was done, what was tested, any known limitations.
+9. Post a Linear comment with: what was done, what was tested, any known limitations.
 
 ## Rework run
 
@@ -57,7 +62,7 @@ If this is a rework run (a branch and PR already exist):
    - Which review comments were addressed
    - What was modified
    - Any decisions or trade-offs
-7. Append a rework section to the Linear workpad.
+7. Post a Linear comment summarising the rework.
 
 ## Quality bar
 
@@ -68,4 +73,4 @@ Before finishing, verify:
 - [ ] No lint errors
 - [ ] All acceptance criteria from the ticket description met
 - [ ] PR created (or updated) and linked to Linear issue
-- [ ] Workpad updated with completion summary
+- [ ] Linear comment posted with a completion summary

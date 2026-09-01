@@ -212,6 +212,10 @@ defmodule LinearCli.CLI do
 
   defp dispatch([:issue, :pr], result, halt), do: run(&Commands.issue_pr/1, result, halt)
   defp dispatch([:issue, :move], result, halt), do: run(&Commands.issue_move/1, result, halt)
+
+  defp dispatch([:issue, :comment], result, halt),
+    do: run(&Commands.issue_comment/1, result, halt)
+
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
   defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
@@ -736,6 +740,24 @@ defmodule LinearCli.CLI do
               options: [
                 title: [long: "--title", help: "The title of the PR"],
                 description: [long: "--description", help: "The description of the PR"]
+              ]
+            ],
+            comment: [
+              name: "comment",
+              about: "Add a comment to an issue",
+              args: [
+                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
+              ],
+              options: [
+                comment: [
+                  short: "-m",
+                  long: "--comment",
+                  help: "Comment text. - opens an editor"
+                ],
+                body_file: [
+                  long: "--body-file",
+                  help: "Read the comment body from this file (- for stdin) instead of --comment"
+                ]
               ]
             ],
             status: [
