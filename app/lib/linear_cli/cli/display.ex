@@ -7,6 +7,7 @@ defmodule LinearCli.CLI.Display do
   own `#to_s`/`#full`/`#display` methods.
   """
 
+  alias LinearCli.CLI.Pager
   alias LinearCli.Linear.{Comment, Issue, Project, ProjectUpdate, Team, User}
   alias LinearCli.Profiles.Profile
 
@@ -15,26 +16,31 @@ defmodule LinearCli.CLI.Display do
   @doc """
   Prints `subject` (a resource, or a list of resources) per `opts[:output]`
   (`"text"`, the default, or `"json"`).
+
+  Text output is routed through `$PAGER` (see `LinearCli.CLI.Pager`) when
+  stdout is a terminal and the content exceeds the terminal height.
+  `--output json` is never paged.
   """
   def show(subject, opts \\ %{}) do
     if Map.get(opts, :output, "text") == "json" do
       subject |> to_plain() |> Jason.encode!(pretty: true) |> IO.puts()
     else
-      subject |> List.wrap() |> Enum.each(&puts_text(&1, opts))
+      text = subject |> List.wrap() |> Enum.map_join("\n", &format(&1, opts))
+      Pager.maybe_page(text, opts)
     end
   end
 
-  defp puts_text(%Team{} = team, _opts) do
-    IO.puts("#{String.pad_trailing(team.key || "", 6)} #{team.name}")
+  defp format(%Team{} = team, _opts) do
+    "#{String.pad_trailing(team.key || "", 6)} #{team.name}"
   end
 
-  defp puts_text(%Project{} = project, _opts) do
-    IO.puts("#{String.pad_trailing(project.name || "", 12)} #{project.url}")
+  defp format(%Project{} = project, _opts) do
+    "#{String.pad_trailing(project.name || "", 12)} #{project.url}"
   end
 
-  defp puts_text(%ProjectUpdate{} = update, _opts) do
+  defp format(%ProjectUpdate{} = update, _opts) do
     health = if update.health, do: " (#{update.health})", else: ""
-    IO.puts("Posted#{health}: #{update.url}")
+    "Posted#{health}: #{update.url}"
   end
 
   # New in this port - Ruby has no equivalent (no bare `Comment` command
@@ -42,28 +48,26 @@ defmodule LinearCli.CLI.Display do
   # `upsert_comment/4` already print a "Comment added to.../updated on..."
   # confirmation via `Prompt.ok/1` before this runs, so this only needs to
   # add the one thing that isn't in that line: a link to the comment.
-  defp puts_text(%Comment{} = comment, _opts) do
-    IO.puts(comment.url || "(no URL returned)")
+  defp format(%Comment{} = comment, _opts) do
+    comment.url || "(no URL returned)"
   end
 
-  defp puts_text(%Profile{} = profile, _opts) do
+  defp format(%Profile{} = profile, _opts) do
     marker = if profile.active, do: "* ", else: "  "
 
-    IO.puts(
-      "#{marker}#{String.pad_trailing(profile.name, 12)} team=#{profile.team || "-"} project=#{profile.project || "-"}"
-    )
+    "#{marker}#{String.pad_trailing(profile.name, 12)} team=#{profile.team || "-"} project=#{profile.project || "-"}"
   end
 
-  defp puts_text(%User{} = user, opts) do
-    IO.puts(user_line(user, opts))
+  defp format(%User{} = user, opts) do
+    user_line(user, opts)
   end
 
-  defp puts_text(%Issue{} = issue, %{full: true}) do
-    IO.puts(issue_full(issue))
+  defp format(%Issue{} = issue, %{full: true}) do
+    issue_full(issue)
   end
 
-  defp puts_text(%Issue{} = issue, _opts) do
-    IO.puts(issue_line(issue))
+  defp format(%Issue{} = issue, _opts) do
+    issue_line(issue)
   end
 
   defp user_line(user, opts) do
