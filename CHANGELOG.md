@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.6.0](https://github.com/rubyists/linear-cli/compare/v2.5.1...v2.6.0) (2026-09-03)
+
+
+### Features
+
+* add --body-file to lc issue create for --description ([#198](https://github.com/rubyists/linear-cli/issues/198)) ([7fe4db7](https://github.com/rubyists/linear-cli/commit/7fe4db7606ae48d6c5049f4a79905e80ea95afb0))
+
 ## [2.5.1](https://github.com/rubyists/linear-cli/compare/v2.5.0...v2.5.1) (2026-09-03)
 
 
