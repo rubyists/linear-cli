@@ -3775,5 +3775,42 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
       assert %{"id" => "c1"} = Jason.decode!(output)
     end
+
+    test "multiple ISSUE_IDs each receive the comment" do
+      test_pid = self()
+
+      stub_lookup_and([
+        {"commentCreate",
+         fn _decoded ->
+           send(test_pid, :comment_created)
+           comment_created()
+         end}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "comment", "CRY-1", "CRY-2", "-m", "lgtm"])
+        end)
+
+      assert output =~ "Comment added to"
+      assert_received :comment_created
+      assert_received :comment_created
+    end
+
+    test "no ISSUE_IDs is a smells_bad error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "comment", "-m", "lgtm"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No issue IDs provided!"
+    end
   end
 end

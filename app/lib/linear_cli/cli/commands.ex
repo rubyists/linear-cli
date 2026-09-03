@@ -556,7 +556,7 @@ defmodule LinearCli.CLI.Commands do
   end
 
   @doc """
-  Adds a comment to a single issue.
+  Adds a comment to one or more issues (ISSUE_ID...).
 
   `--comment`/`-m` and `--body-file` are mutually exclusive. `--body-file`
   reads the body from a file (`-` for stdin) - the way to supply a large
@@ -566,6 +566,10 @@ defmodule LinearCli.CLI.Commands do
   not protect against. Without either option, `comment_for/2`'s existing
   behavior applies (prompt, or open an editor for `-`).
 
+  When multiple issue IDs are given, the same comment body is posted to
+  each concurrently. The interactive prompt (when neither `-m` nor
+  `--body-file` is given) uses the first issue's context.
+
   Calls `Linear.add_comment/2` directly rather than
   `LinearCli.CLI.IssueHelpers.issue_comment/2` so the confirmation can be
   suppressed under `--output json` - matching how `print_move_results/3`
@@ -574,16 +578,47 @@ defmodule LinearCli.CLI.Commands do
   New in this port - Ruby has no equivalent.
   """
   @spec issue_comment(Optimus.ParseResult.t()) :: :ok | {:error, term()}
-  def issue_comment(%{args: %{issue_id: issue_id}, options: options}) do
-    with :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
+  def issue_comment(%{unknown: issue_ids, options: options}) do
+    with :ok <- validate_issue_ids(issue_ids),
+         :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
          {:ok, comment_text} <- resolve_body_from_file(options, :comment),
-         {:ok, [issue]} <- Linear.issues(%{ids: [IssueHelpers.expand_issue_id(issue_id)]}),
-         body = WhatFor.comment_for(issue, comment_text),
-         {:ok, comment} <- Linear.add_comment(issue.identifier, body) do
-      unless options.output == "json", do: Prompt.ok("Comment added to #{issue.identifier}")
-      Display.show(comment, %{output: options.output})
+         {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+         body = WhatFor.comment_for(hd(issues), comment_text),
+         {:ok, pairs} <- add_comments_to_issues(issues, body) do
+      unless options.output == "json" do
+        Enum.each(pairs, fn {issue, _comment} ->
+          Prompt.ok("Comment added to #{issue.identifier}")
+        end)
+      end
+
+      Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: options.output})
       :ok
     end
+  end
+
+  defp add_comments_to_issues(issues, body) do
+    issues
+    |> Task.async_stream(
+      fn issue ->
+        case Linear.add_comment(issue.identifier, body) do
+          {:ok, comment} -> {:ok, {issue, comment}}
+          {:error, reason} -> {:error, reason}
+        end
+      end,
+      max_concurrency: min(length(issues), @max_concurrent_issue_updates),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, pair}}, {:ok, acc} -> {:cont, {:ok, [pair | acc]}}
+      {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
+      {:exit, reason}, _acc -> {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> then(fn
+      {:ok, results} -> {:ok, Enum.reverse(results)}
+      error -> error
+    end)
   end
 
   defp validate_body_file_exclusion(options, text_key, flag_name) do
