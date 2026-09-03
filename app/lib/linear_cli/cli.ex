@@ -738,7 +738,8 @@ defmodule LinearCli.CLI do
                 title: [short: "-t", long: "--title", help: "Issue Title"]
               ],
               flags: [
-                develop: [long: "--dev", help: "Start development after creating the issue"]
+                develop: [long: "--dev", help: "Start development after creating the issue"],
+                yes: [short: "-y", long: "--yes", help: "Skip all interactive prompts"]
               ]
             ],
             develop: [

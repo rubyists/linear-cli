@@ -359,16 +359,24 @@ defmodule LinearCli.CLI.Commands do
            description: description,
            team: options.team,
            labels: options.labels,
-           project: options.project
+           project: options.project,
+           yes: flags.yes
          ],
          {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
-         :ok <- maybe_take(issue, opts) do
+         :ok <- maybe_take(issue, flags.yes, opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
     end
   end
 
-  defp maybe_take(issue, opts) do
+  defp maybe_take(issue, true, opts) do
+    case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+      {:ok, _updated} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp maybe_take(issue, _yes, opts) do
     if Prompt.yes?("Do you want to take this issue?") do
       case IssueHelpers.gimme_da_issue!(issue.id, opts) do
         {:ok, _updated} -> :ok
