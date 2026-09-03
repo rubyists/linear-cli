@@ -691,6 +691,9 @@ defmodule LinearCli.CLI do
               about: "Show full details for a single issue",
               args: [
                 issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
+              ],
+              flags: [
+                web: [short: "-w", long: "--web", help: "Open the issue in your browser"]
               ]
             ],
             assign: [

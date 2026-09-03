@@ -4,6 +4,7 @@ defmodule LinearCli.CLI.Commands do
   result. Ported from vendor/ruby-linear-cli/lib/linear/commands/**.
   """
 
+  alias LinearCli.Browser
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
@@ -291,13 +292,23 @@ defmodule LinearCli.CLI.Commands do
 
   Mirrors `gh issue view`: a dedicated verb for the single-issue display case,
   making it discoverable without knowing about `list`'s `--full` flag.
+
+  With `-w`/`--web`, opens the issue URL in the default browser instead of
+  printing it. The `opts` keyword arg accepts an injectable `opener` for tests.
   """
-  def issue_view(%{args: %{issue_id: issue_id}, options: options}) do
+  @spec issue_view(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_view(result, opts \\ [])
+
+  def issue_view(%{args: %{issue_id: issue_id}, flags: flags, options: options}, opts) do
     expanded_id = IssueHelpers.expand_issue_id(issue_id)
 
     with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
-      Display.show(issue, %{output: options.output, full: true})
-      :ok
+      if flags.web do
+        Browser.open_url(issue.url, opts)
+      else
+        Display.show(issue, %{output: options.output, full: true})
+        :ok
+      end
     end
   end
 

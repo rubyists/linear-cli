@@ -224,9 +224,13 @@ Show full details for a single issue (title, description, and all comments):
 $ lc issue view CRY-1234
 $ lc i v CRY-1234 <1>
 $ lc issue view CRY-1234 --output json <2>
+$ lc issue view CRY-1234 --web <3>
+$ lc issue view CRY-1234 -w <4>
 ----
 <1> Short alias: `i` for `issue`, `v` for `view`
 <2> Output as JSON
+<3> Open the issue in your browser instead of printing it
+<4> Short form of `--web`
 
 ==== Assign one or more issues to yourself (take em!)
 
