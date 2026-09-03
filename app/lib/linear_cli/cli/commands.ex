@@ -341,15 +341,16 @@ defmodule LinearCli.CLI.Commands do
   def issue_create(result, opts \\ [])
 
   def issue_create(%{options: options, flags: flags}, opts) do
-    create_opts = [
-      title: options.title,
-      description: options.description,
-      team: options.team,
-      labels: options.labels,
-      project: options.project
-    ]
-
-    with {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
+    with :ok <- validate_body_file_exclusion(options, :description, "--description"),
+         {:ok, description} <- resolve_body_from_file(options, :description),
+         create_opts = [
+           title: options.title,
+           description: description,
+           team: options.team,
+           labels: options.labels,
+           project: options.project
+         ],
+         {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
          :ok <- maybe_take(issue, opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
@@ -554,8 +555,8 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_comment(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_comment(%{args: %{issue_id: issue_id}, options: options}) do
-    with :ok <- validate_comment_options(options),
-         {:ok, comment_text} <- resolve_comment_body(options),
+    with :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
+         {:ok, comment_text} <- resolve_body_from_file(options, :comment),
          {:ok, [issue]} <- Linear.issues(%{ids: [IssueHelpers.expand_issue_id(issue_id)]}),
          body = WhatFor.comment_for(issue, comment_text),
          {:ok, comment} <- Linear.add_comment(issue.identifier, body) do
@@ -565,16 +566,21 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
-  defp validate_comment_options(%{comment: comment, body_file: body_file})
-       when not is_nil(comment) and not is_nil(body_file) do
-    {:error, {:smells_bad, "give --comment or --body-file, not both"}}
+  defp validate_body_file_exclusion(options, text_key, flag_name) do
+    if not is_nil(Map.get(options, :body_file)) and not is_nil(Map.get(options, text_key)) do
+      {:error, {:smells_bad, "give #{flag_name} or --body-file, not both"}}
+    else
+      :ok
+    end
   end
 
-  defp validate_comment_options(_options), do: :ok
-
-  defp resolve_comment_body(%{body_file: nil, comment: comment}), do: {:ok, comment}
-  defp resolve_comment_body(%{body_file: "-"}), do: {:ok, read_stdin()}
-  defp resolve_comment_body(%{body_file: path}), do: File.read(path)
+  defp resolve_body_from_file(options, text_key) do
+    case Map.get(options, :body_file) do
+      nil -> {:ok, Map.get(options, text_key)}
+      "-" -> {:ok, read_stdin()}
+      path -> File.read(path)
+    end
+  end
 
   defp read_stdin do
     case IO.read(:stdio, :eof) do

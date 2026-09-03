@@ -719,6 +719,11 @@ defmodule LinearCli.CLI do
                   "for the required information.",
               options: [
                 description: [short: "-d", long: "--description", help: "Issue Description"],
+                body_file: [
+                  long: "--body-file",
+                  help:
+                    "Read the description from this file (- for stdin) instead of --description"
+                ],
                 labels: [
                   short: "-l",
                   long: "--labels",
