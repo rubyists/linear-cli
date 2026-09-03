@@ -512,6 +512,66 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     end
   end
 
+  describe "issue view" do
+    test "prints full issue details (header, description, state)" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" =>
+              issue_map(%{
+                "state" => %{"id" => "s1", "name" => "In Progress", "type" => "started"}
+              })
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "view", "CRY-1"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert output =~ "Fix the thing"
+      assert output =~ "[In Progress]"
+    end
+
+    test "outputs JSON when --output json is given" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+        Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "view", "CRY-1", "--output", "json"])
+        end)
+
+      decoded = Jason.decode!(output)
+      assert decoded["identifier"] == "CRY-1"
+      assert decoded["title"] == "Fix the thing"
+    end
+
+    test "lc i v ISSUE_ID alias routes to issue view" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+        Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["i", "v", "CRY-1"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert output =~ "Fix the thing"
+    end
+  end
+
   describe "issue create (Ruby: commands/issue/create.rb)" do
     test "resolves every field, declines to take it, and displays the created issue" do
       stub_responses([

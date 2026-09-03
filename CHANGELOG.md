@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/rubyists/linear-cli/compare/v2.5.0...v2.5.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* repair stokowski submodule reference ([#199](https://github.com/rubyists/linear-cli/issues/199)) ([a7aad55](https://github.com/rubyists/linear-cli/commit/a7aad55a726e22db5115ece5dea996d9b2dcba08))
+
 ## [2.5.0](https://github.com/rubyists/linear-cli/compare/v2.4.0...v2.5.0) (2026-08-24)
 
 

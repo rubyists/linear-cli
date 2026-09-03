@@ -286,6 +286,21 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
+  @doc """
+  Shows full details for a single issue - equivalent to `issue list --full ISSUE_ID`.
+
+  Mirrors `gh issue view`: a dedicated verb for the single-issue display case,
+  making it discoverable without knowing about `list`'s `--full` flag.
+  """
+  def issue_view(%{args: %{issue_id: issue_id}, options: options}) do
+    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+
+    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
+      Display.show(issue, %{output: options.output, full: true})
+      :ok
+    end
+  end
+
   defp resolve_project_id(nil, _team_key), do: {:ok, nil}
 
   defp resolve_project_id(search, team_key) when is_binary(team_key) do
