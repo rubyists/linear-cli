@@ -68,13 +68,14 @@ defmodule LinearCli.Linear.Issue do
     attribute :title, :string, public?: true
     attribute :branch_name, :string, public?: true
     attribute :description, :string, public?: true
+    attribute :url, :string, public?: true
     attribute :assignee, :term, public?: true
     attribute :state, :term, public?: true
     attribute :team, :term, public?: true
     attribute :comments, {:array, :term}, public?: true, default: []
   end
 
-  @issue_fields "id identifier title branchName description createdAt updatedAt"
+  @issue_fields "id identifier title branchName description url createdAt updatedAt"
   @state_fields "id name type"
 
   @doc "GraphQL field selection for an issue plus its assignee/team (Ruby: Issue.base_fragment)."
@@ -102,6 +103,7 @@ defmodule LinearCli.Linear.Issue do
       title: map["title"],
       branch_name: map["branchName"],
       description: map["description"],
+      url: map["url"],
       assignee: map["assignee"] && LinearCli.Linear.User.from_map(map["assignee"]),
       state: map["state"] && LinearCli.Linear.WorkflowState.from_map(map["state"]),
       team: map["team"] && LinearCli.Linear.Team.from_map(map["team"]),

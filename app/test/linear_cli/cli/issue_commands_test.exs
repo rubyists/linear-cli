@@ -570,6 +570,106 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "CRY-1"
       assert output =~ "Fix the thing"
     end
+
+    test "--web opens the issue URL in the browser and prints nothing" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" => issue_map(%{"url" => "https://linear.app/the-rubyists/issue/CRY-1"})
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_view(
+                     %{
+                       args: %{issue_id: "CRY-1"},
+                       flags: %{web: true},
+                       options: %{output: "text"}
+                     },
+                     opener: fn url ->
+                       send(test_pid, {:opened, url})
+                       :ok
+                     end
+                   )
+        end)
+
+      assert_received {:opened, "https://linear.app/the-rubyists/issue/CRY-1"}
+      assert output == ""
+    end
+
+    test "-w short flag opens the browser via the full CLI dispatch path" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" => issue_map(%{"url" => "https://linear.app/the-rubyists/issue/CRY-1"})
+          }
+        })
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 Commands.issue_view(
+                   %{
+                     args: %{issue_id: "CRY-1"},
+                     flags: %{web: true},
+                     options: %{output: "text"}
+                   },
+                   opener: fn url ->
+                     send(test_pid, {:opened, url})
+                     :ok
+                   end
+                 )
+      end)
+
+      assert_received {:opened, "https://linear.app/the-rubyists/issue/CRY-1"}
+    end
+
+    test "--web with --output json opens browser and prints nothing" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" => issue_map(%{"url" => "https://linear.app/the-rubyists/issue/CRY-1"})
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_view(
+                     %{
+                       args: %{issue_id: "CRY-1"},
+                       flags: %{web: true},
+                       options: %{output: "json"}
+                     },
+                     opener: fn url ->
+                       send(test_pid, {:opened, url})
+                       :ok
+                     end
+                   )
+        end)
+
+      assert_received {:opened, "https://linear.app/the-rubyists/issue/CRY-1"}
+      assert output == ""
+    end
   end
 
   describe "issue create (Ruby: commands/issue/create.rb)" do
