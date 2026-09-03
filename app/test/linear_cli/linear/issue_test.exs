@@ -62,6 +62,42 @@ defmodule LinearCli.Linear.IssueTest do
     assert {:ok, []} = Linear.issues(%{unassigned: true})
   end
 
+  test "issues/1 with labels sends the correct label filter to the API" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+      assert filter["labels"] == %{"some" => %{"name" => %{"eqIgnoreCase" => "Bug"}}}
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+  end
+
+  test "issues/1 with multiple labels sends OR filter to the API" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+      assert filter["labels"] == %{
+               "some" => %{
+                 "or" => [
+                   %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                   %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                 ]
+               }
+             }
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{labels: ["Bug", "Feature"]})
+  end
+
   test "issues/1 with ids fetches each by id via the full-detail query" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -466,6 +502,62 @@ defmodule LinearCli.Linear.IssueTest do
 
       assert {:error, %Ash.Error.Invalid{}} =
                Linear.update_issue_description(issue, "Updated body")
+    end
+  end
+
+  describe "issues/1 label filtering" do
+    test "issues/1 with labels: [single] sends some/name/eqIgnoreCase filter" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert filter["labels"] == %{
+                 "some" => %{"name" => %{"eqIgnoreCase" => "Bug"}}
+               }
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+    end
+
+    test "issues/1 with labels: [multiple] sends some/or filter for OR semantics" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert filter["labels"] == %{
+                 "some" => %{
+                   "or" => [
+                     %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                     %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                   ]
+                 }
+               }
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug", "Feature"]})
+    end
+
+    test "issues/1 with labels: [] sends no labels filter key" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        refute Map.has_key?(filter, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
     end
   end
 end

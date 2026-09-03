@@ -277,7 +277,8 @@ defmodule LinearCli.CLI.Commands do
         project_id: project_id,
         all: Map.get(flags, :all, false),
         state: Map.get(options, :state) || [],
-        status: Map.get(options, :status) || []
+        status: Map.get(options, :status) || [],
+        labels: Map.get(options, :labels) || []
       }
 
       with {:ok, issues} <- Linear.issues(input) do

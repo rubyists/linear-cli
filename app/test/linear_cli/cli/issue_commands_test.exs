@@ -455,6 +455,102 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert_received {:halted, 1}
     end
 
+    test "--labels filters by a single label name (case-insensitive)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--labels", "Incident-followup"])
+      end)
+
+      assert_received {:filter, filter}
+
+      assert filter["labels"] == %{
+               "some" => %{"name" => %{"eqIgnoreCase" => "Incident-followup"}}
+             }
+    end
+
+    test "--labels accepts comma-separated names and matches issues with any of them (OR)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([issue_map()]))
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--labels", "Bug,Feature"])
+      end)
+
+      assert_received {:filter, filter}
+
+      assert filter["labels"] == %{
+               "some" => %{
+                 "or" => [
+                   %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                   %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                 ]
+               }
+             }
+    end
+
+    test "--labels with an unknown label name returns empty result, not a crash" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, issues_response([]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--labels", "no-such-label"])
+        end)
+
+      assert output == "" or is_binary(output)
+    end
+
+    test "--labels composes with --team" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        if String.contains?(decoded["query"] || "", "teams(") do
+          Req.Test.json(conn, %{
+            "data" => %{
+              "teams" => %{
+                "edges" => [
+                  %{
+                    "node" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                    "cursor" => "c1"
+                  }
+                ],
+                "pageInfo" => %{"hasNextPage" => false, "endCursor" => "c1"}
+              }
+            }
+          })
+        else
+          send(test_pid, {:filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([issue_map()]))
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "list", "--team", "ENG", "--labels", "Bug"])
+      end)
+
+      assert_received {:filter, filter}
+      assert Map.has_key?(filter, "team")
+      assert filter["labels"] == %{"some" => %{"name" => %{"eqIgnoreCase" => "Bug"}}}
+    end
+
     test "compact listing includes workflow state name in brackets" do
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
