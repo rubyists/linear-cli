@@ -750,7 +750,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           project: "Manhattan Rollout",
           output: "text"
         },
-        flags: %{develop: true}
+        flags: %{develop: true, yes: false}
       }
 
       output =
@@ -882,7 +882,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
           project: nil,
           output: "text"
         },
-        flags: %{develop: false}
+        flags: %{develop: false, yes: false}
       }
 
       capture_io("piped from stdin\nwith a real newline", fn ->
@@ -944,6 +944,192 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       end)
 
       assert_received {:halted, _code}
+    end
+
+    test "-y/--yes with all required flags creates and self-assigns without any prompts" do
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      created_issue =
+        issue_map(%{
+          "id" => "i2",
+          "identifier" => "CRY-2",
+          "title" => "New thing",
+          "branchName" => "cry-2-new-thing",
+          "description" => "Some description",
+          "assignee" => me_map()
+        })
+
+      stub_responses([
+        {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
+        {"projects(first: 100", team_projects([project_map("p1", "Manhattan Rollout")])},
+        {"issueCreate", %{"data" => %{"issueCreate" => %{"issue" => created_issue}}}},
+        {"viewer", %{"data" => %{"viewer" => me_map()}}},
+        {"issue(id: $id)", %{"data" => %{"issue" => created_issue}}}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "create",
+                     "--title",
+                     "New thing",
+                     "--description",
+                     "Some description",
+                     "--team",
+                     "ENG",
+                     "--project",
+                     "Manhattan Rollout",
+                     "--yes"
+                   ])
+        end)
+
+      refute output =~ "Do you want to take this issue?"
+      assert output =~ "CRY-2"
+    end
+
+    test "-y without --title is a smells_bad error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            ["issue", "create", "--description", "Some desc", "--team", "ENG", "--yes"],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--title is required with --yes"
+    end
+
+    test "-y without --description (or --body-file) is a smells_bad error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            ["issue", "create", "--title", "New thing", "--team", "ENG", "--yes"],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--description is required with --yes"
+    end
+
+    test "-y without --team (and multiple teams) is a smells_bad error" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      stub_responses([
+        {"viewer",
+         %{
+           "data" => %{
+             "viewer" => %{
+               "id" => "u1",
+               "name" => "Ada",
+               "email" => "ada@x.com",
+               "teams" => %{
+                 "nodes" => [
+                   team_map(),
+                   %{"id" => "t2", "key" => "OPS", "name" => "Ops", "description" => nil}
+                 ]
+               }
+             }
+           }
+         }}
+      ])
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "create",
+              "--title",
+              "New thing",
+              "--description",
+              "Some desc",
+              "--yes"
+            ],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--team is required"
+    end
+
+    test "-y with --project resolves it by exact match and uses it" do
+      test_pid = self()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      created_issue =
+        issue_map(%{
+          "id" => "i2",
+          "identifier" => "CRY-2",
+          "title" => "T",
+          "description" => "D",
+          "assignee" => me_map()
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(
+              conn,
+              team_projects([
+                project_map("p1", "Manhattan Rollout"),
+                project_map("p2", "Other Project")
+              ])
+            )
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:project_id, decoded["variables"]["input"]["projectId"]})
+            Req.Test.json(conn, %{"data" => %{"issueCreate" => %{"issue" => created_issue}}})
+
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => created_issue}})
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 Commands.issue_create(
+                   %{
+                     options: %{
+                       title: "T",
+                       description: "D",
+                       team: "ENG",
+                       labels: [],
+                       project: "Manhattan Rollout",
+                       output: "text"
+                     },
+                     flags: %{develop: false, yes: true}
+                   },
+                   me: me
+                 )
+      end)
+
+      assert_received {:project_id, "p1"}
     end
   end
 
