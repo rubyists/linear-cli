@@ -453,6 +453,8 @@ defmodule LinearCli.CLI do
 
   defp parse_statuses(value), do: {:ok, split_filter_values(value)}
 
+  defp parse_labels(value), do: {:ok, split_filter_values(value)}
+
   defp split_filter_values(value) do
     value
     |> String.split(",", trim: true)
@@ -683,6 +685,12 @@ defmodule LinearCli.CLI do
                   long: "--status",
                   help: "Filter by friendly workflow status name(s) (comma-separated)",
                   parser: &parse_statuses/1
+                ],
+                labels: [
+                  short: "-l",
+                  long: "--labels",
+                  help: "Filter by label name(s) (comma-separated, OR match)",
+                  parser: &parse_labels/1
                 ]
               ]
             ],

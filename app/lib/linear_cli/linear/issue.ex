@@ -16,6 +16,7 @@ defmodule LinearCli.Linear.Issue do
       argument :all, :boolean, default: false
       argument :state, {:array, :string}, default: []
       argument :status, {:array, :string}, default: []
+      argument :labels, {:array, :string}, default: []
       manual LinearCli.Linear.Issue.Read.List
     end
 
@@ -201,6 +202,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     |> maybe_put_team_filter(args)
     |> maybe_put_project_filter(args)
     |> maybe_put_state_filter(args)
+    |> maybe_put_label_filter(args)
   end
 
   @completed_types ~w(completed)
@@ -280,6 +282,17 @@ defmodule LinearCli.Linear.Issue.Read.List do
   defp maybe_put_status_names(filter, statuses) do
     names = Enum.map(statuses, &%{"name" => %{"eqIgnoreCase" => &1}})
     Map.put(filter, "or", names)
+  end
+
+  defp maybe_put_label_filter(filter, %{labels: []}), do: filter
+
+  defp maybe_put_label_filter(filter, %{labels: [label]}) do
+    Map.put(filter, "labels", %{"some" => %{"name" => %{"eqIgnoreCase" => label}}})
+  end
+
+  defp maybe_put_label_filter(filter, %{labels: labels}) do
+    or_clauses = Enum.map(labels, &%{"name" => %{"eqIgnoreCase" => &1}})
+    Map.put(filter, "labels", %{"some" => %{"or" => or_clauses}})
   end
 end
 
