@@ -89,11 +89,17 @@ defmodule LinearCli.CLI.Display do
   defp issue_full(issue) do
     header = issue_line(issue)
     sep = String.duplicate("-", String.length(header))
+    labels = labels_line(issue.labels)
     description = render_markdown(issue.description)
     comments = Enum.map_join(issue.comments, "\n", &comment_block/1)
 
-    Enum.join([header, sep, description, comments], "\n")
+    [header, sep, labels, description, comments]
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join("\n")
   end
+
+  defp labels_line([]), do: ""
+  defp labels_line(labels), do: "Labels: #{Enum.map_join(labels, ", ", & &1.name)}"
 
   defp comment_block(comment) do
     user = (comment.user && comment.user.name) || "unknown"

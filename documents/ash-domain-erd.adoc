@@ -72,6 +72,7 @@ erDiagram
         WorkflowState state
         Team team
         Comment[] comments
+        Label[] labels
     }
     Label {
         string id PK
@@ -103,6 +104,7 @@ erDiagram
     Issue }o--|| WorkflowState : "state [nested]"
     Issue }o--|| Team : "team [nested]"
     Issue ||--o{ Comment : "comments [nested]"
+    Issue ||--o{ Label : "labels [nested]"
     User }o--o{ Team : "teams [nested]"
     Comment }o--|| User : "user/author [nested]"
     Project }o--o{ Team : "teams [nested]"
@@ -140,7 +142,7 @@ Eight resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Issue`
 | `id` (`:string`)
-| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`)
+| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`)
 
 | `LinearCli.Linear.Label`
 | `id` (`:string`)
@@ -196,6 +198,12 @@ data, not from declared Ash relationships.
 | `comments` (`{:array, :term}`)
 | GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.comments.nodes` (full fragment only)
 
+| `Issue`
+| `Label`
+| one-to-many
+| `labels` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.labels.nodes` (full fragment only)
+
 | `User`
 | `Team`
 | many-to-many
@@ -224,9 +232,13 @@ data, not from declared Ash relationships.
 
 === Notes on unidirectional associations
 
-* `Label` and `WorkflowState` have no stored association attributes.
-  Their `team_id` appears only as a query argument passed to their read
-  actions; there is no `:team` field on those structs.
+* `Label` is stored as an association attribute on `Issue` (`labels`, `{:array, :term}`) —
+  populated from `issue.labels.nodes` in `full_fields` responses only.
+  However, `Label` itself has no stored back-reference to its team; the
+  `team_id` is passed as an action argument to `Label.Read.ByTeam` only.
+* `WorkflowState` has no stored association attributes.
+  Its `team_id` appears only as a query argument passed to its read
+  actions; there is no `:team` field on that struct.
 * `ProjectUpdate` has no stored association attributes.
   Its `project_id` appears only as a required create argument.
 * When `Team.Read.Find` fetches a team by id, the response includes
@@ -401,8 +413,8 @@ All four issue-update actions (`:assign`, `:attach_to_project`, `:close`,
 `:set_status`) delegate to this shared runner rather than each building
 their own `issueUpdate` mutation.  `run/2` calls the mutation, receives
 the updated issue map, and decodes it via `Issue.from_map/1` using
-`Issue.full_fields/0` (the full fragment including assignee, team, and
-comments).
+`Issue.full_fields/0` (the full fragment including assignee, team,
+comments, and labels).
 
 The mutation GraphQL document is built at call time (not a module
 attribute) because `Issue.full_fields/0` references `User`, `Team`, and
