@@ -23,6 +23,9 @@ Implement the solution, create a PR, and ensure it passes all quality checks.
 Always sign git commits. If a gpg-agent is not available with a signing key,
 stop and note that on the linear issue, do not create an unsigned commit.
 
+Follow conventional commit message title rules for PR titles. This is
+necessary for release-please to pick up our squash merge commits to main.
+
 ## First run
 
 1. Read the investigation summary from the Linear comments.
@@ -38,8 +41,9 @@ stop and note that on the linear issue, do not create an unsigned commit.
 7. Push the branch and create a PR:
    ```
    git push -u origin HEAD
-   gh pr create --title "{{ issue.identifier }}: <concise title>" --body "<description>"
+   gh pr create --title "<type>(scope): <concise title>" --body "<description>"
    ```
+   We follow the same conventional commit message title for PR titles
 8. Link the PR to the Linear issue.
 9. Post a Linear comment with: what was done, what was tested, any known limitations.
 
