@@ -770,10 +770,8 @@ defmodule LinearCli.CLI do
             ],
             comment: [
               name: "comment",
-              about: "Add a comment to an issue",
-              args: [
-                issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
-              ],
+              about: "Add a comment to one or more issues (ISSUE_ID...)",
+              allow_unknown_args: true,
               options: [
                 comment: [
                   short: "-m",
