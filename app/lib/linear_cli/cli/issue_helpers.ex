@@ -445,6 +445,7 @@ defmodule LinearCli.CLI.IssueHelpers do
           [] -> []
           labels -> WhatFor.labels_for(team, labels)
         end
+
       project_search = opts[:project] || Profiles.default_project()
 
       with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: project_search}) do
