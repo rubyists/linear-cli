@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.7.0](https://github.com/rubyists/linear-cli/compare/v2.6.0...v2.7.0) (2026-09-04)
+
+
+### Features
+
+* **display:** route long output through \$PAGER ([#203](https://github.com/rubyists/linear-cli/issues/203)) ([c8f42da](https://github.com/rubyists/linear-cli/commit/c8f42da8fd8e43ea10467013270a77d4aed22efc))
+* **issue-comment:** accept multiple ISSUE_IDs ([#208](https://github.com/rubyists/linear-cli/issues/208)) ([1ae4fba](https://github.com/rubyists/linear-cli/commit/1ae4fbae0e1eece717b2f911efa9c21d8024ed64))
+* **issue-create:** add -y/--yes to skip interactive prompts ([#205](https://github.com/rubyists/linear-cli/issues/205)) ([f798546](https://github.com/rubyists/linear-cli/commit/f798546a9f5f6a2844f7636fdb3ae6f74dbb0ee9))
+* **issue:** add --labels filter to lc issue list ([#206](https://github.com/rubyists/linear-cli/issues/206)) ([f966f14](https://github.com/rubyists/linear-cli/commit/f966f14acdaf5690ac6254b24895f44c0a203110))
+* **issue:** add -w/--web flag to lc issue view ([#204](https://github.com/rubyists/linear-cli/issues/204)) ([f26757e](https://github.com/rubyists/linear-cli/commit/f26757e2abb5626c4b188994dbcc7268088fb3c6))
+* **issue:** include labels in Issue.full_fields and display ([#210](https://github.com/rubyists/linear-cli/issues/210)) ([df13fd8](https://github.com/rubyists/linear-cli/commit/df13fd81c99eb4b787cc66aeaed9fe87cd57500e))
+
 ## [2.6.0](https://github.com/rubyists/linear-cli/compare/v2.5.1...v2.6.0) (2026-09-03)
 
 
