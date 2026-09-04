@@ -14,6 +14,10 @@ on:  # yamllint disable-line rule:truthy
         default: false
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
   test:
     name: Test
@@ -52,11 +56,47 @@ jobs:
         run: mix ci
         working-directory: .
 
+  burrito_changes:
+    # Building Burrito is deliberately reserved for changes that affect its
+    # dependency graph or packaging path. The release workflow still builds
+    # every target before publishing.
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    name: Detect Burrito-impacting changes
+    runs-on: ubuntu-latest
+    outputs:
+      burrito_changed: ${{ steps.changes.outputs.burrito_changed }}
+    steps:
+      -
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      -
+        id: changes
+        name: Check whether Burrito-impacting files changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+              app/mix.exs \
+              app/mix.lock \
+              app/release/ \
+              ci/prepare_musl_nifs.sh \
+              ci/test_burrito_shared_loader.sh \
+              .github/workflows/ci.yaml \
+              .github/workflows/main.yaml
+          then
+              printf 'burrito_changed=false\n' >> "$GITHUB_OUTPUT"
+          else
+              printf 'burrito_changed=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
   burrito_linux_regression:
     # ci.yaml is also called by main.yaml after pushes and closed release PRs.
-    # Keep this expensive native build as a pre-merge pull-request gate; the
-    # release workflow builds every target after the release PR merges.
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    # Keep this expensive native build as a pre-merge dependency-change gate;
+    # the release workflow builds every target after the release PR merges.
+    needs: [burrito_changes]
+    if: needs.burrito_changes.outputs.burrito_changed == 'true'
     name: Burrito Linux shared-loader regression
     runs-on: ubuntu-latest
     timeout-minutes: 20
