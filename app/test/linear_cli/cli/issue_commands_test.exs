@@ -606,6 +606,96 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "[Done]"
       assert output =~ "Fix the thing"
     end
+
+    test "-l shows label names in compact output" do
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "-l", "Bug"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug]"
+    end
+
+    test "--labels shows label names in compact output" do
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--labels", "Bug"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug]"
+    end
+
+    test "--labels with multiple labels shows all label names in compact output" do
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false},
+              %{"id" => "l2", "name" => "Feature", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--labels", "Bug,Feature"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug, Feature]"
+    end
+
+    test "compact listing without --labels does not show label brackets" do
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["issue", "list"]) end)
+
+      assert output =~ "CRY-1"
+      refute output =~ "[Bug]"
+    end
   end
 
   describe "issue view" do

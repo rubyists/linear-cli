@@ -282,7 +282,12 @@ defmodule LinearCli.CLI.Commands do
       }
 
       with {:ok, issues} <- Linear.issues(input) do
-        Display.show(issues, %{output: options.output, full: flags.full})
+        Display.show(issues, %{
+          output: options.output,
+          full: flags.full,
+          labels: input.labels != []
+        })
+
         :ok
       end
     end

@@ -557,6 +557,72 @@ defmodule LinearCli.Linear.IssueTest do
   end
 
   describe "issues/1 label filtering" do
+    test "issues/1 with labels requests labels fields in the GraphQL query" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels {")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+    end
+
+    test "issues/1 without labels does not request labels fields in the GraphQL query" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        refute String.contains?(query, "labels {")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
+    end
+
+    test "issues/1 with labels parses label names from the response" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Bug fix",
+                    "branchName" => "cry-1-bug-fix",
+                    "description" => nil,
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                    "labels" => %{
+                      "nodes" => [
+                        %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+                      ]
+                    }
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{labels: ["Bug"]})
+      assert [label] = issue.labels
+      assert label.name == "Bug"
+    end
+
     test "issues/1 with labels: [single] sends some/name/eqIgnoreCase filter" do
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)

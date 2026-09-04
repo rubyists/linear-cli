@@ -88,6 +88,11 @@ defmodule LinearCli.Linear.Issue do
       "team { #{LinearCli.Linear.Team.base_fields()} }"
   end
 
+  @doc "GraphQL field selection for base_fields plus labels — used when listing issues filtered by label."
+  def list_fields_with_labels do
+    "#{base_fields()} labels { nodes { #{LinearCli.Linear.Label.base_fields()} } }"
+  end
+
   @doc "GraphQL field selection for a fully detailed issue, incl. comments (Ruby: Issue.full_fragment)."
   def full_fields do
     "#{@issue_fields} " <>
@@ -137,7 +142,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if args.ids != [] do
       find_by_ids(args.ids)
     else
-      list_all(build_filter(args))
+      list_all(build_filter(args), args.labels != [])
     end
   end
 
@@ -155,6 +160,19 @@ defmodule LinearCli.Linear.Issue.Read.List do
     query($filter: IssueFilter, $first: Int!, $after: String) {
       issues(filter: $filter, first: $first, after: $after) {
         edges { node { #{Issue.base_fields()} } cursor }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+    """
+  end
+
+  # Same paginated query but includes labels in each node — used when the caller
+  # filtered by --labels so we can show labels in the compact output.
+  defp list_document_with_labels do
+    """
+    query($filter: IssueFilter, $first: Int!, $after: String) {
+      issues(filter: $filter, first: $first, after: $after) {
+        edges { node { #{Issue.list_fields_with_labels()} } cursor }
         pageInfo { hasNextPage endCursor }
       }
     }
@@ -187,9 +205,11 @@ defmodule LinearCli.Linear.Issue.Read.List do
     end
   end
 
-  defp list_all(filter) do
+  defp list_all(filter, include_labels) do
+    document = if include_labels, do: list_document_with_labels(), else: list_document()
+
     Paginate.all(
-      list_document(),
+      document,
       "issues",
       fn after_cursor -> %{"filter" => filter, "first" => 50, "after" => after_cursor} end,
       &Issue.from_map/1
