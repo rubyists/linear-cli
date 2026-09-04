@@ -11,10 +11,9 @@ defmodule LinearCli.CLI.Pager do
   - The content's line count does not exceed the terminal's row count
 
   When paging is needed the content is written to a temp file and the
-  pager is invoked via `System.shell/1`, which — like
-  `Owl.IO.open_in_editor/2`'s own use of the same function — lets the
-  child process open `/dev/tty` directly for interactive keyboard
-  control.
+  The pager inherits the terminal's standard streams, so pagers that
+  render to standard output (such as `bat`) work as well as interactive
+  pagers such as `less`.
 
   ## Testing
 
@@ -38,12 +37,12 @@ defmodule LinearCli.CLI.Pager do
   - `:rows_fn` — 0-arity function returning terminal row count or `nil`
     (defaults to `&Owl.IO.rows/0`)
   - `:shell_fn` — 1-arity function receiving the full shell command
-    (defaults to `&System.shell/1`)
+    (defaults to a runner that inherits the terminal's standard streams)
   """
   @spec maybe_page(String.t(), map()) :: :ok
   def maybe_page(text, opts \\ %{}) do
     rows_fn = Map.get(opts, :rows_fn, &Owl.IO.rows/0)
-    shell_fn = Map.get(opts, :shell_fn, &System.shell/1)
+    shell_fn = Map.get(opts, :shell_fn, &run_pager/1)
     terminal_rows = rows_fn.()
     pager = resolve_pager()
 
@@ -85,6 +84,23 @@ defmodule LinearCli.CLI.Pager do
     end
 
     :ok
+  end
+
+  # `System.shell/1` captures a child's stdout. That made pagers such as
+  # `bat` appear to succeed while their output was silently discarded.
+  defp run_pager(command) do
+    shell = System.find_executable("sh") || raise "could not find sh on PATH"
+
+    port =
+      Port.open({:spawn_executable, shell}, [
+        :nouse_stdio,
+        :exit_status,
+        args: ["-c", command]
+      ])
+
+    receive do
+      {^port, {:exit_status, status}} -> {"", status}
+    end
   end
 
   defp shell_quote(path) do
