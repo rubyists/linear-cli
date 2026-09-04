@@ -611,7 +611,9 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       labeled_issue =
         issue_map(%{
           "labels" => %{
-            "nodes" => [%{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}]
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
           }
         })
 
@@ -679,7 +681,9 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       labeled_issue =
         issue_map(%{
           "labels" => %{
-            "nodes" => [%{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}]
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
           }
         })
 
