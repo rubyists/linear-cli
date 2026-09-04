@@ -439,20 +439,20 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     end
 
     test "--state with an unknown type exits 1 (Optimus parse error)" do
-      test_pid = self()
-      halt = fn code -> send(test_pid, {:halted, code}) end
+      # The production halt function never returns. Throw from the test double
+      # too, so the parser's error path stops before it reaches the normal CLI
+      # dispatch and emits an unrelated exception diagnostic.
+      output =
+        capture_io(fn ->
+          assert catch_throw(
+                   LinearCli.CLI.main(
+                     ["issue", "list", "--state", "badtype"],
+                     fn code -> throw({:halted, code}) end
+                   )
+                 ) == {:halted, 1}
+        end)
 
-      # Optimus catches the bad value and calls halt.(1); with a fake halt that
-      # doesn't terminate the process, execution continues and eventually crashes
-      # (same artifact as the --help test in cli_test.exs). Rescue it so the test
-      # can still verify halt was called with the right code.
-      try do
-        LinearCli.CLI.main(["issue", "list", "--state", "badtype"], halt)
-      rescue
-        _ -> :ok
-      end
-
-      assert_received {:halted, 1}
+      assert output =~ "invalid value \"badtype\" for --state option"
     end
 
     test "--labels filters by a single label name (case-insensitive)" do
@@ -1043,8 +1043,6 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     end
 
     test "-y/--yes with all required flags creates and self-assigns without any prompts" do
-      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
-
       created_issue =
         issue_map(%{
           "id" => "i2",

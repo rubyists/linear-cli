@@ -16,6 +16,8 @@ and best practices for agents to follow.
 - Phase 11 Plan: documents/phase-11-plan.adoc
 - Phase 12 Plan: documents/phase-12-plan.adoc
 - Phase 13 Plan: documents/phase-13-plan.adoc
+- Phase 14 Plan: documents/phase-14-plan.adoc
+- Burrito distribution decision: documents/burrito-decision.adoc
 
 ## Project Structure
 
@@ -57,7 +59,7 @@ Supporting directories (not Mix projects):
   `lproj`). Each one just calls `exec lc ...`.
 - `ci/` — Shell scripts for CI and release: conventional-commit enforcement,
   container build/publish, Homebrew formula bump.
-- `githooks/` — `commit-msg` and `pre-push` hooks; installed by `mix setup`.
+- `git-hooks/` — `commit-msg` and `pre-push` hooks; installed by `mix setup`.
 - `oci/` — `Containerfile` for the published container image.
 - `schema/` — The Linear GraphQL schema (`LinearAPI.graphql`), kept for reference.
 - `cinemas/` — Terminal session recordings (`.cinema.gif`) embedded in Readme.adoc.
@@ -127,7 +129,7 @@ not need a structural-doc update.
 ## Standards
 
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
-  and `pre-push` hooks at `githooks/` (run `mix setup` once per clone to
+  and `pre-push` hooks at `git-hooks/` (run `mix setup` once per clone to
   activate them).
 - Dogfooding & running `lc` locally (no MCP, no escript): app/usage-rules.md
 - Accessibility: app/usage-rules.md — the actual reason this project

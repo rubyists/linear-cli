@@ -1,6 +1,7 @@
 defmodule LinearCli.CLITest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   setup do
     Req.Test.stub(LinearCli.Api, fn conn ->
@@ -558,10 +559,13 @@ defmodule LinearCli.CLITest do
 
     output =
       capture_io(:stderr, fn ->
-        LinearCli.CLI.main(["issue", "develop", "CRY-999"], halt)
+        log = capture_log(fn -> LinearCli.CLI.main(["issue", "develop", "CRY-999"], halt) end)
+        send(test_pid, {:log, log})
       end)
 
     assert_received {:halted, 66}
+    assert_received {:log, log}
+    assert log =~ "Linear API partial-success: 1 field error(s) discarded, data returned"
     assert output =~ "No issue found with id"
     refute output =~ "What the heck is this?"
   end

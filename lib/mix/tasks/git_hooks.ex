@@ -1,18 +1,15 @@
 defmodule Mix.Tasks.GitHooks do
-  @shortdoc "Installs this repo's git hooks (commit-msg, pre-push - Conventional Commits)"
+  @shortdoc "Installs this repo's commit-msg and pre-push validation hooks"
 
   @moduledoc """
   #{@shortdoc}.
 
       mix git_hooks
 
-  Sets `core.hooksPath` to `githooks/` (this repo's own `commit-msg` and
-  `pre-push` hooks, both enforcing Conventional Commits via
-  `ci/validate_conventional_commit.sh`/`ci/conventional_commits.sh`) -
-  the same one-line `git config` this repo's docs already told you to run
-  by hand, just idempotent and easy to re-run. Safe to run repeatedly:
-  setting the same git config value twice is a no-op. Wired into
-  `mix setup` - see that task.
+  Sets `core.hooksPath` to `git-hooks/`: its `commit-msg` hook enforces
+  Conventional Commits, and its `pre-push` hook runs `mix precommit`.
+  This is idempotent and safe to run repeatedly: setting the same Git config
+  value twice is a no-op. Wired into `mix setup` - see that task.
   """
 
   use Mix.Task
@@ -20,9 +17,19 @@ defmodule Mix.Tasks.GitHooks do
   alias RepoTasks.Shell
 
   @impl Mix.Task
-  def run(_argv) do
-    Shell.run!("git", ["config", "core.hooksPath", "githooks"])
-    Mix.shell().info("==> Git hooks installed (core.hooksPath = githooks)")
+  def run(argv) do
+    run(argv, &Shell.run!/3)
+    Mix.shell().info("==> Git hooks installed (core.hooksPath = git-hooks)")
     :ok
+  end
+
+  @doc false
+  def run([], shell) do
+    shell.("git", ["config", "core.hooksPath", "git-hooks"], [])
+    :ok
+  end
+
+  def run(_argv, _shell) do
+    Mix.raise("Usage: mix git_hooks")
   end
 end

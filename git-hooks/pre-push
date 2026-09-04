@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the same complete validation gate as CI before every push, including
+# Hex's retired/vulnerable-package audit. It also validates every commit since
+# the branch diverged from its base (catching a commit made before the hooks
+# were installed, an amend, a rebase, etc.). Activate with:
+#   mix git_hooks
+
+repo_top=$(git rev-parse --show-toplevel) || exit 1
+cd "$repo_top" || exit 1
+exec mix precommit
