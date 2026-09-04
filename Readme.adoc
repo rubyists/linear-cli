@@ -18,7 +18,7 @@ endif::[]
 :image-major-tag: v2
 // x-release-please-end
 // x-release-please-start-version
-:image-pin-example: v2.7.0
+:image-pin-example: v2.7.1
 // x-release-please-end
 
 A command line interface to https://linear.app - list, take, create, develop,
