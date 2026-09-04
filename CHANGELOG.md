@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.8.0](https://github.com/rubyists/linear-cli/compare/v2.7.0...v2.8.0) (2026-09-04)
+
+
+### Features
+
+* **issue-list:** show labels in compact output when filtering by --labels ([#211](https://github.com/rubyists/linear-cli/issues/211)) ([8073f9a](https://github.com/rubyists/linear-cli/commit/8073f9a27e8e35cb991dc0e88676b69986b4fb96))
+
+
+### Bug Fixes
+
+* **pager:** fix pagers that use stdio ([#214](https://github.com/rubyists/linear-cli/issues/214)) ([6d56882](https://github.com/rubyists/linear-cli/commit/6d56882830dac501e2e7749354446aaa4a0c0a8c))
+
 ## [2.7.0](https://github.com/rubyists/linear-cli/compare/v2.6.0...v2.7.0) (2026-09-04)
 
 
