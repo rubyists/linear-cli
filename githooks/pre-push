@@ -1,9 +1,0 @@
-#!/bin/sh
-# Enforces Conventional Commits on every commit about to be pushed, not
-# just whatever commit-msg already checked at commit time (catches a
-# commit made before this hook was installed, an amend, a rebase, etc.).
-# See app/usage-rules.md for the rule. Activate with:
-#   git config core.hooksPath githooks
-
-repo_top=$(git rev-parse --show-toplevel) || exit 1
-exec "$repo_top/ci/conventional_commits.sh"
