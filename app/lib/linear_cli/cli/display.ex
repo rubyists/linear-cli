@@ -66,8 +66,8 @@ defmodule LinearCli.CLI.Display do
     issue_full(issue)
   end
 
-  defp format(%Issue{} = issue, _opts) do
-    issue_line(issue)
+  defp format(%Issue{} = issue, opts) do
+    issue_line(issue, opts)
   end
 
   defp user_line(user, opts) do
@@ -80,10 +80,16 @@ defmodule LinearCli.CLI.Display do
     end
   end
 
-  defp issue_line(issue) do
+  defp issue_line(issue, opts \\ %{}) do
     state = if issue.state, do: "[#{issue.state.name}] ", else: ""
     basic = "#{String.pad_trailing(issue.identifier || "", 12)} #{state}#{issue.title}"
-    if issue.assignee, do: "#{basic} (#{issue.assignee.name})", else: basic
+    line = if issue.assignee, do: "#{basic} (#{issue.assignee.name})", else: basic
+
+    if Map.get(opts, :labels) && issue.labels != [] do
+      "#{line} [#{Enum.map_join(issue.labels, ", ", & &1.name)}]"
+    else
+      line
+    end
   end
 
   defp issue_full(issue) do
