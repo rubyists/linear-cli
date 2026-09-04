@@ -10,6 +10,18 @@ defmodule LinearCli.CLI.PagerTest do
   @long_text String.duplicate("line\n", 50)
   @short_text "just one line"
 
+  setup do
+    original = System.get_env("PAGER")
+    System.delete_env("PAGER")
+
+    on_exit(fn ->
+      case original do
+        nil -> System.delete_env("PAGER")
+        value -> System.put_env("PAGER", value)
+      end
+    end)
+  end
+
   describe "maybe_page/2 - not a TTY" do
     test "prints directly without invoking the pager" do
       {invoked, shell_fn} = spy_shell()
