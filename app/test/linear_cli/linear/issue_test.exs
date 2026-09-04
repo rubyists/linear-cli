@@ -106,6 +106,7 @@ defmodule LinearCli.Linear.IssueTest do
       assert id == "CRY-2"
       assert query =~ "issue(id: $id)"
       assert query =~ "comments"
+      assert query =~ "labels"
 
       Req.Test.json(conn, %{
         "data" => %{
@@ -117,7 +118,8 @@ defmodule LinearCli.Linear.IssueTest do
             "description" => nil,
             "assignee" => nil,
             "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
-            "comments" => %{"nodes" => []}
+            "comments" => %{"nodes" => []},
+            "labels" => %{"nodes" => []}
           }
         }
       })
@@ -125,6 +127,49 @@ defmodule LinearCli.Linear.IssueTest do
 
     assert {:ok, [issue]} = Linear.issues(%{ids: ["cry-2"]})
     assert issue.identifier == "CRY-2"
+    assert issue.labels == []
+  end
+
+  test "issues/1 with ids parses labels from the full-detail response" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"id" => _id}} = Jason.decode!(body)
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "issue" => %{
+            "id" => "i2",
+            "identifier" => "CRY-2",
+            "title" => "Ship it",
+            "branchName" => "cry-2-ship-it",
+            "description" => nil,
+            "assignee" => nil,
+            "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+            "comments" => %{"nodes" => []},
+            "labels" => %{
+              "nodes" => [
+                %{
+                  "id" => "lbl-1",
+                  "name" => "Bug",
+                  "description" => nil,
+                  "isGroup" => false
+                },
+                %{
+                  "id" => "lbl-2",
+                  "name" => "Feature",
+                  "description" => "A new feature",
+                  "isGroup" => false
+                }
+              ]
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, [issue]} = Linear.issues(%{ids: ["cry-2"]})
+    assert length(issue.labels) == 2
+    assert Enum.map(issue.labels, & &1.name) == ["Bug", "Feature"]
   end
 
   test "issues/1 parses the issue's current state when present in the response" do

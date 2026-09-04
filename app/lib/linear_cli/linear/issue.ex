@@ -74,6 +74,7 @@ defmodule LinearCli.Linear.Issue do
     attribute :state, :term, public?: true
     attribute :team, :term, public?: true
     attribute :comments, {:array, :term}, public?: true, default: []
+    attribute :labels, {:array, :term}, public?: true, default: []
   end
 
   @issue_fields "id identifier title branchName description url createdAt updatedAt"
@@ -93,7 +94,8 @@ defmodule LinearCli.Linear.Issue do
       "state { #{@state_fields} } " <>
       "assignee { #{LinearCli.Linear.User.fields_with_teams()} } " <>
       "team { #{LinearCli.Linear.Team.full_fields()} } " <>
-      "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } }"
+      "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } } " <>
+      "labels { nodes { #{LinearCli.Linear.Label.base_fields()} } }"
   end
 
   @doc false
@@ -112,6 +114,11 @@ defmodule LinearCli.Linear.Issue do
         Enum.map(
           get_in(map, ["comments", "nodes"]) || [],
           &LinearCli.Linear.Comment.from_map/1
+        ),
+      labels:
+        Enum.map(
+          get_in(map, ["labels", "nodes"]) || [],
+          &LinearCli.Linear.Label.from_map/1
         )
     )
   end
