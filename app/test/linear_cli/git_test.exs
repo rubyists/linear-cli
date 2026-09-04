@@ -8,8 +8,7 @@ defmodule LinearCli.GitTest do
   # under System.tmp_dir!(), never against the real project working
   # directory. See house rule 6 in the project instructions.
   setup do
-    origin_path = tmp_path("origin")
-    File.mkdir_p!(origin_path)
+    origin_path = tmp_dir!("origin")
     {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
 
     # `git init --bare`'s HEAD symref follows the runner's ambient
@@ -23,27 +22,29 @@ defmodule LinearCli.GitTest do
     {_output, 0} =
       System.cmd("git", ["symbolic-ref", "HEAD", "refs/heads/main"], cd: origin_path)
 
-    repo_path = tmp_path("repo")
-    File.mkdir_p!(repo_path)
+    repo_path = tmp_dir!("repo")
     init_repo!(repo_path)
     commit_file!(repo_path, "README.md", "hello")
     {_output, 0} = System.cmd("git", ["branch", "-M", "main"], cd: repo_path)
     {_output, 0} = System.cmd("git", ["remote", "add", "origin", origin_path], cd: repo_path)
     {_output, 0} = System.cmd("git", ["push", "-q", "-u", "origin", "main"], cd: repo_path)
 
-    on_exit(fn ->
-      File.rm_rf!(origin_path)
-      File.rm_rf!(repo_path)
-    end)
-
     %{repo: repo_path, origin: origin_path}
   end
 
-  defp tmp_path(prefix) do
-    Path.join(
-      System.tmp_dir!(),
-      "linear_cli_git_test_#{prefix}_#{System.unique_integer([:positive, :monotonic])}"
-    )
+  # `System.unique_integer/1` is unique only within the current BEAM VM. A
+  # fresh `mix test` process starts its sequence over, so an interrupted prior
+  # run can otherwise reuse its stale /tmp fixture. A cryptographic nonce makes
+  # the directory unique across processes as well; register cleanup before any
+  # Git command can fail, so failed setup does not leave another collision
+  # behind.
+  defp tmp_dir!(prefix) do
+    nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    path = Path.join(System.tmp_dir!(), "linear_cli_git_test_#{prefix}_#{nonce}")
+
+    File.mkdir!(path)
+    on_exit(fn -> File.rm_rf!(path) end)
+    path
   end
 
   defp init_repo!(path) do
@@ -113,11 +114,9 @@ defmodule LinearCli.GitTest do
     end
 
     test "returns an error tuple when there is no origin remote" do
-      repo_path = tmp_path("repo_no_origin")
-      File.mkdir_p!(repo_path)
+      repo_path = tmp_dir!("repo_no_origin")
       init_repo!(repo_path)
       commit_file!(repo_path, "README.md", "hello")
-      on_exit(fn -> File.rm_rf!(repo_path) end)
 
       assert {:error, _reason} = Git.default_branch(cwd: repo_path)
     end

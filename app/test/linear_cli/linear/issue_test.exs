@@ -1,5 +1,6 @@
 defmodule LinearCli.Linear.IssueTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
 
   alias LinearCli.Linear
 
@@ -244,8 +245,13 @@ defmodule LinearCli.Linear.IssueTest do
       })
     end)
 
-    assert {:error, %Ash.Error.Unknown{errors: [%{value: [not_found: _id]}]}} =
-             Linear.issues(%{ids: ["nope"]})
+    log =
+      capture_log(fn ->
+        assert {:error, %Ash.Error.Unknown{errors: [%{value: [not_found: _id]}]}} =
+                 Linear.issues(%{ids: ["nope"]})
+      end)
+
+    assert log =~ "Linear API partial-success: 1 field error(s) discarded, data returned"
   end
 
   describe "create_issue/3+" do
