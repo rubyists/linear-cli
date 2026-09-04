@@ -1,0 +1,543 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Sep 04, 2026
+:my-title: Phase 14 plan: end-to-end Conventional Commits and pull request title enforcement
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+[NOTE]
+====
+This plan was reconstructed on 2026-09-03 after the prompt-session database
+that contained the original planning discussion became malformed. The user's
+confirmed goal is to guarantee both Conventional Commit subjects and
+Conventional Commit-formatted pull request titles.
+
+Nine draft files from that session survived untracked on branch `recover-197`,
+at `f6a5e37` (then the tip of `main`). They are inventoried below. They are
+implementation evidence, not a complete or approved change set. In particular,
+none of the tracked callers, workflows, documentation, or old enforcement
+files had been changed, and `git diff --cached` was empty when this plan was
+written. The recovered validator drafts were also placed under `git-hooks/`,
+but that placement is not the intended architecture: checks are first-class
+standalone programs under `ci/`, while Git hooks are only lifecycle adapters.
+
+On 2026-09-04, `main` was pulled through `df3c769` (v2.7.0) while all nine
+drafts survived untracked. That pull landed one related guidance change,
+`a34a1b7` / #202, which teaches the Stokowski implementation prompt to use a
+Conventional Commit-shaped PR title. It did not land any validator, hook, task,
+workflow, or branch-protection enforcement from this phase.
+====
+
+== Goal
+
+Make it impossible for a commit with a non-conforming subject to enter the
+protected `main` branch through the normal repository workflows, and make a
+non-conforming pull request title a required-check failure before merge.
+
+The local hooks provide immediate feedback, while GitHub Actions plus branch
+protection provide the authoritative enforcement boundary. Local hooks alone
+cannot be the guarantee because Git permits `--no-verify`, hooks are not active
+until `mix setup` has been run, and a pre-push hook can be bypassed by another
+client entirely.
+
+The motivating regression is pull request #197. Its individual branch commits
+were checked, but its title was:
+
+----
+Stokowski tooling: fix Claude→Qwen routing, add lc issue comment
+----
+
+GitHub used that title for the squash commit and appended `(#197)`, producing
+the non-conventional `main` commit `f6a5e37`. The old CI gate only inspected the
+commits already on the PR branch; it never inspected the title that would
+become the integration commit's subject.
+
+The same gap produced a second regression immediately afterward: pull request
+#196 became `8207063 EXT-19: add lc issue view command with v alias (#196)` on
+`main`. Commit `a34a1b7` then corrected the agent prompt that had proposed that
+issue-identifier-first title shape. Subsequent observed titles through
+`df3c769` conform, but guidance and voluntary compliance are not enforcement.
+
+This phase closes both sides of that gap:
+
+* every commit subject introduced by a PR or direct protected-branch update;
+* the current pull request title, including after it is edited.
+
+== Scope of the rule
+
+The machine-enforced contract is the first line (the Git commit *subject*, or
+the whole single-line PR title):
+
+----
+<type>[(scope)][!]: <description>
+----
+
+Allowed types remain the project list in `app/usage-rules.md`:
+`fix`, `feat`, `perf`, `observability`/`obs`,
+`config`/`configuration`, `chore`, `ci`, `docs`, `refactor`,
+`sec`/`security`, `style`, `cleanup`, and `test`.
+
+Commit bodies and footers remain allowed and are not syntax-linted beyond
+selecting the first non-comment, non-blank line from a commit-message file.
+The existing imperative-present-tense guidance remains a human review rule;
+trying to classify English grammar in a shell regex would create false
+guarantees rather than a useful gate.
+
+== Reconstructed decisions
+
+1. *One shared subject validator.*
+   `ci/validate_conventional_subject.sh` owns the format and allowed-type
+   regex as an independently executable check. It accepts either a
+   commit-message file (for `commit-msg`) or `--subject <text>` (for
+   commit-range and PR-title checks). A context value such as
+   `CONVENTIONAL_SUBJECT_KIND="Pull request title"` changes diagnostics, not
+   validation semantics. There must not be separate regex copies for commits
+   and titles.
+2. *PR titles follow the identical format.*
+   `ci/validate_pull_request_title.sh` requires and validates
+   `PULL_REQUEST_TITLE` only when `PULL_REQUEST_TITLE_REQUIRED=true`; non-PR
+   events skip it explicitly. Missing, empty, malformed, or trailing-whitespace
+   titles fail when required. The environment switch itself accepts only
+   `true` or `false`, so a workflow wiring typo fails closed.
+3. *Every introduced commit is checked as a range.*
+   `ci/validate_commit_range.sh` validates every subject after the merge
+   base between `HEAD` and its base. Local default-base precedence is
+   `origin/main`, then `main`, specifically so a direct push from local `main`
+   is compared with the pre-push remote instead of with itself. `BASE_REF`
+   accepts an exact 40-character SHA so a GitHub push event can use
+   `github.event.before` and validate the new `main` commit rather than an empty
+   `main..main` range.
+4. *No exception for non-conventional merge subjects.*
+   Bare `Merge branch ...` subjects fail like any other non-conventional
+   subject. The old validator exempted GitHub's update-branch merge commits,
+   but that contradicts the goal that every commit subject conform. A
+   contributor can rebase, or merge locally with a subject such as
+   `chore: Merge branch 'main' into my-branch`. Documentation must call out
+   this consequence because GitHub's Update branch button can create a subject
+   that the gate deliberately rejects.
+5. *Local hooks are thin lifecycle adapters, not checks.*
+   `git-hooks/commit-msg` only resolves the repository and `exec`s
+   `ci/validate_conventional_subject.sh` with Git's message-file argument.
+   `git-hooks/pre-push` only resolves the repository and `exec`s
+   `ci/validate_push_refs.sh`, preserving Git's arguments and stdin. The latter
+   first-class check validates the commits actually introduced by every ref
+   update, ignores deletions, and avoids the inaccurate claim that checking
+   only the currently checked-out `HEAD` covers every possible `git push`
+   form. New branches fall back to their merge base with `origin/main`;
+   existing remote branches use the outgoing update range. The remote CI gate
+   remains authoritative even after the local adapter is made exact.
+6. *All custom checks are first-class programs under `ci/`.*
+   The canonical check programs are
+   `ci/validate_conventional_subject.sh`,
+   `ci/validate_pull_request_title.sh`,
+   `ci/validate_commit_range.sh`, and
+   `ci/validate_push_refs.sh`. Each has its own usable command-line/environment
+   contract, diagnostics, exit status, executable mode, and direct tests; none
+   requires invocation through a Git hook, Mix task, or workflow. Existing
+   `ci/validate_conventional_commit.sh` and `ci/conventional_commits.sh`
+   responsibilities are consolidated into those canonical programs, not moved
+   out of `ci/`. If an old filename must remain temporarily for compatibility,
+   it is only an `exec` wrapper and contains no validation logic.
+
+   `git-hooks/` contains only Git's extensionless `commit-msg` and `pre-push`
+   adapters. Mix tasks and GitHub Actions call the relevant `ci/*.sh` programs
+   directly. `mix git_hooks` configures `core.hooksPath=git-hooks`, rejects
+   unexpected arguments, and retains an injectable runner for unit tests.
+   There must be one live implementation of each check after consolidation.
+7. *`mix precommit` becomes the canonical full-repository gate.*
+   It runs cheap metadata checks first, then root-project checks, then app
+   checks. Its complete order is:
+
+   . `ci/validate_pull_request_title.sh`;
+   . `ci/validate_commit_range.sh`;
+   . root `mix format --check-formatted`;
+   . root `mix test`;
+   . app `mix deps.get`;
+   . app `mix hex.audit`;
+   . app `mix deps.audit`;
+   . app `mix format --check-formatted`;
+   . app `mix credo --strict`;
+   . app `mix usage_rules.sync --check`;
+   . app `mix test`.
+
+   The recovered draft omitted both root checks, which would leave the task's
+   own implementation and validator tests outside the gate that claimed to
+   cover the repository. That omission must be fixed. The shipped `mix ci`
+   command remains as a thin compatibility alias to `mix precommit`; it must
+   not retain a second independently maintained command list.
+8. *One required CI result eventually owns the whole gate.*
+   `.github/workflows/ci.yaml`'s existing `Test` job calls `mix precommit` from
+   the repository root after a full-history checkout of the real PR head or
+   event SHA. The separate `Validate Commit Subjects` job becomes redundant
+   only after branch protection has been migrated safely; see the no-gap
+   sequence below.
+9. *PR title edits retrigger the required check.*
+   The direct `pull_request` trigger explicitly includes `opened`,
+   `synchronize`, `reopened`, and `edited`. Without `edited`, a title could be
+   valid when CI passed and changed to an invalid value afterward without a new
+   required run. The title enters the shell only as a quoted environment value,
+   never as generated shell source.
+10. *Post-merge pushes validate the integration commit too.*
+    `main.yaml` must stop blanket-skipping commit validation. On a `push` to
+    `main`, the reusable CI workflow checks `github.event.before..github.sha`.
+    This is defense in depth for the exact failure seen in #197 and also covers
+    an authorized direct update to `main`. Non-PR events skip only the PR-title
+    check, not commit subjects.
+11. *All merge methods may remain enabled only after merge-title settings are
+    aligned with the guarantee.*
+    As re-verified on 2026-09-04, the repository allows merge, squash, and
+    rebase merges, but `merge_commit_title` is `MERGE_MESSAGE` and
+    `squash_merge_commit_title` is `COMMIT_OR_PR_TITLE`. Squash remains safe
+    once both inputs are enforced: GitHub chooses either a validated individual
+    commit subject or the validated PR title. Rebase relies on the validated
+    individual subjects. Merge commits are not safe while GitHub can generate
+    a `Merge pull request ...`-style subject, so this phase changes
+    `merge_commit_title` to `PR_TITLE` before declaring enforcement complete.
+    Disabling merge commits is the acceptable fallback if GitHub cannot retain
+    that setting, but silently leaving `MERGE_MESSAGE` is not.
+12. *Tests that create Git repositories must survive interrupted runs.*
+    A prior crashed session left `/tmp/linear_cli_git_test_*` directories.
+    `System.unique_integer/1` restarts in a new BEAM VM, so later runs collided
+    with those directories and reported `nothing to commit`. Both existing app
+    Git tests and new root hook tests must create directories with cross-process
+    uniqueness (or atomically retry on `:eexist`) and clean up on exit. A stale
+    directory from a killed run must not make `mix precommit` red.
+13. *Enforcement is prospective; do not rewrite published `main` history.*
+    Commits `f6a5e37` (#197) and `8207063` (#196) remain regression fixtures;
+    `8207063` is the last known bad integration subject as of 2026-09-04. Range
+    selection must exclude commits already present on the chosen base, so new
+    branches from current `main` are not permanently blocked by either one.
+    Every commit added after this phase lands must conform.
+
+== GitHub Actions event contract
+
+The workflow wiring must be explicit enough that each event validates the
+correct revision and does not accidentally inspect GitHub's synthetic PR merge
+commit.
+
+[cols="2,1,2,3", options="header"]
+|===
+| Event
+| Require PR title
+| Commit comparison base
+| Revision checked out
+
+| `pull_request`: `opened`, `synchronize`, `reopened`, `edited`
+| yes
+| exact `pull_request.base.sha` (or an equivalently fetched base ref)
+| exact `pull_request.head.sha`, with full history
+
+| `push` to `main` through `main.yaml` / `workflow_call`
+| no
+| exact `github.event.before`
+| `github.sha`, with full history
+
+| `pull_request: closed` through `main.yaml`
+| no
+| `pull_request.base.sha` when validating the merged result; an explicit
+  documented skip is acceptable only for an unmerged close whose range is
+  empty
+| merged/default-branch `github.sha`, not the deleted PR head
+
+| `workflow_dispatch`
+| no
+| explicit input if supplied, otherwise `origin/main`
+| the selected `github.sha`, with full history
+|===
+
+For a PR event, CI exports:
+
+* `PULL_REQUEST_TITLE_REQUIRED=true`;
+* `PULL_REQUEST_TITLE` from `github.event.pull_request.title`;
+* `BASE_REF` as the exact base SHA.
+
+For all other events, `PULL_REQUEST_TITLE_REQUIRED=false`. A reusable-workflow
+input may be used where GitHub expression scoping makes the event values
+awkward, but the behavior in the table is the contract; a generic
+`skip_commit_validation: true` from `main.yaml` is not.
+
+== Safe branch-protection migration
+
+As re-verified on 2026-09-04, `main` protection is strict, applies to admins, and
+requires two GitHub Actions checks: `Test` and `Validate Commit Subjects`.
+Removing the latter job in the same PR without coordinating protection would
+leave that PR permanently waiting for a check that can no longer be emitted.
+
+Use this no-gap migration:
+
+1. Make `Test` run the complete `mix precommit` gate, including commit subjects
+   and PR title, while temporarily retaining the existing required
+   `Validate Commit Subjects` job as a compatibility check.
+2. Prove on the implementation PR that an invalid title fails `Test`, a fixed
+   title reruns and passes, and an invalid commit subject fails.
+3. Merge with both currently-required checks green.
+4. Change branch protection to require `Test` and no longer require
+   `Validate Commit Subjects`, preserving strictness, the GitHub Actions app
+   binding, admin enforcement, force-push prohibition, and deletion
+   prohibition.
+5. Change `merge_commit_title` from `MERGE_MESSAGE` to `PR_TITLE` (or disable
+   merge commits if that setting cannot be retained), while preserving the
+   safe squash/rebase configuration.
+6. Remove the compatibility job in a follow-up change. Do not reverse steps 4
+   and 6.
+
+If branch protection is deliberately updated immediately before the
+implementation PR merges instead, record that operation and verify there is no
+window in which `Test` is still the old app-only gate. The compatibility-job
+sequence is preferred because it has no enforcement gap.
+
+== Recovery status through 2026-09-04
+
+The following untracked drafts survived. Preserve and rework their useful
+contents, but do not add every draft at its recovered path:
+
+* `git-hooks/commit-msg`;
+* `git-hooks/pre-push`;
+* `git-hooks/validate-conventional-subject` (relocate its implementation to
+  `ci/validate_conventional_subject.sh`);
+* `git-hooks/validate-commit-range` (relocate its implementation to
+  `ci/validate_commit_range.sh`);
+* `git-hooks/validate-pull-request-title` (relocate its implementation to
+  `ci/validate_pull_request_title.sh`);
+* `lib/mix/tasks/precommit.ex`;
+* `test/git_hooks_test.exs`;
+* `test/mix/tasks/git_hooks_test.exs`;
+* `test/mix/tasks/precommit_test.exs`.
+
+The missing `ci/validate_push_refs.sh` must be extracted from the recovered
+`pre-push` behavior. After consolidation, only `commit-msg` and `pre-push`
+remain under `git-hooks/`; the recovered validators do not.
+
+What is already useful in those drafts:
+
+* one shared commit/PR-title regex and contextual diagnostics;
+* the #197 regression subject (the #196/`8207063` fixture still needs adding);
+* required/optional PR-title behavior;
+* `origin/main` precedence for local-main validation;
+* exact-SHA `BASE_REF` support for push events;
+* metadata-first `mix precommit` orchestration;
+* executable file modes and clean shell syntax.
+
+What is known incomplete:
+
+* `Mix.Tasks.GitHooks` is still tracked in its old form, so the two recovered
+  `GitHooks` tests fail with undefined `run/2`;
+* `.github/workflows/ci.yaml` still calls `mix ci` and the old scripts, never
+  exports the PR title, and does not request `pull_request.edited`;
+* `.github/workflows/main.yaml` still passes
+  `skip_commit_validation: true` for every event;
+* `mix precommit` runs only the app checks and therefore omits the root tests
+  that exercise the new enforcement code;
+* the old `githooks/` adapters still exist, while the recovered validators are
+  misplaced under `git-hooks/` and overlap the tracked checks under `ci/`;
+* `AGENTS.md`, `app/usage-rules.md`, and `Readme.adoc` still describe or invoke
+  the old paths/commands;
+* Stokowski's implementation prompt now proposes a conventional PR title after
+  `a34a1b7`, but still invokes `mix ci` instead of the canonical
+  `mix precommit` and does not itself enforce the title;
+* the recovered `pre-push` wrapper checks `HEAD`, not every ref supplied by
+  Git's pre-push protocol;
+* required-status-check migration has not happened.
+
+Verification performed during recovery:
+
+* new shell files pass `bash -n` / `sh -n`;
+* root formatting passes;
+* root tests are 20/22, with only the two expected missing-`GitHooks.run/2`
+  failures;
+* the app suite was 352/352 on the original recovery base when run with an
+  isolated temporary directory;
+* the draft `mix precommit` successfully reaches every app gate, including
+  both dependency audits, formatting, Credo, usage-rules sync, and tests.
+
+== Building blocks
+
+=== First-class checks and hook adapters
+
+* Finish direct `ci/validate_conventional_subject.sh` coverage for every
+  allowed header shape, scoped and breaking forms, invalid types, empty input,
+  trailing whitespace, message-file comments/blanks, and merge subjects.
+* Finish direct `ci/validate_pull_request_title.sh` fail-closed behavior for
+  missing/empty title values and invalid required-switch values.
+* Extend direct `ci/validate_commit_range.sh` tests to cover a feature branch,
+  local `main` ahead of `origin/main`, an exact base SHA, a range containing
+  both valid and invalid subjects, and an empty range.
+* Implement and directly test `ci/validate_push_refs.sh` against Git's
+  pre-push stdin protocol, covering new branches, existing branches, multiple
+  refs, and deletion records in isolated test repositories.
+* Keep `git-hooks/commit-msg` and `git-hooks/pre-push` trivial: each preserves
+  Git's inputs and `exec`s the corresponding `ci/` check.
+* Update `Mix.Tasks.GitHooks`, its moduledoc, and `mix setup` expectations for
+  `git-hooks/` and argument rejection.
+
+=== Full validation task
+
+* Complete `Mix.Tasks.Precommit` with the root checks and strict no-argument
+  contract.
+* Invoke `ci/validate_pull_request_title.sh` and
+  `ci/validate_commit_range.sh` directly; `mix precommit` must not route checks
+  through Git hook entrypoints.
+* Keep the injectable `RepoTasks.Shell` boundary so ordering and working
+  directories are unit-testable without actually invoking the full suite.
+* Convert `Mix.Tasks.Ci` into a thin compatibility alias to
+  `Mix.Tasks.Precommit`. No duplicate list of checks may survive.
+* Retain `.ai/prompts/implement.md`'s conventional PR-title guidance landed by
+  `a34a1b7`, update its quality command from `mix ci` to `mix precommit`, and
+  make clear that scope is optional. Keep the Linear identifier in the
+  description or after the conventional prefix.
+
+=== Workflows
+
+* Update `ci.yaml` to the event contract above, including a full checkout,
+  real PR head, exact base SHA, PR-title environment, and `edited` activity.
+* Call `mix precommit` from the root `Test` job.
+* Have any temporary compatibility job call the appropriate canonical
+  `ci/*.sh` check directly; workflows do not call Git hook adapters.
+* Update `main.yaml` so a push validates from `github.event.before`; remove the
+  blanket skip while handling closed/unmerged PR events explicitly.
+* Keep the Burrito regression job's existing scope and behavior. This phase
+  changes its dependency/gating context only if required by the consolidated
+  workflow; it does not alter release packaging.
+* Exercise workflow expression values with titles containing quotes,
+  backticks, dollar signs, and Unicode to prove the title is data rather than
+  executable shell text.
+
+=== Documentation and repository structure
+
+* `AGENTS.md`: retain this Phase 14 index entry; replace the `githooks/`
+  structural entry with `git-hooks/` and describe that directory as adapters
+  only; describe `ci/` as the home of first-class standalone checks as well as
+  build, packaging, publishing, and release scripts; update the Standards
+  paths.
+* `app/usage-rules.md`: document local commit-time/pre-push checks, required CI
+  validation of every PR commit and current PR title, title-edit reruns, the
+  no-exception merge-subject policy, and the authoritative role of protected
+  CI.
+* `Readme.adoc`: make Conventional Commits apply explicitly to both commit
+  subjects and PR titles; present `mix precommit` as the full development
+  command while retaining focused test commands where useful.
+* `.ai/prompts/implement.md`: use `mix precommit` and a valid PR title as
+  described above. Search all other prompts for `mix ci`, `gh pr create`, and
+  issue-identifier-first title examples during implementation.
+* Do not edit the historical Phase 8 plan to pretend it anticipated this
+  change. Phase 8 accurately records the original commit-range-only CI design;
+  this document records the correction prompted by #197.
+* No Ash resources, actions, code interfaces, associations, or shared domain
+  helpers change, so `documents/ash-domain-erd.adoc` is untouched.
+
+== Tests and acceptance criteria
+
+Automated acceptance:
+
+* A normal `feat(api): add title validation` commit subject passes everywhere.
+* PR #197's title fails both the shared validator and the PR-title wrapper.
+* PR #196's `EXT-19: ...` title / resulting `8207063` subject fails too.
+* A valid required PR title passes; invalid, missing, empty, or
+  trailing-whitespace titles fail.
+* Editing a valid open PR title to an invalid title creates a new required
+  failing `Test` run; editing it back creates a passing run without needing a
+  new commit.
+* A PR containing any invalid commit subject fails even when all other commits
+  and the PR title are valid.
+* A `push` event validates the exact commits after `github.event.before`,
+  including the new squash/merge integration commit.
+* Local `main` ahead of `origin/main` is not treated as an empty range.
+* Every custom check under `ci/` is executable and testable directly, with a
+  documented input and exit-status contract.
+* `commit-msg` and `pre-push` contain no validation logic and delegate to the
+  appropriate `ci/` checks while preserving arguments and stdin; bypassing
+  `commit-msg` and then pushing is caught by `pre-push` in normal and multi-ref
+  cases.
+* `mix git_hooks` writes `core.hooksPath=git-hooks`; `mix setup` still invokes
+  it; both tasks reject unsupported arguments as documented.
+* `mix precommit` runs root and app formatting/tests plus the app audit/static
+  checks in the documented order and exits on the first failure.
+* Root Git-hook tests and app Git tests pass even when stale similarly-named
+  directories already exist under the system temporary directory.
+* No duplicate check implementations survive. Active callers use the
+  canonical `ci/*.sh` programs; any retained legacy `ci/` filename is a thin
+  compatibility wrapper, and `git-hooks/` contains only `commit-msg` and
+  `pre-push`.
+* `mix precommit` is green from a clean checkout.
+* Repository settings report `merge_commit_title=PR_TITLE`, or merge commits
+  are disabled; `MERGE_MESSAGE` is not left enabled as an integration-subject
+  source.
+
+Live GitHub acceptance before declaring the phase complete:
+
+1. Open or use a test PR whose commits are conventional but whose title is not;
+   observe required `Test` failure attributed clearly to the title.
+2. Edit only the title to a conforming value; observe an `edited`-event rerun
+   and green required check.
+3. Push an invalid commit subject to a disposable test branch; observe failure
+   even with a valid title, then replace or reword it using a fresh/disposable
+   branch so the verification does not introduce force-pushing as normal
+   project practice.
+4. Merge a conforming test PR with the project's normal merge method; confirm
+   the resulting `main` subject remains conventional and the `push` validation
+   checks it from the event's `before` SHA.
+5. Complete the required-status-check migration and confirm a fresh PR is
+   merge-blocked when `Test` fails and mergeable when it passes.
+
+== Issue decomposition
+
+Create and implement these as separate Linear issues in dependency order. The
+titles below are stable so a later session can map issue IDs back to this plan
+even if links or local state are unavailable.
+
+1. *EXT-29 — Harden Conventional Commit validators and Git test isolation.*
+   Finish the shared subject/title/range behavior, add both #197 and #196
+   regression fixtures, make pre-push validation cover the actual refs supplied
+   on stdin, and make root/app temporary Git repositories collision-proof after
+   interrupted runs. This is the foundation for every later issue.
+2. *EXT-30 — Consolidate repository Git hooks under `git-hooks/`.*
+   Update `Mix.Tasks.GitHooks`, migrate the two lifecycle adapters from
+   `githooks/` to `git-hooks/`, keep all check implementations under `ci/`,
+   update structural/local-hook documentation, and leave the root hook suite
+   green. Depends on EXT-29.
+3. *EXT-31 — Make `mix precommit` the canonical repository quality gate.*
+   Add root format/tests to the recovered task, retain every app quality step,
+   turn `mix ci` into a thin alias, and update Stokowski/development guidance.
+   Depends on EXT-29; it can proceed in parallel with EXT-30 once shared
+   validator paths are settled.
+4. *EXT-32 — Enforce Conventional Commit subjects and PR titles in GitHub
+   Actions.*
+   Implement the event table, title-edit trigger, safe environment handling,
+   full-history real-head checkout, exact push base, and post-merge validation.
+   Keep the old required job temporarily for the no-gap migration. Depends on
+   EXT-29, EXT-30, and EXT-31.
+5. *EXT-33 — Migrate repository settings and verify Phase 14 end to end.*
+   Change the required-check set only after the consolidated `Test` check is
+   live, set merge commit titles to `PR_TITLE` (or disable merge commits), run
+   the live invalid-title/title-edit/invalid-commit cases, remove the temporary
+   compatibility job, and verify final protection settings. Depends on EXT-32.
+
+== Sequencing
+
+1. *EXT-29*: harden the temporary Git-repository helpers, finish
+   shared-validator/range tests, and make the recovered root suite green
+   without workflow changes.
+2. *EXT-30*: complete `Mix.Tasks.GitHooks`, migrate only the two adapters from
+   `githooks/` to `git-hooks/`, point them at the canonical `ci/` checks, and
+   update focused docs/tests.
+3. *EXT-31*: complete `mix precommit` with root and app checks; reduce `mix ci`
+   to a thin alias; update Stokowski and development commands. This may run in
+   parallel with EXT-30 after EXT-29.
+4. *EXT-32*: wire `ci.yaml` and `main.yaml` to the event contract while
+   retaining the temporary `Validate Commit Subjects` compatibility job.
+5. *EXT-33*: run all local/live checks, merge with both existing required
+   checks green, migrate branch protection and merge-title settings, remove the
+   obsolete compatibility job in the prescribed order, and verify a fresh PR
+   against the final one-check configuration.
+
+Standard workflow from here: take the next unblocked Linear issue, branch from
+it, commit, and open a PR with a Conventional Commits-formatted title. Do not
+commit directly to `main`. Conventional commit type: `ci`.

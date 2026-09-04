@@ -16,6 +16,8 @@ and best practices for agents to follow.
 - Phase 11 Plan: documents/phase-11-plan.adoc
 - Phase 12 Plan: documents/phase-12-plan.adoc
 - Phase 13 Plan: documents/phase-13-plan.adoc
+- Phase 14 Plan: documents/phase-14-plan.adoc
+- Burrito distribution decision: documents/burrito-decision.adoc
 
 ## Project Structure
 
