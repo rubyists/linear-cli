@@ -115,6 +115,22 @@ defmodule GitHooksTest do
     assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
+  test "the range guard fetches a missing local default base from origin" do
+    {worktree, _} = setup_ci_worktree!()
+
+    # Mimic a shallow CI checkout: the remote has main, while neither a local
+    # main branch nor origin/main is available to resolve without a fetch.
+    git!(worktree, ["branch", "-m", "main", "feature"])
+    git!(worktree, ["update-ref", "-d", "refs/remotes/origin/main"])
+
+    File.write!(Path.join(worktree, "README"), "bad commit\n", [:append])
+    git!(worktree, ["add", "README"])
+    git!(worktree, ["commit", "-m", "this is not conventional"])
+
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
+    assert output =~ "this is not conventional"
+  end
+
   test "the range guard reports all invalid subjects in a mixed commit range" do
     {worktree, _} = setup_ci_worktree!()
 
