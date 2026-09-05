@@ -28,6 +28,11 @@ jobs:
     steps:
       -
         uses: actions/checkout@v7
+        with:
+          # The repository-level precommit task validates every commit since
+          # the merge base. Retain the full range so its shell guard can
+          # resolve that base without a second network fetch.
+          fetch-depth: 0
       -
         uses: erlef/setup-beam@v1
         with:
@@ -157,6 +162,4 @@ jobs:
           # workflow_call), where github.event.pull_request is unset.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
-        env:
-          FETCH_BASE_REF: "true"
         run: ./ci/validate_commit_range.sh

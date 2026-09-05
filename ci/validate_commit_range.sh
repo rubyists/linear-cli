@@ -8,8 +8,7 @@ usage() {
 	  $0
 
 	Environment:
-	  BASE_REF          Base branch or ref. Defaults to GITHUB_BASE_REF, then origin/main.
-	  FETCH_BASE_REF    When "true", fetch BASE_REF from origin before validating.
+	  BASE_REF          Base branch or ref. Defaults to GITHUB_BASE_REF, then main.
 EOT
 }
 
@@ -37,9 +36,7 @@ validator="$repo_top/ci/validate_conventional_subject.sh"
 
 [ -x "$validator" ] || die "validator is not executable: $validator"
 
-base_input=${BASE_REF:-${GITHUB_BASE_REF:-}}
-base_name=${base_input#refs/heads/}
-base_name=${base_name#origin/}
+base_input=${BASE_REF:-${GITHUB_BASE_REF:-main}}
 
 base_ref=
 
@@ -49,20 +46,22 @@ then
     # already contains it, and using the immutable SHA ensures the newly
     # pushed main commit is validated instead of comparing main to itself.
     base_ref_candidates="$base_input"
-elif [ -n "$base_input" ]
-then
-    if [ "${FETCH_BASE_REF:-}" = "true" ]
+
+    if ! git rev-parse --verify --quiet "$base_input" >/dev/null
     then
-        git_or_die fetch --no-tags origin "$base_name:refs/remotes/origin/$base_name" >/dev/null
+        # A shallow GitHub checkout may contain only HEAD. Fetch the precise
+        # pre-push SHA here rather than requiring workflow-specific setup.
+        git_or_die fetch --no-tags origin "$base_input" >/dev/null
     fi
+else
+    base_name=${base_input#refs/heads/}
+    base_name=${base_name#origin/}
 
     # Prefer the remote-tracking ref. In particular, a developer pushing
     # directly from local main must compare against origin/main, not against
     # local main (HEAD), or the range would be empty and a bypassed commit-msg
     # hook could slip through pre-push validation.
     base_ref_candidates="origin/$base_name $base_input $base_name"
-else
-    base_ref_candidates="origin/main main"
 fi
 
 for candidate in $base_ref_candidates
@@ -73,6 +72,32 @@ do
         break
     fi
 done
+
+[ -n "$base_ref" ] || {
+    if [[ "$base_input" =~ ^[0-9a-fA-F]{40}$ ]]
+    then
+        # `git fetch origin <sha>` normally makes the object directly
+        # addressable. Keep FETCH_HEAD as a fallback for Git servers that do
+        # not install an anonymous remote-tracking ref for a SHA request.
+        base_ref_candidates="$base_input FETCH_HEAD"
+    else
+        # Local clones normally already have origin/main (or their configured
+        # BASE_REF), so this branch is not taken locally. GitHub Actions'
+        # default shallow checkout does not; fetch the missing base from here
+        # so callers never need a workflow-level FETCH_BASE_REF switch.
+        git_or_die fetch --no-tags origin "$base_name:refs/remotes/origin/$base_name" >/dev/null
+        base_ref_candidates="origin/$base_name $base_input $base_name"
+    fi
+
+    for candidate in $base_ref_candidates
+    do
+        if git rev-parse --verify --quiet "$candidate" >/dev/null
+        then
+            base_ref=$candidate
+            break
+        fi
+    done
+}
 
 [ -n "$base_ref" ] || die "unable to resolve commit comparison base"
 
