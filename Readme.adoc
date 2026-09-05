@@ -1,4 +1,5 @@
 = Linear Command line interface (Elixir)
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :toc: right
 :toclevels: 3
 :sectanchors:
@@ -291,6 +292,8 @@ $ lc issue pr CRY-1234
 ==== Update an issue
 
 All of the update options can work on multiple issues at a time.
+See link:documents/body-file.adoc[`--body-file`: context-specific file input]
+for how file-backed text maps to each command.
 
 ===== Add a comment to one or more issues
 

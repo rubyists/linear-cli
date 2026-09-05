@@ -7,6 +7,10 @@
 - Use the imperative, present tense in the description (`add`, not `added`/`adds`).
 - Mark breaking changes with `!` before the colon (e.g. `feat!: ...`).
 - Bare `Merge branch ...` subjects are rejected — reword as `chore: Merge branch ...`.
+  The sole exception is GitHub's auto-generated **Update branch** merge commit:
+  it is skipped only when it has two parents, was committed by
+  `GitHub <noreply@github.com>`, and exactly matches `Merge branch '<base>' into
+  <head>`.
 - Enforced locally by the `commit-msg` hook at `git-hooks/commit-msg` (each
   commit's own subject, via `ci/validate_conventional_subject.sh`) and the
   `pre-push` hook at `git-hooks/pre-push` (every non-deletion ref update,
