@@ -3,7 +3,7 @@ defmodule Mix.Tasks.CiTest do
 
   alias Mix.Tasks.Ci
 
-  test "runs all quality gate steps in order" do
+  test "delegates to mix precommit" do
     caller = self()
 
     shell = fn cmd, args, opts ->
@@ -13,10 +13,22 @@ defmodule Mix.Tasks.CiTest do
 
     assert :ok = Ci.run([], shell)
 
-    assert_receive {:run, "mix", ["deps.get"], [cd: "app"]}
-    assert_receive {:run, "mix", ["hex.audit"], [cd: "app"]}
-    assert_receive {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
-    assert_receive {:run, "mix", ["usage_rules.sync", "--check"], [cd: "app"]}
-    assert_receive {:run, "mix", ["test"], [cd: "app"]}
+    assert_received {:run, "./ci/validate_pull_request_title.sh", [], []}
+    assert_received {:run, "./ci/validate_commit_range.sh", [], []}
+    assert_received {:run, "mix", ["format", "--check-formatted"], []}
+    assert_received {:run, "mix", ["test"], []}
+    assert_received {:run, "mix", ["deps.get"], [cd: "app"]}
+    assert_received {:run, "mix", ["hex.audit"], [cd: "app"]}
+    assert_received {:run, "mix", ["deps.audit"], [cd: "app"]}
+    assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
+    assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
+    assert_received {:run, "mix", ["usage_rules.sync", "--check"], [cd: "app"]}
+    assert_received {:run, "mix", ["test"], [cd: "app"]}
+  end
+
+  test "rejects arguments via precommit" do
+    assert_raise Mix.Error, "Usage: mix precommit", fn ->
+      Ci.run(["unexpected"], fn _, _, _ -> :ok end)
+    end
   end
 end

@@ -15,6 +15,8 @@ defmodule Mix.Tasks.PrecommitTest do
 
     assert_receive {:run, "./ci/validate_pull_request_title.sh", [], []}
     assert_receive {:run, "./ci/validate_commit_range.sh", [], []}
+    assert_receive {:run, "mix", ["format", "--check-formatted"], []}
+    assert_receive {:run, "mix", ["test"], []}
     assert_receive {:run, "mix", ["deps.get"], [cd: "app"]}
     assert_receive {:run, "mix", ["hex.audit"], [cd: "app"]}
     assert_receive {:run, "mix", ["deps.audit"], [cd: "app"]}

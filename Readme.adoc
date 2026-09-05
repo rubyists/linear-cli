@@ -476,7 +476,14 @@ $ mix lc whoami
 $ mix lc issue list --output json
 ----
 
-The project uses ExUnit and `mix format`. Run tests with:
+The project uses ExUnit and `mix format`. Run the full quality gate with:
+
+[source,sh]
+----
+$ mix precommit
+----
+
+To run only the app test suite or format check directly:
 
 [source,sh]
 ----

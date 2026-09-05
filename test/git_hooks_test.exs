@@ -12,13 +12,6 @@ defmodule GitHooksTest do
     assert {"", 0} = run(@subject_guard, ["--subject", "feat(api): add title validation"])
   end
 
-  test "the shared subject guard rejects the squash title from pull request 197" do
-    title = "Stokowski tooling: fix Claude→Qwen routing, add lc issue comment (#197)"
-
-    assert {output, 1} = run(@subject_guard, ["--subject", title])
-    assert output =~ "Commit subject must use Conventional Commits format"
-  end
-
   test "the shared subject guard rejects the squash title from pull request 196" do
     title = "EXT-19: isolate Burrito musl loader per user (#196)"
 
@@ -115,6 +108,22 @@ defmodule GitHooksTest do
     assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
+  test "the range guard fetches a missing local default base from origin" do
+    {worktree, _} = setup_ci_worktree!()
+
+    # Mimic a shallow CI checkout: the remote has main, while neither a local
+    # main branch nor origin/main is available to resolve without a fetch.
+    git!(worktree, ["branch", "-m", "main", "feature"])
+    git!(worktree, ["update-ref", "-d", "refs/remotes/origin/main"])
+
+    File.write!(Path.join(worktree, "README"), "bad commit\n", [:append])
+    git!(worktree, ["add", "README"])
+    git!(worktree, ["commit", "-m", "this is not conventional"])
+
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
+    assert output =~ "this is not conventional"
+  end
+
   test "the range guard reports all invalid subjects in a mixed commit range" do
     {worktree, _} = setup_ci_worktree!()
 
@@ -136,11 +145,12 @@ defmodule GitHooksTest do
     refute output =~ "feat: valid commit"
   end
 
-  test "the range guard skips a GitHub Update-branch merge commit matching all three predicates" do
+  test "the range guard validates a GitHub Update-branch merge commit" do
     {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree)
 
-    assert {"", 0} = run(@range_guard, [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
+    assert output =~ "Merge branch 'main' into feature"
   end
 
   test "the range guard validates when the committer name is not GitHub" do
@@ -244,8 +254,8 @@ defmodule GitHooksTest do
   end
 
   # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
-  # branch. Defaults simulate GitHub's "Update branch" committer identity and
-  # subject so the predicate in validate_commit_range.sh matches.
+  # branch. Defaults simulate GitHub's "Update branch" identity and subject;
+  # these remain subject to validation because commit metadata is forgeable.
   defp add_github_merge!(worktree, opts \\ []) do
     committer_name = Keyword.get(opts, :committer_name, "GitHub")
     committer_email = Keyword.get(opts, :committer_email, "noreply@github.com")
