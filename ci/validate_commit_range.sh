@@ -33,7 +33,7 @@ git_or_die() {
 }
 
 repo_top=$(git_or_die rev-parse --show-toplevel)
-validator="$repo_top/git-hooks/validate-conventional-subject"
+validator="$repo_top/ci/validate_conventional_subject.sh"
 
 [ -x "$validator" ] || die "validator is not executable: $validator"
 

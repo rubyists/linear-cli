@@ -8,13 +8,12 @@
 - Mark breaking changes with `!` before the colon (e.g. `feat!: ...`).
 - Bare `Merge branch ...` subjects are rejected — reword as `chore: Merge branch ...`.
 - Enforced locally by the `commit-msg` hook at `git-hooks/commit-msg` (each
-  commit's own subject, via its shared subject validator) and the `pre-push`
-  hook at `git-hooks/pre-push` (`mix precommit`, which validates
-  every commit about to be pushed and runs the dependency security audits,
-  formatting, static analysis, and tests) — run `mix setup` once per clone
-  to activate both.
+  commit's own subject, via `ci/validate_conventional_subject.sh`) and the
+  `pre-push` hook at `git-hooks/pre-push` (every non-deletion ref update,
+  via `ci/validate_push_refs.sh`) — run `mix setup` once per clone to
+  activate both.
 - Enforced in CI across a whole PR's commit range by
-  `ci/conventional_commits.sh` (skips GitHub's own auto-generated
+  `ci/validate_commit_range.sh` (skips GitHub's own auto-generated
   update-branch merge commits).
 
 ## Dogfooding: use `lc`, not a Linear MCP server or skill

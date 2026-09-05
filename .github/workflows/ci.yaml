@@ -159,4 +159,4 @@ jobs:
       -
         env:
           FETCH_BASE_REF: "true"
-        run: ./ci/conventional_commits.sh
+        run: ./ci/validate_commit_range.sh

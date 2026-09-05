@@ -22,7 +22,7 @@ then
 fi
 
 repo_top=$(git rev-parse --show-toplevel) || exit 1
-validator="$repo_top/git-hooks/validate-conventional-subject"
+validator="$repo_top/ci/validate_conventional_subject.sh"
 
 if [ ! -x "$validator" ]
 then
