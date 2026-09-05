@@ -5,14 +5,35 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   workflow_call:
     inputs:
-      skip_commit_validation:
+      base_ref:
         description: >-
-          Skip the commit-subject check - it only makes sense pre-merge
-          (should this PR be mergeable), not as a post-merge gate.
+          Commit comparison base: an exact 40-character SHA (for push events
+          and closed-PR validation), a branch name (for workflow_dispatch with
+          an explicit base), or empty (falls back to origin/main). The Test job
+          exports this as BASE_REF so ci/validate_commit_range.sh uses the
+          correct range instead of re-resolving it from scratch.
+        required: false
+        type: string
+        default: ""
+      pull_request_title_required:
+        description: >-
+          Set to true only for pull_request events. ci/validate_pull_request_title.sh
+          treats any other value as "skip" and exits 0. Pass "false" for push,
+          closed-PR, and workflow_dispatch events where there is no PR title to enforce.
         required: false
         type: boolean
         default: false
+      pull_request_title:
+        description: >-
+          The pull request title to validate. Only meaningful when
+          pull_request_title_required is true. Passed as an environment variable
+          so the title is never interpolated as shell code — quotes, backticks,
+          dollar signs, and Unicode are all safe.
+        required: false
+        type: string
+        default: ""
   pull_request:
+    types: [opened, synchronize, reopened, edited]
 
 permissions:
   contents: read
@@ -29,14 +50,15 @@ jobs:
       -
         uses: actions/checkout@v7
         with:
-          # The repository-level precommit task validates every commit since
-          # the merge base. Retain the full range so its shell guard can
-          # resolve that base without a second network fetch.
+          # mix precommit calls ci/validate_commit_range.sh, which validates
+          # every commit since the merge base. A full-history checkout lets the
+          # script resolve that base locally without a second network fetch.
           fetch-depth: 0
           # pull_request otherwise checks out GitHub's synthetic test-merge
-          # commit. Validate the contributor's actual branch tip instead;
-          # the shell guard must never exempt a commit based on forgeable
-          # subject or committer metadata.
+          # commit (subject "Merge <sha> into <sha>"). Validate the
+          # contributor's actual branch tip instead so that commit never
+          # appears in the validated range. Falls back to github.sha for
+          # non-PR triggers (workflow_dispatch, workflow_call from push/closed).
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
         uses: erlef/setup-beam@v1
@@ -58,19 +80,44 @@ jobs:
             app/_build
           key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
       -
-        # mix ci covers: deps.get, hex.audit, deps.audit (Elixir security
-        # advisories), format --check-formatted, credo (static analysis),
-        # usage_rules.sync --check (catches dep-bump drift, see #79),
-        # and mix test. Runs from the repo root; cd: app/ is handled
-        # inside the task itself.
-        run: mix ci
+        # mix precommit runs the full 11-step gate:
+        #   1. ci/validate_pull_request_title.sh — PR title (when required)
+        #   2. ci/validate_commit_range.sh — all commit subjects in the range
+        #   3-4. Root format + test (the repo-management tooling itself)
+        #   5-11. App deps.get, hex.audit, deps.audit, format, credo,
+        #          usage_rules.sync, and test.
+        # BASE_REF carries the exact comparison base SHA so the commit-range
+        # validator never has to guess. For pull_request events it is the exact
+        # base SHA; for push events it is github.event.before; for
+        # workflow_dispatch and unverified closes it is empty, and the validator
+        # falls back to origin/main.
+        # PULL_REQUEST_TITLE is set via env (never ${{ }} in run:) so PR titles
+        # containing quotes, backticks, dollar signs, or Unicode are treated as
+        # inert data, not executable shell code.
+        name: Run full quality gate
+        env:
+          BASE_REF: >-
+            ${{ inputs.base_ref != '' && inputs.base_ref
+                || github.event.pull_request.base.sha }}
+          PULL_REQUEST_TITLE_REQUIRED: >-
+            ${{ inputs.pull_request_title_required
+                || github.event_name == 'pull_request' }}
+          PULL_REQUEST_TITLE: >-
+            ${{ inputs.pull_request_title != '' && inputs.pull_request_title
+                || github.event.pull_request.title }}
+        run: mix precommit
         working-directory: .
 
   burrito_changes:
     # Building Burrito is deliberately reserved for changes that affect its
     # dependency graph or packaging path. The release workflow still builds
     # every target before publishing.
-    if: github.event_name == 'pull_request' && github.event.action != 'closed'
+    # Exclude 'edited' events — a title-only change never alters file content,
+    # so there are no Burrito-impacting diffs to check.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.action != 'closed'
+      && github.event.action != 'edited'
     name: Detect Burrito-impacting changes
     runs-on: ubuntu-latest
     outputs:
@@ -152,7 +199,15 @@ jobs:
         run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_linux_x86_64
 
   conventional_commits:
-    if: inputs.skip_commit_validation != true
+    # Temporary compatibility job retained while branch protection still lists
+    # "Validate Commit Subjects" as a required check. The Test job above runs
+    # the same ci/validate_commit_range.sh via mix precommit and is the
+    # authoritative gate; this job will be removed in EXT-33 after the required-
+    # check set is migrated to "Test" only. Condition mirrors the Test job:
+    # skip only when main.yaml explicitly passes pull_request_title_required=false
+    # for a non-PR event (not when inputs is absent, which is the direct
+    # pull_request trigger).
+    if: inputs.pull_request_title_required != false
     name: Validate Commit Subjects
     runs-on: ubuntu-latest
     steps:
@@ -167,4 +222,8 @@ jobs:
           # workflow_call), where github.event.pull_request is unset.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
+        env:
+          BASE_REF: >-
+            ${{ inputs.base_ref != '' && inputs.base_ref
+                || github.event.pull_request.base.sha }}
         run: ./ci/validate_commit_range.sh
