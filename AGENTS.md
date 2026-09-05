@@ -139,7 +139,8 @@ not need a structural-doc update.
 
 - Bash error handling: never use `set -e`, `set -u`, or `set -o pipefail`
   (including combined forms such as `set -euo pipefail`). Handle every command
-  that can fail with an explicit status check, diagnostic, and exit path.
+  that can fail with an explicit status check, diagnostic, and exit path. See
+  `documents/style/bash.adoc` for the required Bash style.
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
   and `pre-push` hooks at `git-hooks/` (run `mix setup` once per clone to
   activate them).
