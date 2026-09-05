@@ -13,8 +13,8 @@ defmodule Mix.Tasks.PrecommitTest do
 
     assert :ok = Precommit.run([], shell)
 
-    assert_receive {:run, "./git-hooks/validate-pull-request-title", [], []}
-    assert_receive {:run, "./git-hooks/validate-commit-range", [], []}
+    assert_receive {:run, "./ci/validate_pull_request_title.sh", [], []}
+    assert_receive {:run, "./ci/validate_commit_range.sh", [], []}
     assert_receive {:run, "mix", ["deps.get"], [cd: "app"]}
     assert_receive {:run, "mix", ["hex.audit"], [cd: "app"]}
     assert_receive {:run, "mix", ["deps.audit"], [cd: "app"]}

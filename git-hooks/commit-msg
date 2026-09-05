@@ -4,4 +4,4 @@
 #   mix git_hooks
 
 repo_top=$(git rev-parse --show-toplevel) || exit 1
-exec "$repo_top/git-hooks/validate-conventional-subject" "$1"
+exec "$repo_top/ci/validate_conventional_subject.sh" "$1"

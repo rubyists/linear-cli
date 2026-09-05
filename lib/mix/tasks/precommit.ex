@@ -10,10 +10,10 @@ defmodule Mix.Tasks.Precommit do
   GitHub Actions. Cheap metadata guards run first so an invalid pull request
   title or commit subject fails before dependency setup and the test suite:
 
-    1. `git-hooks/validate-pull-request-title` — require a Conventional
-       Commits pull request title when `PULL_REQUEST_TITLE_REQUIRED=true`
-    2. `git-hooks/validate-commit-range` — validate every commit since the
-       branch diverged from its base
+    1. `ci/validate_pull_request_title.sh` — require a Conventional Commits
+       pull request title when `PULL_REQUEST_TITLE_REQUIRED=true`
+    2. `ci/validate_commit_range.sh` — validate every commit since the branch
+       diverged from its base
     3. `mix deps.get` — ensure app dependencies are present
     4. `mix hex.audit` — reject retired or vulnerable Hex packages
     5. `mix deps.audit` — scan dependencies for known security advisories
@@ -42,8 +42,8 @@ defmodule Mix.Tasks.Precommit do
 
   @doc false
   def run([], shell) do
-    shell.("./git-hooks/validate-pull-request-title", [], [])
-    shell.("./git-hooks/validate-commit-range", [], [])
+    shell.("./ci/validate_pull_request_title.sh", [], [])
+    shell.("./ci/validate_commit_range.sh", [], [])
     shell.("mix", ["deps.get"], cd: "app")
     shell.("mix", ["hex.audit"], cd: "app")
     shell.("mix", ["deps.audit"], cd: "app")

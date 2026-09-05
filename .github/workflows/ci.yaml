@@ -159,4 +159,4 @@ jobs:
       -
         env:
           FETCH_BASE_REF: "true"
-        run: ./git-hooks/validate-commit-range
+        run: ./ci/validate_commit_range.sh

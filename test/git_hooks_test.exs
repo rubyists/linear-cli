@@ -1,9 +1,12 @@
 defmodule GitHooksTest do
   use ExUnit.Case, async: true
 
-  @subject_guard Path.expand("../git-hooks/validate-conventional-subject", __DIR__)
-  @title_guard Path.expand("../git-hooks/validate-pull-request-title", __DIR__)
-  @range_guard Path.expand("../git-hooks/validate-commit-range", __DIR__)
+  @subject_guard Path.expand("../ci/validate_conventional_subject.sh", __DIR__)
+  @title_guard Path.expand("../ci/validate_pull_request_title.sh", __DIR__)
+  @range_guard Path.expand("../ci/validate_commit_range.sh", __DIR__)
+  @push_refs_guard Path.expand("../ci/validate_push_refs.sh", __DIR__)
+
+  @zero_sha "0000000000000000000000000000000000000000"
 
   test "the shared subject guard accepts Conventional Commits" do
     assert {"", 0} = run(@subject_guard, ["--subject", "feat(api): add title validation"])
@@ -87,7 +90,7 @@ defmodule GitHooksTest do
   end
 
   test "the range guard compares local main against origin/main" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
     {initial_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
     initial_sha = String.trim(initial_sha)
 
@@ -95,11 +98,11 @@ defmodule GitHooksTest do
     git!(worktree, ["add", "README"])
     git!(worktree, ["commit", "-m", "this is not conventional"])
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "this is not conventional"
 
     assert {output, 1} =
-             run(Path.join(hooks_dir, "validate-commit-range"), [],
+             run(@range_guard, [],
                cd: worktree,
                env: [{"BASE_REF", initial_sha}]
              )
@@ -108,12 +111,12 @@ defmodule GitHooksTest do
   end
 
   test "the range guard passes when the commit range is empty" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
-    assert {"", 0} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    {worktree, _} = setup_ci_worktree!()
+    assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
   test "the range guard reports all invalid subjects in a mixed commit range" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
 
     File.write!(Path.join(worktree, "a"), "a")
     git!(worktree, ["add", "a"])
@@ -127,55 +130,122 @@ defmodule GitHooksTest do
     git!(worktree, ["add", "c"])
     git!(worktree, ["commit", "-m", "also bad subject"])
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "not conventional at all"
     assert output =~ "also bad subject"
     refute output =~ "feat: valid commit"
   end
 
   test "the range guard skips a GitHub Update-branch merge commit matching all three predicates" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree)
 
-    assert {"", 0} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
   test "the range guard validates when the committer name is not GitHub" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree, committer_name: "Not GitHub")
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "Merge branch 'main' into feature"
   end
 
   test "the range guard validates when the committer email is not noreply@github.com" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree, committer_email: "not@github.com")
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "Merge branch 'main' into feature"
   end
 
   test "the range guard validates a single-parent commit whose subject matches the GitHub pattern" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
 
     git!(worktree, ["commit", "--allow-empty", "-m", "Merge branch 'main' into feature"])
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "Merge branch 'main' into feature"
   end
 
   test "the range guard validates a two-parent GitHub-committer merge with a non-matching subject" do
-    {worktree, hooks_dir} = setup_hooks_worktree!()
+    {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree, subject: "Merge feature into main")
 
-    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
     assert output =~ "Merge feature into main"
+  end
+
+  test "the push_refs guard passes when there are no refs to push" do
+    {worktree, _} = setup_ci_worktree!()
+    assert {"", 0} = run_with_stdin(@push_refs_guard, "", cd: worktree)
+  end
+
+  test "the push_refs guard skips deletion pushes" do
+    {worktree, _} = setup_ci_worktree!()
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    head_sha = String.trim(head_sha)
+    stdin = "refs/heads/old-branch #{@zero_sha} refs/heads/old-branch #{head_sha}\n"
+    assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+  end
+
+  test "the push_refs guard passes a valid conventional commit on an existing branch" do
+    {worktree, _} = setup_ci_worktree!()
+    {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    base_sha = String.trim(base_sha)
+
+    File.write!(Path.join(worktree, "x"), "x")
+    git!(worktree, ["add", "x"])
+    git!(worktree, ["commit", "-m", "feat: add x"])
+
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    head_sha = String.trim(head_sha)
+
+    stdin = "refs/heads/main #{head_sha} refs/heads/main #{base_sha}\n"
+    assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+  end
+
+  test "the push_refs guard rejects a non-conventional commit on an existing branch" do
+    {worktree, _} = setup_ci_worktree!()
+    {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    base_sha = String.trim(base_sha)
+
+    File.write!(Path.join(worktree, "y"), "y")
+    git!(worktree, ["add", "y"])
+    git!(worktree, ["commit", "-m", "this is not conventional"])
+
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    head_sha = String.trim(head_sha)
+
+    stdin = "refs/heads/main #{head_sha} refs/heads/main #{base_sha}\n"
+    assert {output, 1} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+    assert output =~ "this is not conventional"
+  end
+
+  test "the push_refs guard passes a valid conventional commit on a new branch" do
+    {worktree, _} = setup_ci_worktree!()
+
+    git!(worktree, ["checkout", "-b", "new-feature"])
+    File.write!(Path.join(worktree, "f"), "f")
+    git!(worktree, ["add", "f"])
+    git!(worktree, ["commit", "-m", "feat: add f"])
+
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    head_sha = String.trim(head_sha)
+
+    stdin = "refs/heads/new-feature #{head_sha} refs/heads/new-feature #{@zero_sha}\n"
+    assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+  end
+
+  test "git-hooks/ directory contains only the commit-msg and pre-push adapters" do
+    hooks_dir = Path.expand("../git-hooks", __DIR__)
+    entries = File.ls!(hooks_dir) |> Enum.sort()
+    assert entries == ["commit-msg", "pre-push"]
   end
 
   # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
   # branch. Defaults simulate GitHub's "Update branch" committer identity and
-  # subject so the predicate in validate-commit-range matches.
+  # subject so the predicate in validate_commit_range.sh matches.
   defp add_github_merge!(worktree, opts \\ []) do
     committer_name = Keyword.get(opts, :committer_name, "GitHub")
     committer_email = Keyword.get(opts, :committer_email, "noreply@github.com")
@@ -203,10 +273,12 @@ defmodule GitHooksTest do
     end
   end
 
-  # Creates a git repo in a temp dir with origin set up and the guard scripts
-  # copied in. Uses a cryptographic nonce so collisions cannot occur across
-  # BEAM VM restarts (unlike System.unique_integer/1 which resets each run).
-  defp setup_hooks_worktree! do
+  # Creates a git repo in a temp dir with origin set up and ci/ scripts copied
+  # in so validate_commit_range.sh and validate_push_refs.sh can find
+  # validate_conventional_subject.sh via $repo_top/ci/.
+  # Uses a cryptographic nonce so collisions cannot occur across BEAM VM
+  # restarts (unlike System.unique_integer/1 which resets each run).
+  defp setup_ci_worktree! do
     test_root = tmp_dir!("root")
     bare_repo = Path.join(test_root, "origin.git")
     worktree = Path.join(test_root, "worktree")
@@ -224,16 +296,25 @@ defmodule GitHooksTest do
     git!(worktree, ["remote", "add", "origin", bare_repo])
     git!(worktree, ["push", "--set-upstream", "origin", "main"])
 
-    hooks_dir = Path.join(worktree, "git-hooks")
-    File.mkdir_p!(hooks_dir)
+    ci_dir = Path.join(worktree, "ci")
+    File.mkdir_p!(ci_dir)
 
-    for guard <- [@subject_guard, @range_guard] do
-      destination = Path.join(hooks_dir, Path.basename(guard))
+    for guard <- [@subject_guard, @range_guard, @push_refs_guard] do
+      destination = Path.join(ci_dir, Path.basename(guard))
       File.cp!(guard, destination)
       File.chmod!(destination, 0o755)
     end
 
-    {worktree, hooks_dir}
+    {worktree, ci_dir}
+  end
+
+  defp run_with_stdin(command, stdin_content, opts \\ []) do
+    nonce = :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
+    stdin_file = Path.join(System.tmp_dir!(), "linear_cli_stdin_#{nonce}")
+    File.write!(stdin_file, stdin_content)
+    on_exit(fn -> File.rm(stdin_file) end)
+    opts = Keyword.put(opts, :stderr_to_stdout, true)
+    System.cmd("sh", ["-c", "#{command} < #{stdin_file}"], opts)
   end
 
   defp write_commit_msg!(content) do
