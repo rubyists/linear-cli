@@ -14,7 +14,7 @@
   formatting, static analysis, and tests) — run `mix setup` once per clone
   to activate both.
 - Enforced in CI across a whole PR's commit range by
-  `ci/conventional_commits.sh` (skips GitHub's own auto-generated
+  `git-hooks/validate-commit-range` (skips GitHub's own auto-generated
   update-branch merge commits).
 
 ## Dogfooding: use `lc`, not a Linear MCP server or skill
