@@ -36,7 +36,7 @@ necessary for release-please to pick up our squash merge commits to main.
    ```
 4. Implement the changes with clean, logical commits.
 5. Run the full quality suite:
-   - mix ci
+   - mix precommit
 6. Fix any failures before proceeding.
 7. Push the branch and create a PR:
    ```
