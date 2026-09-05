@@ -318,7 +318,7 @@ defmodule GitHooksTest do
     {worktree, ci_dir}
   end
 
-  defp run_with_stdin(command, stdin_content, opts \\ []) do
+  defp run_with_stdin(command, stdin_content, opts) do
     nonce = :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
     stdin_file = Path.join(System.tmp_dir!(), "linear_cli_stdin_#{nonce}")
     File.write!(stdin_file, stdin_content)
@@ -344,8 +344,29 @@ defmodule GitHooksTest do
   end
 
   defp run(command, args, opts \\ []) do
-    opts = Keyword.put(opts, :stderr_to_stdout, true)
-    System.cmd(command, args, opts)
+    test_env = Keyword.get(opts, :env, [])
+    test_env_keys = MapSet.new(test_env, fn {k, _} -> k end)
+
+    # Elixir 1.20's System.cmd :env only adds/overrides listed keys — any CI var
+    # not listed flows through unchanged. Elixir 1.20 also does not support
+    # {key, false} for unsetting. Use env(1) -u flags instead to clear CI-level
+    # variables (BASE_REF, PULL_REQUEST_TITLE*) that the GitHub Actions job
+    # environment sets and that would otherwise corrupt these test subprocess calls.
+    unset_flags =
+      ~w[BASE_REF GITHUB_BASE_REF PULL_REQUEST_TITLE PULL_REQUEST_TITLE_REQUIRED]
+      |> Enum.reject(&MapSet.member?(test_env_keys, &1))
+      |> Enum.flat_map(&["-u", &1])
+
+    set_args = Enum.map(test_env, fn {k, v} -> "#{k}=#{v}" end)
+
+    env_args = unset_flags ++ set_args ++ [command | args]
+
+    opts =
+      opts
+      |> Keyword.delete(:env)
+      |> Keyword.put(:stderr_to_stdout, true)
+
+    System.cmd("/usr/bin/env", env_args, opts)
   end
 
   defp git!(directory, args) do

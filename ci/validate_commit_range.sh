@@ -105,18 +105,8 @@ base_sha=$(git_or_die merge-base HEAD "$base_ref")
 
 validation_status=0
 
-while IFS= read -r -d '' entry
+while IFS= read -r -d '' subject
 do
-    IFS=$'\x01' read -r parents committer_name committer_email subject <<< "$entry"
-
-    if [ -n "$parents" ]
-    then
-        IFS=' ' read -ra parents_array <<< "$parents"
-        parent_count=${#parents_array[@]}
-    else
-        parent_count=0
-    fi
-
     "$validator" --subject "$subject"
     status=$?
 
@@ -124,6 +114,6 @@ do
     then
         validation_status=$status
     fi
-done < <(git log -z --format='%P%x01%cn%x01%ce%x01%s' "$base_sha..HEAD")
+done < <(git log -z --format='%s' "$base_sha..HEAD")
 
 exit "$validation_status"

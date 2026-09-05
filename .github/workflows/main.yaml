@@ -19,7 +19,23 @@ jobs:
     name: Validations
     uses: ./.github/workflows/ci.yaml
     with:
-      skip_commit_validation: true
+      # push: validate every commit introduced after github.event.before.
+      # The exact SHA lets ci/validate_commit_range.sh check the squash/merge
+      # integration commit itself rather than comparing main to main (empty).
+      # pull_request closed: validate the merged result when a PR was actually
+      # merged; the base SHA gives the correct start of the new-commits range.
+      # For unmerged closes the range would be empty, but passing the base SHA
+      # is harmless — git log will find no commits to validate.
+      # workflow_dispatch: no PR title and no exact base; the validator falls
+      # back to origin/main as the comparison base.
+      # PR title validation only applies to direct pull_request events
+      # (handled by ci.yaml's own trigger), not to any workflow_call here.
+      base_ref: >-
+        ${{ github.event_name == 'push' && github.event.before
+            || github.event_name == 'pull_request' && github.event.pull_request.base.sha
+            || '' }}
+      pull_request_title_required: false
+      pull_request_title: ""
 
   manage-release-pr:
     needs: [validate]
