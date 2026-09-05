@@ -2,13 +2,10 @@
 # Runs Hex's dependency security audit from the app Mix project. This is used
 # by the pre-push hook as well as the CI quality gate.
 
-repo_top=$(git rev-parse --show-toplevel 2>&1)
-status=$?
-
-if [ "$status" -ne 0 ]
+if ! repo_top=$(git rev-parse --show-toplevel 2>&1)
 then
     printf 'ERROR: unable to resolve repository root: %s\n' "$repo_top" >&2
-    exit "$status"
+    exit 1
 fi
 
 app_dir="$repo_top/app"
