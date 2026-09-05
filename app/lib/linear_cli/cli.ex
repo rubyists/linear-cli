@@ -878,6 +878,11 @@ defmodule LinearCli.CLI do
                   long: "--description",
                   help: "Update the issue description. - to open an editor"
                 ],
+                body_file: [
+                  long: "--body-file",
+                  help:
+                    "Read the description from this file (- for stdin) instead of --description"
+                ],
                 project: [
                   short: "-p",
                   long: "--project",

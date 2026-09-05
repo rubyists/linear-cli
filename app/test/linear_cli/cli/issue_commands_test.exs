@@ -2097,6 +2097,142 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "No issue IDs provided!"
       assert output =~ "This smells bad! Bailing."
     end
+
+    test "--body-file reads the description from a file verbatim" do
+      path = tmp_path("body_file")
+      File.write!(path, "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim")
+      on_exit(fn -> File.rm(path) end)
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:description, decoded["variables"]["input"]["description"]})
+
+            Req.Test.json(
+              conn,
+              issue_updated(%{
+                "description" => "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim"
+              })
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "--body-file",
+                     path,
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received {:description, "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim"}
+      assert output =~ "CRY-1 description updated"
+    end
+
+    test "--body-file - reads the description from stdin" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:description, decoded["variables"]["input"]["description"]})
+            Req.Test.json(conn, issue_updated(%{"description" => "from stdin body"}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        unknown: ["CRY-1"],
+        options: %{
+          body_file: "-",
+          description: nil,
+          comment: nil,
+          project: nil,
+          reason: nil,
+          status: nil
+        },
+        flags: %{cancel: false, close: false, trash: false}
+      }
+
+      capture_io("from stdin body", fn ->
+        assert :ok = Commands.issue_update(result)
+      end)
+
+      assert_received {:description, "from stdin body"}
+    end
+
+    test "--description and --body-file together is a smells_bad error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "update",
+              "-d",
+              "some desc",
+              "--body-file",
+              "somefile",
+              "CRY-1"
+            ],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "give --description or --body-file, not both"
+    end
+
+    test "an unreadable --body-file surfaces an error, no GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      capture_io(:stderr, fn ->
+        LinearCli.CLI.main(
+          [
+            "issue",
+            "update",
+            "--body-file",
+            "/nonexistent/path/does-not-exist",
+            "CRY-1"
+          ],
+          halt
+        )
+      end)
+
+      assert_received {:halted, _code}
+    end
   end
 
   describe "issue assign" do
