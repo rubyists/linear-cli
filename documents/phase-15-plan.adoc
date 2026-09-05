@@ -54,8 +54,8 @@ build/package release artifacts.
 It owns deterministic, source-local feedback:
 
 . root formatting and root unit tests;
-. app formatting, compilation/static analysis, and only the app tests that are
-   explicitly classified as fast unit tests; and
+. app formatting, compilation/static analysis, and the ordinary complete app
+   test suite, without ExUnit tag filtering; and
 . any similarly local check added later.
 
 The implementation target is a warm run in no more than five seconds on an ordinary
@@ -83,20 +83,24 @@ passed; it must not be presented as a prediction that all CI checks will pass.
 
 == Implementation plan
 
-=== 1. Classify the current checks and tests
+=== 1. Inventory current checks and test cost
 
 Inventory every command currently run by `mix precommit`, `mix ci`, and the
 GitHub workflows. For each, record its owner, dependencies, network/service
 requirements, and warm-run cost.
 
-Split the app suite deliberately rather than relying on a naming convention or
-a vague assumption that all `mix test` tests are local. Add an explicit test
-classification mechanism for slow, integration, service-backed, native, or
-end-to-end tests. The default app test command used by `precommit` must select
-only the fast unit category; `ci` must run both that category and the excluded
-CI category. SQLite files created privately by tests are acceptable only when
-they remain self-contained and within the local time budget; an externally
-managed database is CI-only.
+Do not introduce an ExUnit `ci_only` tag, an `--only` test invocation, or a
+test-exclusion tier in this phase. Both gates run the ordinary app test suite.
+SQLite files created privately by tests are acceptable when they remain
+self-contained and within the local time budget; an externally managed database
+is CI-only.
+
+If the repository later needs a service-backed, native, or end-to-end test
+suite, it requires a separate approved plan before implementation. That plan
+must identify real tests and their prerequisites, define a named command with
+an owner, and include the command and its coverage in the same change. It must
+not add an empty placeholder invocation or use `mix test --only` merely to
+reserve a future category.
 
 === 2. Implement the local gate
 
@@ -106,15 +110,18 @@ execution for unit tests, and document that dependencies must already exist.
 
 Remove from it, at minimum, `deps.get`, Hex/dependency audits, pull-request
 title validation, remote/range Git validation that can fetch, and every
-CI-classified test. Add regression tests that assert both the included order
-and the absence of CI-only commands.
+external-service or integration command introduced by a later approved plan.
+Do not exclude any portion of the ordinary app test suite. Add regression tests
+that assert both the included order and the absence of `--only`/`ci_only`
+filtering.
 
 === 3. Implement the CI gate
 
 Make `Mix.Tasks.Ci` an independent orchestrator, not an alias. It performs
 environment/bootstrap work as needed, invokes the local gate, and then runs
 the CI-only checks. It owns dependency and security audits, PR-title and
-commit-range validation, and the classified integration/service suites.
+commit-range validation, and only integration/service commands introduced by a
+later approved plan.
 
 Design the task so local CI-equivalent runs can state their prerequisites and
 fail clearly if a required service is unavailable. Do not conceal external
@@ -141,15 +148,15 @@ starts/depends on external services. Verify that a clean CI environment can
 run `mix ci` end to end, including its bootstrap and service-backed checks.
 
 Test failures at each boundary: a formatting/unit-test failure must fail both
-commands; a CI-only audit, metadata, or integration failure must fail only
-`mix ci`. Confirm workflow runs report the CI gate and preserve Phase 14's
-required protection behavior.
+commands; a CI-only audit, metadata, or later-approved integration-command
+failure must fail only `mix ci`. Confirm workflow runs report the CI gate and
+preserve Phase 14's required protection behavior.
 
 == Linear issue decomposition
 
-1. *Classify test and check tiers.* Define the explicit fast-versus-CI-only
-   test selection, inventory current costs/dependencies, and add enforcement
-   tests for the classification.
+1. *Inventory checks and protect the ordinary test suite.* Record current
+   costs/dependencies and enforce that neither gate uses `--only`, `ci_only`,
+   or an empty placeholder test tier.
 2. *Restore `mix precommit` as a local gate.* Implement the lightweight task,
    documentation, and task tests after classification is available.
 3. *Make `mix ci` the full integration gate.* Implement CI orchestration,
@@ -165,7 +172,8 @@ required protection behavior.
 * `mix precommit` needs no network, credentials, Git fetch, container runtime,
   externally managed database, or other service after dependencies are present.
 * `mix ci` runs every `mix precommit` check plus documented CI-only checks.
-* Tests enforce both the command sequences and the excluded CI-only work.
+* Tests enforce both command sequences and reject `--only`/`ci_only` test
+  filtering.
 * GitHub Actions calls `mix ci`; Conventional Commit and PR-title validation
   remain required CI behavior.
 * Developer documentation describes the two commands without calling the local
