@@ -195,66 +195,12 @@ fi
 container_args+=(
     -v "$mdex_native_dir:/mdex_native"
     -v "$syntect_native_dir:/makeup_syntect"
+    -v "$repo_root/ci/patch_musl_nifs.sh:/patch_musl_nifs.sh:ro"
 )
 
 mdex_nif_name=$(basename -- "${mdex_nifs[0]}")
 
-# The single-quoted body is intentionally expanded by the container's shell.
-# shellcheck disable=SC2016
-if ! "$container_runtime" "${container_args[@]}" alpine:3.22 sh -c '
-    fail() {
-        printf "ERROR: %s\n" "$*" >&2
-        exit 1
-    }
-
-    apk add --no-cache libgcc patchelf || fail "unable to install Alpine patching tools"
-
-    while [ "$#" -gt 0 ]
-    do
-        nif="$1"
-        libgcc_name="$2"
-        shift 2
-
-        bundled_libgcc="${nif%/*}/$libgcc_name"
-        install -m 0755 /usr/lib/libgcc_s.so.1 "$bundled_libgcc" || fail "unable to install libgcc for $nif"
-
-        # libc.so is the musl dependency name; glibc NIFs require libc.so.6.
-        # Check this before patching so a host artifact cannot slip through.
-        needed=$(patchelf --print-needed "$nif") || fail "unable to inspect dependencies for $nif"
-        if ! printf "%s\n" "$needed" | grep -Fxq libc.so
-        then
-            fail "musl NIF does not depend on libc.so: $nif"
-        fi
-
-        # Set RUNPATH before growing DT_NEEDED. With patchelf 0.18, doing these
-        # two mutations in the opposite order can produce a loadable NIF that
-        # crashes on its first call.
-        patchelf --set-rpath "\$ORIGIN" "$nif" || fail "unable to set RUNPATH for $nif"
-
-        needed=$(patchelf --print-needed "$nif") || fail "unable to inspect libgcc dependency for $nif"
-
-        if printf "%s\n" "$needed" | grep -Fxq libgcc_s.so.1
-        then
-            patchelf --replace-needed libgcc_s.so.1 "$libgcc_name" "$nif" || fail "unable to replace libgcc dependency for $nif"
-        elif ! printf "%s\n" "$needed" | grep -Fxq "$libgcc_name"
-        then
-            printf "musl NIF has no expected libgcc dependency: %s\n" "$nif" >&2
-            exit 1
-        fi
-
-        needed=$(patchelf --print-needed "$nif") || fail "unable to verify libgcc dependency for $nif"
-        if ! printf "%s\n" "$needed" | grep -Fxq "$libgcc_name"
-        then
-            fail "musl NIF did not retain renamed libgcc dependency: $nif"
-        fi
-
-        rpath=$(patchelf --print-rpath "$nif") || fail "unable to inspect RUNPATH for $nif"
-        if [ "$rpath" != "\$ORIGIN" ]
-        then
-            fail "musl NIF RUNPATH is not \\$ORIGIN: $nif"
-        fi
-    done
-' sh \
+if ! "$container_runtime" "${container_args[@]}" alpine:3.22 sh /patch_musl_nifs.sh \
     "/mdex_native/$mdex_nif_name" libmdex_musl_libgcc_s.so.1 \
     "/makeup_syntect/$syntect_host_name" libmakeup_syntect_musl_libgcc_s.so.1
 then
