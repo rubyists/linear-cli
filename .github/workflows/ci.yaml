@@ -80,12 +80,13 @@ jobs:
             app/_build
           key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
       -
-        # mix precommit runs the full 11-step gate:
-        #   1. ci/validate_pull_request_title.sh — PR title (when required)
-        #   2. ci/validate_commit_range.sh — all commit subjects in the range
-        #   3-4. Root format + test (the repo-management tooling itself)
-        #   5-11. App deps.get, hex.audit, deps.audit, format, credo,
-        #          usage_rules.sync, and test.
+        # mix ci is the complete integration gate:
+        #   1. App deps.get (bootstrap)
+        #   2. ci/validate_pull_request_title.sh — PR title (when required)
+        #   3. ci/validate_commit_range.sh — all commit subjects in the range
+        #   4. mix precommit — root format + test, app format + credo + test
+        #   5-7. App hex.audit, deps.audit, usage_rules.sync
+        #   8. App mix test --only ci_only (CI-classified integration tests)
         # BASE_REF carries the exact comparison base SHA so the commit-range
         # validator never has to guess. For pull_request events it is the exact
         # base SHA; for push events it is github.event.before; for
@@ -105,7 +106,7 @@ jobs:
           PULL_REQUEST_TITLE: >-
             ${{ inputs.pull_request_title != '' && inputs.pull_request_title
                 || github.event.pull_request.title }}
-        run: mix precommit
+        run: mix ci
         working-directory: .
 
   burrito_changes:
