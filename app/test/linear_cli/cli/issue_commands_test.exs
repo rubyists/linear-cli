@@ -2116,7 +2116,13 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
           String.contains?(query, "issueUpdate") ->
             send(test_pid, {:description, decoded["variables"]["input"]["description"]})
-            Req.Test.json(conn, issue_updated(%{"description" => "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim"}))
+
+            Req.Test.json(
+              conn,
+              issue_updated(%{
+                "description" => "## Summary\n\nliteral \\n and $SOME_VAR survive verbatim"
+              })
+            )
 
           true ->
             raise "no stub matched query: #{query}"
@@ -2162,7 +2168,14 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
       result = %{
         unknown: ["CRY-1"],
-        options: %{body_file: "-", description: nil, comment: nil, project: nil, reason: nil, status: nil},
+        options: %{
+          body_file: "-",
+          description: nil,
+          comment: nil,
+          project: nil,
+          reason: nil,
+          status: nil
+        },
         flags: %{cancel: false, close: false, trash: false}
       }
 
