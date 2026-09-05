@@ -26,6 +26,6 @@ Application.put_env(:elixir, :ansi_enabled, true)
 # creates a profile.
 Application.fetch_env!(:linear_cli, :profiles_db_path) |> File.rm()
 
-# Tests tagged @moduletag :ci_only are excluded from the local gate (mix
-# precommit). They run only through mix ci's --only ci_only step.
-ExUnit.start(exclude: [:ci_only])
+# Test selection belongs to the invoking quality gate. `mix precommit` excludes
+# `:ci_only`; `mix ci` is unfiltered so it runs the complete suite.
+ExUnit.start()

@@ -17,7 +17,7 @@ defmodule Mix.Tasks.PrecommitTest do
     assert_received {:run, "mix", ["test"], []}
     assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
     assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
-    assert_received {:run, "mix", ["test"], [cd: "app"]}
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], [cd: "app"]}
   end
 
   test "does not run CI-only steps" do
@@ -36,6 +36,13 @@ defmodule Mix.Tasks.PrecommitTest do
     refute_received {:run, "mix", ["hex.audit"], _}
     refute_received {:run, "mix", ["deps.audit"], _}
     refute_received {:run, "mix", ["usage_rules.sync", "--check"], _}
+    refute_received {:run, "mix", ["test", "--only", "ci_only"], _}
+  end
+
+  test "does not globally exclude CI-only tests" do
+    helper = Path.expand("../../../app/test/test_helper.exs", __DIR__)
+
+    refute File.read!(helper) =~ "ExUnit.start(exclude: [:ci_only])"
   end
 
   test "rejects arguments" do

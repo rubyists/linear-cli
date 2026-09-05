@@ -86,5 +86,7 @@ dependencies.
 `mix ci` is an independent orchestrator. It installs dependencies, runs fast
 metadata guards (PR-title and commit-range validation), invokes `mix precommit`
 in full, and then performs the CI-only checks (Hex and dependency security
-audits, usage-rule drift, and CI-classified integration tests). GitHub Actions
-calls `mix ci`, not `mix precommit`.
+audits and usage-rule drift), followed by the unfiltered app test suite. That
+final test run includes both ordinary tests and any future tests tagged
+`ci_only`; the tag is excluded only by `mix precommit`, never globally. GitHub
+Actions calls `mix ci`, not `mix precommit`.

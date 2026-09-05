@@ -14,8 +14,9 @@
 - Enforced locally by the `commit-msg` hook at `git-hooks/commit-msg` (each
   commit's own subject, via `ci/validate_conventional_subject.sh`) and the
   `pre-push` hook at `git-hooks/pre-push` (every non-deletion ref update,
-  via `ci/validate_push_refs.sh`) — run `mix setup` once per clone to
-  activate both.
+  via `ci/validate_push_refs.sh`, followed by `ci/hex-audit.sh`) — run
+  `mix setup` once per clone to activate both. The Hex audit needs network
+  access and prevents a push when it finds a vulnerable or retired package.
 - Enforced in CI across a whole PR's commit range by
   `ci/validate_commit_range.sh` (skips GitHub's own auto-generated
   update-branch merge commits).

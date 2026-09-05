@@ -252,6 +252,20 @@ defmodule GitHooksTest do
     assert entries == ["commit-msg", "pre-push"]
   end
 
+  test "the pre-push adapter validates refs before running the Hex audit" do
+    hook = Path.expand("../git-hooks/pre-push", __DIR__) |> File.read!()
+
+    assert hook =~ "\"$repo_top/ci/validate_push_refs.sh\" \"$@\" || exit $?"
+    assert hook =~ "exec \"$repo_top/ci/hex-audit.sh\""
+  end
+
+  test "the Hex audit wrapper runs the app Mix task" do
+    wrapper = Path.expand("../ci/hex-audit.sh", __DIR__) |> File.read!()
+
+    assert wrapper =~ "cd \"$repo_top/app\""
+    assert wrapper =~ "exec mix hex.audit"
+  end
+
   # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
   # branch. Defaults simulate GitHub's "Update branch" identity and subject;
   # these remain subject to validation because commit metadata is forgeable.

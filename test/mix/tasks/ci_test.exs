@@ -23,12 +23,13 @@ defmodule Mix.Tasks.CiTest do
     assert_received {:run, "mix", ["test"], []}
     assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
     assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
-    assert_received {:run, "mix", ["test"], [cd: "app"]}
-    # CI-only checks
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], [cd: "app"]}
+    # CI-only audits, followed by the unfiltered app suite.
     assert_received {:run, "mix", ["hex.audit"], [cd: "app"]}
     assert_received {:run, "mix", ["deps.audit"], [cd: "app"]}
     assert_received {:run, "mix", ["usage_rules.sync", "--check"], [cd: "app"]}
-    assert_received {:run, "mix", ["test", "--only", "ci_only"], [cd: "app"]}
+    assert_received {:run, "mix", ["test"], [cd: "app"]}
+    refute_received {:run, "mix", ["test", "--only", "ci_only"], _}
   end
 
   test "rejects arguments" do

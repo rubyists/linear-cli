@@ -461,7 +461,8 @@ $ lproj list --mine
 == Development
 
 First, activate the repo's git hooks (enforces conventional-commit subjects
-on every commit, and again on every commit about to be pushed):
+on every commit and push, and runs a Hex dependency security audit before a
+push):
 
 [source,sh]
 ----

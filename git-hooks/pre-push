@@ -1,7 +1,8 @@
 #!/bin/sh
-# Validates every commit subject introduced by this push.
-# See app/usage-rules.md for the rule. Activate with:
+# Validates every commit subject introduced by this push, then rejects known
+# vulnerable or retired Hex dependencies. See app/usage-rules.md. Activate with:
 #   mix git_hooks
 
 repo_top=$(git rev-parse --show-toplevel) || exit 1
-exec "$repo_top/ci/validate_push_refs.sh" "$@"
+"$repo_top/ci/validate_push_refs.sh" "$@" || exit $?
+exec "$repo_top/ci/hex-audit.sh"

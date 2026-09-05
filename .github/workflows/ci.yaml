@@ -84,9 +84,9 @@ jobs:
         #   1. App deps.get (bootstrap)
         #   2. ci/validate_pull_request_title.sh — PR title (when required)
         #   3. ci/validate_commit_range.sh — all commit subjects in the range
-        #   4. mix precommit — root format + test, app format + credo + test
+        #   4. mix precommit — root format + test, app format + credo + test --exclude ci_only
         #   5-7. App hex.audit, deps.audit, usage_rules.sync
-        #   8. App mix test --only ci_only (CI-classified integration tests)
+        #   8. App mix test (the unfiltered suite, including ci_only tests)
         # BASE_REF carries the exact comparison base SHA so the commit-range
         # validator never has to guess. For pull_request events it is the exact
         # base SHA; for push events it is github.event.before; for
