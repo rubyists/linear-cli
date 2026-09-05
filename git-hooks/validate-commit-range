@@ -80,8 +80,34 @@ base_sha=$(git_or_die merge-base HEAD "$base_ref")
 
 validation_status=0
 
-while IFS= read -r -d '' subject
+# A commit is exempt from subject validation only when ALL three conditions hold:
+#   1. It has exactly two parents (is a merge commit).
+#   2. Its committer is GitHub <noreply@github.com> (the trusted bot identity).
+#   3. Its subject matches the canonical "Update branch" pattern.
+# Ordinary contributor-created merge commits (different committer, or a
+# subject that doesn't match the pattern) still go through subject validation.
+github_merge_pattern="^Merge branch '[^']+' into .+"
+
+while IFS= read -r -d '' entry
 do
+    IFS=$'\x01' read -r parents committer_name committer_email subject <<< "$entry"
+
+    if [ -n "$parents" ]
+    then
+        IFS=' ' read -ra parents_array <<< "$parents"
+        parent_count=${#parents_array[@]}
+    else
+        parent_count=0
+    fi
+
+    if [ "$parent_count" -eq 2 ] \
+        && [ "$committer_name" = "GitHub" ] \
+        && [ "$committer_email" = "noreply@github.com" ] \
+        && [[ "$subject" =~ $github_merge_pattern ]]
+    then
+        continue
+    fi
+
     "$validator" --subject "$subject"
     status=$?
 
@@ -89,6 +115,6 @@ do
     then
         validation_status=$status
     fi
-done < <(git log -z --format='%s' "$base_sha..HEAD")
+done < <(git log -z --format='%P%x01%cn%x01%ce%x01%s' "$base_sha..HEAD")
 
 exit "$validation_status"

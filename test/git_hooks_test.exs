@@ -133,6 +133,76 @@ defmodule GitHooksTest do
     refute output =~ "feat: valid commit"
   end
 
+  test "the range guard skips a GitHub Update-branch merge commit matching all three predicates" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+    add_github_merge!(worktree)
+
+    assert {"", 0} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+  end
+
+  test "the range guard validates when the committer name is not GitHub" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+    add_github_merge!(worktree, committer_name: "Not GitHub")
+
+    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert output =~ "Merge branch 'main' into feature"
+  end
+
+  test "the range guard validates when the committer email is not noreply@github.com" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+    add_github_merge!(worktree, committer_email: "not@github.com")
+
+    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert output =~ "Merge branch 'main' into feature"
+  end
+
+  test "the range guard validates a single-parent commit whose subject matches the GitHub pattern" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+
+    git!(worktree, ["commit", "--allow-empty", "-m", "Merge branch 'main' into feature"])
+
+    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert output =~ "Merge branch 'main' into feature"
+  end
+
+  test "the range guard validates a two-parent GitHub-committer merge with a non-matching subject" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+    add_github_merge!(worktree, subject: "Merge feature into main")
+
+    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert output =~ "Merge feature into main"
+  end
+
+  # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
+  # branch. Defaults simulate GitHub's "Update branch" committer identity and
+  # subject so the predicate in validate-commit-range matches.
+  defp add_github_merge!(worktree, opts \\ []) do
+    committer_name = Keyword.get(opts, :committer_name, "GitHub")
+    committer_email = Keyword.get(opts, :committer_email, "noreply@github.com")
+    subject = Keyword.get(opts, :subject, "Merge branch 'main' into feature")
+
+    git!(worktree, ["checkout", "-b", "feature"])
+    File.write!(Path.join(worktree, "feature_file"), "feature content")
+    git!(worktree, ["add", "feature_file"])
+    git!(worktree, ["commit", "-m", "feat: add feature"])
+    git!(worktree, ["checkout", "main"])
+
+    git_with_env!(worktree, ["merge", "--no-ff", "-m", subject, "feature"], [
+      {"GIT_COMMITTER_NAME", committer_name},
+      {"GIT_COMMITTER_EMAIL", committer_email}
+    ])
+  end
+
+  defp git_with_env!(directory, args, extra_env) do
+    case System.cmd("git", args, cd: directory, stderr_to_stdout: true, env: extra_env) do
+      {_output, 0} ->
+        :ok
+
+      {output, status} ->
+        flunk("git #{Enum.join(args, " ")} failed (#{status}):\n#{output}")
+    end
+  end
+
   # Creates a git repo in a temp dir with origin set up and the guard scripts
   # copied in. Uses a cryptographic nonce so collisions cannot occur across
   # BEAM VM restarts (unlike System.unique_integer/1 which resets each run).
