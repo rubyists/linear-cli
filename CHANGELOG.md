@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.8.0](https://github.com/rubyists/linear-cli/compare/v2.7.0...v2.8.0) (2026-09-05)
+
+
+### Features
+
+* **issue-list:** show labels in compact output when filtering by --labels ([#211](https://github.com/rubyists/linear-cli/issues/211)) ([8073f9a](https://github.com/rubyists/linear-cli/commit/8073f9a27e8e35cb991dc0e88676b69986b4fb96))
+* **issue-update:** add --body-file to lc issue update ([#227](https://github.com/rubyists/linear-cli/issues/227)) ([3933891](https://github.com/rubyists/linear-cli/commit/39338913bdf5fc50b40f46bc3a40b3806dfb256e))
+* **precommit:** make mix precommit the canonical repository quality gate ([#225](https://github.com/rubyists/linear-cli/issues/225)) ([5dc5ad8](https://github.com/rubyists/linear-cli/commit/5dc5ad81cedf1ff2055c464aa3eb66614d38f0e7))
+
+
+### Bug Fixes
+
+* **ci:** preserve GitHub Update branch merge exception ([#220](https://github.com/rubyists/linear-cli/issues/220)) ([044459e](https://github.com/rubyists/linear-cli/commit/044459e2c82b72faddd533b9eb3ee00e20596d53))
+* **pager:** fix pagers that use stdio ([#214](https://github.com/rubyists/linear-cli/issues/214)) ([6d56882](https://github.com/rubyists/linear-cli/commit/6d56882830dac501e2e7749354446aaa4a0c0a8c))
+
 ## [2.7.0](https://github.com/rubyists/linear-cli/compare/v2.6.0...v2.7.0) (2026-09-04)
 
 
