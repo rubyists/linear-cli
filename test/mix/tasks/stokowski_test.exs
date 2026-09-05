@@ -24,10 +24,12 @@ defmodule Mix.Tasks.StokowskiTest do
 
   # Each test gets its own directory rather than sharing System.tmp_dir!()
   # directly - both tests run async and would otherwise race on the same
-  # workflow.yaml.
+  # workflow.yaml. A cryptographic nonce avoids collisions across BEAM VM
+  # restarts (unlike System.unique_integer/1 which resets each run).
   defp in_tmp_dir(fun) do
-    dir = Path.join(System.tmp_dir!(), "stokowski_test_#{System.unique_integer([:positive])}")
-    File.mkdir_p!(dir)
+    nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    dir = Path.join(System.tmp_dir!(), "stokowski_test_#{nonce}")
+    File.mkdir!(dir)
 
     try do
       File.cd!(dir, fun)

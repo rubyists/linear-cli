@@ -16,6 +16,27 @@ defmodule GitHooksTest do
     assert output =~ "Commit subject must use Conventional Commits format"
   end
 
+  test "the shared subject guard rejects the squash title from pull request 196" do
+    title = "EXT-19: isolate Burrito musl loader per user (#196)"
+
+    assert {output, 1} = run(@subject_guard, ["--subject", title])
+    assert output =~ "Commit subject must use Conventional Commits format"
+  end
+
+  test "the shared subject guard accepts a commit message file with body and footer" do
+    path =
+      write_commit_msg!(
+        "feat(ci): add range validation\n\nBody.\n\nCo-authored-by: X <x@example.com>\n"
+      )
+
+    assert {"", 0} = run(@subject_guard, [path])
+  end
+
+  test "the shared subject guard skips comment lines in a commit message file" do
+    path = write_commit_msg!("# This is a comment\n\nfeat: valid subject after comment lines\n")
+    assert {"", 0} = run(@subject_guard, [path])
+  end
+
   test "the pull request guard accepts a valid required title" do
     env = [
       {"PULL_REQUEST_TITLE_REQUIRED", "true"},
@@ -36,6 +57,25 @@ defmodule GitHooksTest do
     assert output =~ "Pull request title must use Conventional Commits format"
   end
 
+  test "the pull request guard rejects a missing required title" do
+    env = [{"PULL_REQUEST_TITLE_REQUIRED", "true"}]
+
+    assert {output, 1} = run(@title_guard, [], env: env)
+    assert output =~ "PULL_REQUEST_TITLE must be set"
+  end
+
+  test "the shared subject guard rejects an empty subject" do
+    assert {output, 1} = run(@subject_guard, ["--subject", ""])
+    assert output =~ "Commit subject is empty"
+  end
+
+  test "the pull request guard rejects an invalid PULL_REQUEST_TITLE_REQUIRED value" do
+    env = [{"PULL_REQUEST_TITLE_REQUIRED", "maybe"}]
+
+    assert {output, 1} = run(@title_guard, [], env: env)
+    assert output =~ "PULL_REQUEST_TITLE_REQUIRED must be"
+  end
+
   test "the pull request guard skips non-pull-request events" do
     env = [
       {"PULL_REQUEST_TITLE_REQUIRED", "false"},
@@ -47,37 +87,9 @@ defmodule GitHooksTest do
   end
 
   test "the range guard compares local main against origin/main" do
-    test_root =
-      Path.join(System.tmp_dir!(), "linear_cli_git_hooks_#{System.unique_integer([:positive])}")
-
-    bare_repo = Path.join(test_root, "origin.git")
-    worktree = Path.join(test_root, "worktree")
-
-    on_exit(fn -> File.rm_rf!(test_root) end)
-
-    File.mkdir_p!(worktree)
-    git!(test_root, ["init", "--bare", bare_repo])
-    git!(worktree, ["init", "--initial-branch", "main"])
-    git!(worktree, ["config", "user.name", "Git Hooks Test"])
-    git!(worktree, ["config", "user.email", "git-hooks@example.com"])
-    git!(worktree, ["config", "commit.gpgsign", "false"])
-
-    File.write!(Path.join(worktree, "README"), "initial\n")
-    git!(worktree, ["add", "README"])
-    git!(worktree, ["commit", "-m", "chore: create test repository"])
-    git!(worktree, ["remote", "add", "origin", bare_repo])
-    git!(worktree, ["push", "--set-upstream", "origin", "main"])
+    {worktree, hooks_dir} = setup_hooks_worktree!()
     {initial_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
     initial_sha = String.trim(initial_sha)
-
-    hooks_dir = Path.join(worktree, "git-hooks")
-    File.mkdir_p!(hooks_dir)
-
-    for guard <- [@subject_guard, @range_guard] do
-      destination = Path.join(hooks_dir, Path.basename(guard))
-      File.cp!(guard, destination)
-      File.chmod!(destination, 0o755)
-    end
 
     File.write!(Path.join(worktree, "README"), "bad commit\n", [:append])
     git!(worktree, ["add", "README"])
@@ -93,6 +105,81 @@ defmodule GitHooksTest do
              )
 
     assert output =~ "this is not conventional"
+  end
+
+  test "the range guard passes when the commit range is empty" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+    assert {"", 0} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+  end
+
+  test "the range guard reports all invalid subjects in a mixed commit range" do
+    {worktree, hooks_dir} = setup_hooks_worktree!()
+
+    File.write!(Path.join(worktree, "a"), "a")
+    git!(worktree, ["add", "a"])
+    git!(worktree, ["commit", "-m", "feat: valid commit"])
+
+    File.write!(Path.join(worktree, "b"), "b")
+    git!(worktree, ["add", "b"])
+    git!(worktree, ["commit", "-m", "not conventional at all"])
+
+    File.write!(Path.join(worktree, "c"), "c")
+    git!(worktree, ["add", "c"])
+    git!(worktree, ["commit", "-m", "also bad subject"])
+
+    assert {output, 1} = run(Path.join(hooks_dir, "validate-commit-range"), [], cd: worktree)
+    assert output =~ "not conventional at all"
+    assert output =~ "also bad subject"
+    refute output =~ "feat: valid commit"
+  end
+
+  # Creates a git repo in a temp dir with origin set up and the guard scripts
+  # copied in. Uses a cryptographic nonce so collisions cannot occur across
+  # BEAM VM restarts (unlike System.unique_integer/1 which resets each run).
+  defp setup_hooks_worktree! do
+    test_root = tmp_dir!("root")
+    bare_repo = Path.join(test_root, "origin.git")
+    worktree = Path.join(test_root, "worktree")
+    File.mkdir!(worktree)
+
+    git!(test_root, ["init", "--bare", bare_repo])
+    git!(worktree, ["init", "--initial-branch", "main"])
+    git!(worktree, ["config", "user.name", "Git Hooks Test"])
+    git!(worktree, ["config", "user.email", "git-hooks@example.com"])
+    git!(worktree, ["config", "commit.gpgsign", "false"])
+
+    File.write!(Path.join(worktree, "README"), "initial\n")
+    git!(worktree, ["add", "README"])
+    git!(worktree, ["commit", "-m", "chore: create test repository"])
+    git!(worktree, ["remote", "add", "origin", bare_repo])
+    git!(worktree, ["push", "--set-upstream", "origin", "main"])
+
+    hooks_dir = Path.join(worktree, "git-hooks")
+    File.mkdir_p!(hooks_dir)
+
+    for guard <- [@subject_guard, @range_guard] do
+      destination = Path.join(hooks_dir, Path.basename(guard))
+      File.cp!(guard, destination)
+      File.chmod!(destination, 0o755)
+    end
+
+    {worktree, hooks_dir}
+  end
+
+  defp write_commit_msg!(content) do
+    nonce = :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
+    path = Path.join(System.tmp_dir!(), "linear_cli_git_hooks_commit_msg_#{nonce}")
+    File.write!(path, content)
+    on_exit(fn -> File.rm(path) end)
+    path
+  end
+
+  defp tmp_dir!(prefix) do
+    nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    path = Path.join(System.tmp_dir!(), "linear_cli_git_hooks_#{prefix}_#{nonce}")
+    File.mkdir!(path)
+    on_exit(fn -> File.rm_rf!(path) end)
+    path
   end
 
   defp run(command, args, opts \\ []) do

@@ -100,12 +100,10 @@ defmodule LinearCli.CLI.IssueCommandsTest do
   # `System.tmp_dir!()` - never the real project working directory. See house
   # rule 6 and `LinearCli.GitTest`'s own identical setup.
   defp git_repo! do
-    origin_path = tmp_path("origin")
-    File.mkdir_p!(origin_path)
+    origin_path = tmp_dir!("origin")
     {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
 
-    repo_path = tmp_path("repo")
-    File.mkdir_p!(repo_path)
+    repo_path = tmp_dir!("repo")
     {_output, 0} = System.cmd("git", ["init", "-q"], cd: repo_path)
     {_output, 0} = System.cmd("git", ["config", "user.name", "Test User"], cd: repo_path)
     {_output, 0} = System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo_path)
@@ -116,12 +114,19 @@ defmodule LinearCli.CLI.IssueCommandsTest do
     {_output, 0} = System.cmd("git", ["remote", "add", "origin", origin_path], cd: repo_path)
     {_output, 0} = System.cmd("git", ["push", "-q", "-u", "origin", "main"], cd: repo_path)
 
-    on_exit(fn ->
-      File.rm_rf!(origin_path)
-      File.rm_rf!(repo_path)
-    end)
-
     repo_path
+  end
+
+  # `System.unique_integer/1` resets across BEAM VM restarts, so an interrupted
+  # prior run can reuse a stale /tmp directory. A cryptographic nonce avoids
+  # collisions across processes; `on_exit` is registered before any git command
+  # so a setup failure still cleans up.
+  defp tmp_dir!(prefix) do
+    nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    path = Path.join(System.tmp_dir!(), "linear_cli_issue_commands_test_#{prefix}_#{nonce}")
+    File.mkdir!(path)
+    on_exit(fn -> File.rm_rf!(path) end)
+    path
   end
 
   defp tmp_path(prefix) do
