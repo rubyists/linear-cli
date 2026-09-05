@@ -75,6 +75,8 @@ defmodule LinearCli.Linear.Issue do
     attribute :team, :term, public?: true
     attribute :comments, {:array, :term}, public?: true, default: []
     attribute :labels, {:array, :term}, public?: true, default: []
+    attribute :relations, {:array, :term}, public?: true, default: []
+    attribute :inverse_relations, {:array, :term}, public?: true, default: []
   end
 
   @issue_fields "id identifier title branchName description url createdAt updatedAt"
@@ -95,12 +97,17 @@ defmodule LinearCli.Linear.Issue do
 
   @doc "GraphQL field selection for a fully detailed issue, incl. comments (Ruby: Issue.full_fragment)."
   def full_fields do
+    rel = LinearCli.Linear.IssueRelation.relation_fields()
+    relation_connection = "edges { node { #{rel} } cursor } pageInfo { hasNextPage endCursor }"
+
     "#{@issue_fields} " <>
       "state { #{@state_fields} } " <>
       "assignee { #{LinearCli.Linear.User.fields_with_teams()} } " <>
       "team { #{LinearCli.Linear.Team.full_fields()} } " <>
       "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } } " <>
-      "labels { nodes { #{LinearCli.Linear.Label.base_fields()} } }"
+      "labels { nodes { #{LinearCli.Linear.Label.base_fields()} } } " <>
+      "relations(first: 50) { #{relation_connection} } " <>
+      "inverseRelations(first: 50) { #{relation_connection} }"
   end
 
   @doc false
@@ -124,6 +131,16 @@ defmodule LinearCli.Linear.Issue do
         Enum.map(
           get_in(map, ["labels", "nodes"]) || [],
           &LinearCli.Linear.Label.from_map/1
+        ),
+      relations:
+        Enum.map(
+          get_in(map, ["relations", "edges"]) || [],
+          &LinearCli.Linear.IssueRelation.from_map(&1["node"], :outbound)
+        ),
+      inverse_relations:
+        Enum.map(
+          get_in(map, ["inverseRelations", "edges"]) || [],
+          &LinearCli.Linear.IssueRelation.from_map(&1["node"], :inbound)
         )
     )
   end

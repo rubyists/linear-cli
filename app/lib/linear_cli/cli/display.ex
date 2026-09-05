@@ -8,7 +8,7 @@ defmodule LinearCli.CLI.Display do
   """
 
   alias LinearCli.CLI.Pager
-  alias LinearCli.Linear.{Comment, Issue, Project, ProjectUpdate, Team, User}
+  alias LinearCli.Linear.{Comment, Issue, IssueRelation, Project, ProjectUpdate, Team, User}
   alias LinearCli.Profiles.Profile
 
   @ash_internal_fields ~w(__meta__ __metadata__ __order__ __lateral_join_source__ aggregates calculations)a
@@ -25,9 +25,19 @@ defmodule LinearCli.CLI.Display do
     if Map.get(opts, :output, "text") == "json" do
       subject |> to_plain() |> Jason.encode!(pretty: true) |> IO.puts()
     else
-      text = subject |> List.wrap() |> Enum.map_join("\n", &format(&1, opts))
+      text = format_text(subject, opts)
       Pager.maybe_page(text, opts)
     end
+  end
+
+  defp format_text([%IssueRelation{} | _] = relations, _opts), do: relations_block(relations)
+
+  defp format_text(subject, opts) do
+    subject |> List.wrap() |> Enum.map_join("\n", &format(&1, opts))
+  end
+
+  defp format(%IssueRelation{} = relation, _opts) do
+    relation_line(relation)
   end
 
   defp format(%Team{} = team, _opts) do
@@ -99,7 +109,13 @@ defmodule LinearCli.CLI.Display do
     description = render_markdown(issue.description)
     comments = Enum.map_join(issue.comments, "\n", &comment_block/1)
 
-    [header, sep, labels, description, comments]
+    all_relations =
+      List.wrap(Map.get(issue, :relations, [])) ++
+        List.wrap(Map.get(issue, :inverse_relations, []))
+
+    relations_text = if all_relations != [], do: relations_block(all_relations), else: ""
+
+    [header, sep, labels, description, comments, relations_text]
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n")
   end
@@ -115,6 +131,59 @@ defmodule LinearCli.CLI.Display do
   defp render_markdown(nil), do: render_markdown("# No description for this issue")
   defp render_markdown(""), do: render_markdown("# No description for this issue")
   defp render_markdown(text), do: Marcli.render(text)
+
+  @direction_labels %{
+    blocks: {"Blocks", :outbound, "blocks"},
+    blocked_by: {"Blocked by", :inbound, "blocks"},
+    related: {"Related to", nil, "related"},
+    duplicate: {"Duplicate of", nil, "duplicate"},
+    similar: {"Similar to", nil, "similar"}
+  }
+
+  defp relations_block(relations) do
+    grouped = Enum.group_by(relations, &relation_section_key/1)
+
+    section_order = [:blocks, :blocked_by, :related, :duplicate, :similar]
+
+    section_order
+    |> Enum.flat_map(fn key ->
+      case Map.get(grouped, key) do
+        nil ->
+          []
+
+        rels ->
+          {label, _dir, _type} = @direction_labels[key]
+          lines = Enum.map(rels, &relation_line/1)
+          ["#{label}:" | lines]
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp relation_section_key(%IssueRelation{direction: :outbound, type: "blocks"}), do: :blocks
+  defp relation_section_key(%IssueRelation{direction: :inbound, type: "blocks"}), do: :blocked_by
+  defp relation_section_key(%IssueRelation{type: "related"}), do: :related
+  defp relation_section_key(%IssueRelation{type: "duplicate"}), do: :duplicate
+  defp relation_section_key(%IssueRelation{type: "similar"}), do: :similar
+  defp relation_section_key(%IssueRelation{}), do: :related
+
+  defp relation_line(%IssueRelation{
+         direction: direction,
+         type: type,
+         issue: src,
+         related_issue: rel,
+         id: id
+       }) do
+    other =
+      case direction do
+        :outbound -> rel
+        :inbound -> src
+      end
+
+    identifier = (other && other.identifier) || "?"
+    title = (other && other.title) || ""
+    "  #{String.pad_trailing(identifier, 10)} #{title} [#{type}/#{id}]"
+  end
 
   defp to_plain(list) when is_list(list), do: Enum.map(list, &to_plain/1)
 

@@ -56,5 +56,9 @@ defmodule LinearCli.Linear do
     resource LinearCli.Linear.ProjectUpdate do
       define :post_project_update, action: :create, args: [:project_id, :body]
     end
+
+    resource LinearCli.Linear.IssueRelation do
+      define :issue_relations, action: :list, args: [:issue_id]
+    end
   end
 end
