@@ -4042,4 +4042,120 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "No issue IDs provided!"
     end
   end
+
+  describe "issue relation list" do
+    defp relation_node(id, type, src_ident, rel_ident) do
+      %{
+        "id" => id,
+        "type" => type,
+        "issue" => %{
+          "id" => "i-src",
+          "identifier" => src_ident,
+          "title" => "#{src_ident} title",
+          "url" => "u"
+        },
+        "relatedIssue" => %{
+          "id" => "i-rel",
+          "identifier" => rel_ident,
+          "title" => "#{rel_ident} title",
+          "url" => "u"
+        }
+      }
+    end
+
+    defp relation_edge(node), do: %{"node" => node, "cursor" => "c-#{node["id"]}"}
+
+    defp relations_stub(out_edges, inv_edges) do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        is_inverse = String.contains?(body, "inverseRelations")
+
+        data =
+          if is_inverse do
+            %{
+              "data" => %{
+                "issue" => %{
+                  "inverseRelations" => %{
+                    "edges" => inv_edges,
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            }
+          else
+            %{
+              "data" => %{
+                "issue" => %{
+                  "relations" => %{
+                    "edges" => out_edges,
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            }
+          end
+
+        Req.Test.json(conn, data)
+      end)
+    end
+
+    test "displays Blocks section for outbound blocks relations" do
+      relations_stub(
+        [relation_edge(relation_node("r1", "blocks", "EXT-1", "EXT-2"))],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_list(%{args: %{issue_id: "EXT-1"}, options: %{output: "text"}})
+        end)
+
+      assert output =~ "Blocks:"
+      assert output =~ "EXT-2"
+    end
+
+    test "displays Blocked by section for inbound blocks relations" do
+      relations_stub(
+        [],
+        [relation_edge(relation_node("r1", "blocks", "EXT-3", "EXT-1"))]
+      )
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_list(%{args: %{issue_id: "EXT-1"}, options: %{output: "text"}})
+        end)
+
+      assert output =~ "Blocked by:"
+      assert output =~ "EXT-3"
+    end
+
+    test "returns empty output when issue has no relations" do
+      relations_stub([], [])
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_list(%{args: %{issue_id: "EXT-1"}, options: %{output: "text"}})
+        end)
+
+      assert String.trim(output) == ""
+    end
+
+    test "JSON output includes all relation fields" do
+      relations_stub(
+        [relation_edge(relation_node("r1", "blocks", "EXT-1", "EXT-2"))],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_list(%{args: %{issue_id: "EXT-1"}, options: %{output: "json"}})
+        end)
+
+      [entry] = Jason.decode!(output)
+      assert entry["id"] == "r1"
+      assert entry["type"] == "blocks"
+      assert entry["direction"] == "outbound"
+    end
+  end
 end
