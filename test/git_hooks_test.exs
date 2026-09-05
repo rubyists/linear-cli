@@ -318,7 +318,7 @@ defmodule GitHooksTest do
     {worktree, ci_dir}
   end
 
-  defp run_with_stdin(command, stdin_content, opts \\ []) do
+  defp run_with_stdin(command, stdin_content, opts) do
     nonce = :crypto.strong_rand_bytes(8) |> Base.url_encode64(padding: false)
     stdin_file = Path.join(System.tmp_dir!(), "linear_cli_stdin_#{nonce}")
     File.write!(stdin_file, stdin_content)
