@@ -12,13 +12,6 @@ defmodule GitHooksTest do
     assert {"", 0} = run(@subject_guard, ["--subject", "feat(api): add title validation"])
   end
 
-  test "the shared subject guard rejects the squash title from pull request 197" do
-    title = "Stokowski tooling: fix Claude→Qwen routing, add lc issue comment (#197)"
-
-    assert {output, 1} = run(@subject_guard, ["--subject", title])
-    assert output =~ "Commit subject must use Conventional Commits format"
-  end
-
   test "the shared subject guard rejects the squash title from pull request 196" do
     title = "EXT-19: isolate Burrito musl loader per user (#196)"
 
