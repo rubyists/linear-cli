@@ -1,47 +1,27 @@
 defmodule Mix.Tasks.Ci do
-  @shortdoc "Runs the complete quality gate against app/"
+  @shortdoc "Compatibility alias for mix precommit"
 
   @moduledoc """
   #{@shortdoc}.
 
       mix ci
 
-  Runs every check `.github/workflows/ci.yaml`'s `test` job runs on a pull
-  request, in the same order, so a green `mix ci` locally predicts a green
-  CI run — and CI itself calls this task, so there's one place to fix if
-  either ever breaks:
+  Delegates to `Mix.Tasks.Precommit`, which is the canonical full-repository
+  quality gate. Kept for backwards compatibility with scripts and CI
+  configurations that call `mix ci` directly.
 
-    1. `mix deps.get` — ensure deps are present
-    2. `mix hex.audit` — reject retired or vulnerable Hex packages
-    3. `mix deps.audit` — scan dependencies for known security advisories
-    4. `mix format --check-formatted` — code is formatted
-    5. `mix credo --strict` — static analysis (style, complexity, common bugs)
-    6. `mix usage_rules.sync --check` — usage rules are in sync with deps
-       (catches drift introduced by a dep bump without re-running the sync;
-       see #79)
-    7. `mix test` — all tests pass
-
-  All steps run inside `app/`.
+  See `mix help precommit` for the complete step list.
   """
 
   use Mix.Task
 
-  alias RepoTasks.Shell
-
   @impl Mix.Task
   def run(argv) do
-    run(argv, &Shell.run!/3)
+    Mix.Tasks.Precommit.run(argv)
   end
 
   @doc false
-  def run(_argv, shell) do
-    shell.("mix", ["deps.get"], cd: "app")
-    shell.("mix", ["hex.audit"], cd: "app")
-    shell.("mix", ["deps.audit"], cd: "app")
-    shell.("mix", ["format", "--check-formatted"], cd: "app")
-    shell.("mix", ["credo", "--strict"], cd: "app")
-    shell.("mix", ["usage_rules.sync", "--check"], cd: "app")
-    shell.("mix", ["test"], cd: "app")
-    :ok
+  def run(argv, shell) do
+    Mix.Tasks.Precommit.run(argv, shell)
   end
 end

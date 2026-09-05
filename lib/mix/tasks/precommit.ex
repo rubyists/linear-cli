@@ -14,13 +14,15 @@ defmodule Mix.Tasks.Precommit do
        pull request title when `PULL_REQUEST_TITLE_REQUIRED=true`
     2. `ci/validate_commit_range.sh` — validate every commit since the branch
        diverged from its base
-    3. `mix deps.get` — ensure app dependencies are present
-    4. `mix hex.audit` — reject retired or vulnerable Hex packages
-    5. `mix deps.audit` — scan dependencies for known security advisories
-    6. `mix format --check-formatted` — check formatting
-    7. `mix credo --strict` — run static analysis
-    8. `mix usage_rules.sync --check` — catch usage-rule drift after dep bumps
-    9. `mix test` — run the app test suite
+    3. `mix format --check-formatted` — check root project formatting
+    4. `mix test` — run the root project test suite (validator and task tests)
+    5. `mix deps.get` — ensure app dependencies are present
+    6. `mix hex.audit` — reject retired or vulnerable Hex packages
+    7. `mix deps.audit` — scan dependencies for known security advisories
+    8. `mix format --check-formatted` — check app formatting
+    9. `mix credo --strict` — run static analysis
+   10. `mix usage_rules.sync --check` — catch usage-rule drift after dep bumps
+   11. `mix test` — run the app test suite
 
   Pull request metadata does not exist before a pull request is opened, so
   local runs skip only the title guard. GitHub Actions sets both
@@ -28,7 +30,7 @@ defmodule Mix.Tasks.Precommit do
   a missing, empty, or non-conventional title then fails this task. Commit
   subjects are always validated.
 
-  All Mix quality steps run inside `app/`.
+  Steps 1-4 run from the repo root; steps 5-11 run inside `app/`.
   """
 
   use Mix.Task
@@ -44,6 +46,8 @@ defmodule Mix.Tasks.Precommit do
   def run([], shell) do
     shell.("./ci/validate_pull_request_title.sh", [], [])
     shell.("./ci/validate_commit_range.sh", [], [])
+    shell.("mix", ["format", "--check-formatted"], [])
+    shell.("mix", ["test"], [])
     shell.("mix", ["deps.get"], cd: "app")
     shell.("mix", ["hex.audit"], cd: "app")
     shell.("mix", ["deps.audit"], cd: "app")
