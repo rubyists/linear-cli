@@ -198,33 +198,3 @@ jobs:
         timeout-minutes: 2
         run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_linux_x86_64
 
-  conventional_commits:
-    # Temporary compatibility job retained while branch protection still lists
-    # "Validate Commit Subjects" as a required check. The Test job above runs
-    # the same ci/validate_commit_range.sh via mix precommit and is the
-    # authoritative gate; this job will be removed in EXT-33 after the required-
-    # check set is migrated to "Test" only.
-    # Run for all direct triggers (pull_request, workflow_dispatch); skip only
-    # when main.yaml calls this workflow for a non-PR event and explicitly sets
-    # pull_request_title_required to false — those are post-merge runs where
-    # there is no open PR to gate on Validate Commit Subjects.
-    if: github.event_name != 'workflow_call' || inputs.pull_request_title_required
-    name: Validate Commit Subjects
-    runs-on: ubuntu-latest
-    steps:
-      -
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          # pull_request's default ref is the synthetic refs/pull/N/merge test-merge
-          # commit (subject "Merge <sha> into <sha>"), not the PR branch tip - check
-          # out the real head SHA instead so that commit is never in the validated
-          # range. Falls back to github.sha for non-PR triggers (workflow_dispatch/
-          # workflow_call), where github.event.pull_request is unset.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      -
-        env:
-          BASE_REF: >-
-            ${{ inputs.base_ref != '' && inputs.base_ref
-                || github.event.pull_request.base.sha }}
-        run: ./ci/validate_commit_range.sh
