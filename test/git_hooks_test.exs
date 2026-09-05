@@ -159,6 +159,17 @@ defmodule GitHooksTest do
     assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
+  test "the range guard skips a GitHub pull-request test merge commit" do
+    {worktree, _} = setup_ci_worktree!()
+
+    subject =
+      "Merge #{String.duplicate("a", 40)} into #{String.duplicate("b", 40)}"
+
+    add_github_merge!(worktree, subject: subject)
+
+    assert {"", 0} = run(@range_guard, [], cd: worktree)
+  end
+
   test "the range guard validates when the committer name is not GitHub" do
     {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree, committer_name: "Not GitHub")
