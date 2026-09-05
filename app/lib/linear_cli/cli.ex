@@ -117,13 +117,33 @@ defmodule LinearCli.CLI do
     "profile" => %{"l" => "list", "ls" => "list"}
   }
 
+  @nested_subcommand_aliases %{
+    "issue" => %{
+      "relation" => %{"l" => "list", "ls" => "list"}
+    }
+  }
+
   @doc false
   def normalize_subcommand_aliases([first | rest]) do
     canonical_first = Map.get(@command_aliases, first, first)
 
     case {Map.fetch(@subcommand_aliases, canonical_first), rest} do
       {{:ok, sub_aliases}, [second | more]} ->
-        [canonical_first, Map.get(sub_aliases, second, second) | more]
+        canonical_second = Map.get(sub_aliases, second, second)
+
+        case {Map.fetch(@nested_subcommand_aliases, canonical_first), more} do
+          {{:ok, nested}, [third | rest2]} ->
+            case Map.fetch(nested, canonical_second) do
+              {:ok, third_aliases} ->
+                [canonical_first, canonical_second, Map.get(third_aliases, third, third) | rest2]
+
+              :error ->
+                [canonical_first, canonical_second | more]
+            end
+
+          _ ->
+            [canonical_first, canonical_second | more]
+        end
 
       _ ->
         [canonical_first | rest]
@@ -221,6 +241,9 @@ defmodule LinearCli.CLI do
   defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
   defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
   defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
+
+  defp dispatch([:issue, :relation, :list], result, halt),
+    do: run(&Commands.issue_relation_list/1, result, halt)
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
   # with nothing after it) - Optimus itself doesn't require reaching a leaf,
@@ -894,6 +917,23 @@ defmodule LinearCli.CLI do
                   help: "Workflow state name to use with --close or --cancel"
                 ],
                 reason: [long: "--reason", help: "Reason for closing the issue. - open an editor"]
+              ]
+            ],
+            relation: [
+              name: "relation",
+              about: "Manage issue relationships (blocks, blocked-by, related, duplicate)",
+              subcommands: [
+                list: [
+                  name: "list",
+                  about: "List relationships for an issue (alias: ls)",
+                  args: [
+                    issue_id: [
+                      value_name: "ISSUE",
+                      help: "The issue to list relationships for (e.g. EXT-1)",
+                      required: true
+                    ]
+                  ]
+                ]
               ]
             ]
           ]

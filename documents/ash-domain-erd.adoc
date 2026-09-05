@@ -73,6 +73,15 @@ erDiagram
         Team team
         Comment[] comments
         Label[] labels
+        IssueRelation[] relations
+        IssueRelation[] inverse_relations
+    }
+    IssueRelation {
+        string id PK
+        atom direction
+        string type
+        term issue
+        term related_issue
     }
     Label {
         string id PK
@@ -105,6 +114,8 @@ erDiagram
     Issue }o--|| Team : "team [nested]"
     Issue ||--o{ Comment : "comments [nested]"
     Issue ||--o{ Label : "labels [nested]"
+    Issue ||--o{ IssueRelation : "relations [nested, outbound]"
+    Issue ||--o{ IssueRelation : "inverse_relations [nested, inbound]"
     User }o--o{ Team : "teams [nested]"
     Comment }o--|| User : "user/author [nested]"
     Project }o--o{ Team : "teams [nested]"
@@ -121,7 +132,7 @@ arguments only.
 The table below is the plain-text equivalent of the entity boxes in the
 diagram above, included for accessibility.
 
-Eight resources are registered in `LinearCli.Linear`
+Nine resources are registered in `LinearCli.Linear`
 (`app/lib/linear_cli/linear.ex`).
 
 [cols="1,2,3", options="header"]
@@ -142,7 +153,7 @@ Eight resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Issue`
 | `id` (`:string`)
-| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`)
+| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`), `relations` (`{:array, :term}`), `inverse_relations` (`{:array, :term}`)
 
 | `LinearCli.Linear.Label`
 | `id` (`:string`)
@@ -159,6 +170,10 @@ Eight resources are registered in `LinearCli.Linear`
 | `LinearCli.Linear.ProjectUpdate`
 | `id` (`:string`)
 | `body`, `health`, `url`
+
+| `LinearCli.Linear.IssueRelation`
+| `id` (`:string`)
+| `type` (`:string`), `direction` (`:atom`, `:outbound` or `:inbound`), `issue` (`:term`), `related_issue` (`:term`)
 |===
 
 == Associations (text reference)
@@ -203,6 +218,18 @@ data, not from declared Ash relationships.
 | one-to-many
 | `labels` (`{:array, :term}`)
 | GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.labels.nodes` (full fragment only)
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (outbound)
+| `relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.relations.edges` (full fragment only); direction set to `:outbound`
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (inbound)
+| `inverse_relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.inverseRelations.edges` (full fragment only); direction set to `:inbound`
 
 | `User`
 | `Team`
@@ -364,6 +391,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | update
 | `Linear.Issue.Update.SetStatus`
 | `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`
+
+| `IssueRelation`
+| `issue_relations`
+| `:list`
+| read
+| `Linear.IssueRelation.Read.List`
+| `issue(id: $issueId) { relations(first:, after:) { edges { node { ... } cursor } pageInfo { ... } } }` and same for `inverseRelations`, fetched concurrently; paginated up to 100 per direction
 
 | `Label`
 | `labels_by_names`
