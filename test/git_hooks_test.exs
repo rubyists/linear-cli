@@ -344,7 +344,22 @@ defmodule GitHooksTest do
   end
 
   defp run(command, args, opts \\ []) do
-    opts = Keyword.put(opts, :stderr_to_stdout, true)
+    test_env = Keyword.get(opts, :env, [])
+    test_env_keys = MapSet.new(test_env, fn {k, _} -> k end)
+
+    # GitHub Actions sets BASE_REF and PULL_REQUEST_TITLE* in the job-level env
+    # block; System.cmd :env only affects listed keys, so any unlisted CI var
+    # flows through unchanged and corrupts test subprocess calls.
+    ci_clear =
+      ~w[BASE_REF GITHUB_BASE_REF PULL_REQUEST_TITLE PULL_REQUEST_TITLE_REQUIRED]
+      |> Enum.reject(&MapSet.member?(test_env_keys, &1))
+      |> Enum.map(&{&1, false})
+
+    opts =
+      opts
+      |> Keyword.put(:stderr_to_stdout, true)
+      |> Keyword.put(:env, ci_clear ++ test_env)
+
     System.cmd(command, args, opts)
   end
 
