@@ -55,7 +55,7 @@ It owns deterministic, source-local feedback:
 
 . root formatting and root unit tests;
 . app formatting, compilation/static analysis, and the ordinary complete app
-   test suite, without ExUnit tag filtering; and
+   test suite via `mix test --exclude ci_only`; and
 . any similarly local check added later.
 
 The implementation target is a warm run in no more than five seconds on an ordinary
@@ -89,18 +89,28 @@ Inventory every command currently run by `mix precommit`, `mix ci`, and the
 GitHub workflows. For each, record its owner, dependencies, network/service
 requirements, and warm-run cost.
 
-Do not introduce an ExUnit `ci_only` tag, an `--only` test invocation, or a
-test-exclusion tier in this phase. Both gates run the ordinary app test suite.
-SQLite files created privately by tests are acceptable when they remain
-self-contained and within the local time budget; an externally managed database
-is CI-only.
+Adopt the `ci_only` exclusion mechanism in this phase even though no current
+test has that tag: `mix precommit` runs `mix test --exclude ci_only`, while
+`mix ci` runs ordinary unfiltered `mix test`. `mix test --only` is not an
+approved quality-gate mechanism. SQLite files created privately by tests are
+acceptable when they remain self-contained and within the local time budget;
+an externally managed database is CI-only.
 
 If the repository later needs a service-backed, native, or end-to-end test
 suite, it requires a separate approved plan before implementation. That plan
-must identify real tests and their prerequisites, define a named command with
-an owner, and include the command and its coverage in the same change. It must
-not add an empty placeholder invocation or use `mix test --only` merely to
-reserve a future category.
+must identify real tagged tests and their prerequisites, define ownership, and
+include their coverage in the same change. It may use `@tag :ci_only` only with
+this already-established contract:
+
+* `mix precommit` runs `mix test --exclude ci_only`, so the local gate omits
+  those deliberately slower or service-dependent tests;
+* `mix ci` runs ordinary `mix test` with no `--only` or `--exclude` flag, so it
+  includes both the normal suite and every `ci_only` test; and
+* the tag is not globally excluded in `test_helper.exs` or any environment
+  configuration, because CI must include it by default.
+
+The future plan must not add a new empty placeholder invocation, and it must
+never use `mix test --only` merely to reserve a category.
 
 === 2. Implement the local gate
 
@@ -111,17 +121,18 @@ execution for unit tests, and document that dependencies must already exist.
 Remove from it, at minimum, `deps.get`, Hex/dependency audits, pull-request
 title validation, remote/range Git validation that can fetch, and every
 external-service or integration command introduced by a later approved plan.
-Do not exclude any portion of the ordinary app test suite. Add regression tests
-that assert both the included order and the absence of `--only`/`ci_only`
-filtering.
+Its app test step is always `mix test --exclude ci_only`; that excludes nothing
+today but gives a future planned tagged suite the correct local behavior. Add
+regression tests that assert the included order, the exact `--exclude ci_only`
+local command, and the absence of `--only`.
 
 === 3. Implement the CI gate
 
 Make `Mix.Tasks.Ci` an independent orchestrator, not an alias. It performs
 environment/bootstrap work as needed, invokes the local gate, and then runs
 the CI-only checks. It owns dependency and security audits, PR-title and
-commit-range validation, and only integration/service commands introduced by a
-later approved plan.
+commit-range validation, the ordinary unfiltered app `mix test` suite, and only
+integration/service commands introduced by a later approved plan.
 
 Design the task so local CI-equivalent runs can state their prerequisites and
 fail clearly if a required service is unavailable. Do not conceal external
@@ -154,9 +165,10 @@ preserve Phase 14's required protection behavior.
 
 == Linear issue decomposition
 
-1. *Inventory checks and protect the ordinary test suite.* Record current
-   costs/dependencies and enforce that neither gate uses `--only`, `ci_only`,
-   or an empty placeholder test tier.
+1. *Inventory checks and establish the test boundary.* Record current
+   costs/dependencies; enforce `mix test --exclude ci_only` in `precommit`, an
+   unfiltered `mix test` in `ci`, no global `ci_only` exclusion, and no
+   `--only` invocation. Future plans may add real tagged tests to that boundary.
 2. *Restore `mix precommit` as a local gate.* Implement the lightweight task,
    documentation, and task tests after classification is available.
 3. *Make `mix ci` the full integration gate.* Implement CI orchestration,
@@ -172,8 +184,10 @@ preserve Phase 14's required protection behavior.
 * `mix precommit` needs no network, credentials, Git fetch, container runtime,
   externally managed database, or other service after dependencies are present.
 * `mix ci` runs every `mix precommit` check plus documented CI-only checks.
-* Tests enforce both command sequences and reject `--only`/`ci_only` test
-  filtering.
+* Tests enforce both command sequences: `precommit` uses
+  `mix test --exclude ci_only`; `ci` uses unfiltered `mix test`; neither uses
+  `--only`; and no global `ci_only` exclusion is configured. Future plans may
+  add real tagged tests to this established boundary.
 * GitHub Actions calls `mix ci`; Conventional Commit and PR-title validation
   remain required CI behavior.
 * Developer documentation describes the two commands without calling the local
