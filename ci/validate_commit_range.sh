@@ -108,10 +108,12 @@ validation_status=0
 # A commit is exempt from subject validation only when ALL three conditions hold:
 #   1. It has exactly two parents (is a merge commit).
 #   2. Its committer is GitHub <noreply@github.com> (the trusted bot identity).
-#   3. Its subject matches the canonical "Update branch" pattern.
+#   3. Its subject matches one of GitHub's two generated merge patterns:
+#      an "Update branch" merge, or a pull-request test merge of two SHAs.
 # Ordinary contributor-created merge commits (different committer, or a
 # subject that doesn't match the pattern) still go through subject validation.
-github_merge_pattern="^Merge branch '[^']+' into .+"
+github_update_branch_merge_pattern="^Merge branch '[^']+' into .+"
+github_pull_request_merge_pattern="^Merge [0-9a-fA-F]{40} into [0-9a-fA-F]{40}$"
 
 while IFS= read -r -d '' entry
 do
@@ -128,7 +130,8 @@ do
     if [ "$parent_count" -eq 2 ] \
         && [ "$committer_name" = "GitHub" ] \
         && [ "$committer_email" = "noreply@github.com" ] \
-        && [[ "$subject" =~ $github_merge_pattern ]]
+        && { [[ "$subject" =~ $github_update_branch_merge_pattern ]] \
+            || [[ "$subject" =~ $github_pull_request_merge_pattern ]]; }
     then
         continue
     fi
