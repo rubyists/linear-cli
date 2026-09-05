@@ -172,6 +172,20 @@ workflows. Verify against a disposable pair of test issues: create every
 supported type, list from both endpoints, remove it, and confirm that repeated
 add/remove operations have the documented idempotent result.
 
+== Linear issue decomposition
+
+1. *Add the issue-relation domain and list command.* Introduce the Ash resource,
+   code interfaces, paginated inbound/outbound read path, `issue relation list`
+   / `ls`, full-view display, JSON contract, and ERD documentation.
+2. *Add multi-target relationship creation.* Implement `issue relation add
+   ISSUE RELATED_ISSUE... --type TYPE`, including directional normalization,
+   self-link protection, per-target idempotency/partial-failure reporting, and
+   tests. This depends on the first issue.
+3. *Add multi-target relationship removal.* Implement `issue relation remove
+   ISSUE RELATED_ISSUE... --type TYPE`, including exact relation resolution,
+   safe absent/ambiguous behavior, per-target reporting, and tests. This also
+   depends on the first issue and shares its relation representation.
+
 == Acceptance criteria
 
 * `lc issue relation list` (and `ls`), `add`, and `remove` are discoverable in
