@@ -1,36 +1,33 @@
 defmodule Mix.Tasks.Precommit do
-  @shortdoc "Runs every local and CI validation for this repository"
+  @shortdoc "Fast local quality gate (format, static analysis, unit tests)"
 
   @moduledoc """
   #{@shortdoc}.
 
       mix precommit
 
-  This is the single validation entrypoint for developers, Git hooks, and
-  GitHub Actions. Cheap metadata guards run first so an invalid pull request
-  title or commit subject fails before dependency setup and the test suite:
+  A fast, self-contained command designed for frequent developer use: between
+  edits, before committing, and as the pre-push hook target. On a warm checkout
+  with dependencies already installed, it completes in under five seconds.
 
-    1. `ci/validate_pull_request_title.sh` — require a Conventional Commits
-       pull request title when `PULL_REQUEST_TITLE_REQUIRED=true`
-    2. `ci/validate_commit_range.sh` — validate every commit since the branch
-       diverged from its base
-    3. `mix format --check-formatted` — check root project formatting
-    4. `mix test` — run the root project test suite (validator and task tests)
-    5. `mix deps.get` — ensure app dependencies are present
-    6. `mix hex.audit` — reject retired or vulnerable Hex packages
-    7. `mix deps.audit` — scan dependencies for known security advisories
-    8. `mix format --check-formatted` — check app formatting
-    9. `mix credo --strict` — run static analysis
-   10. `mix usage_rules.sync --check` — catch usage-rule drift after dep bumps
-   11. `mix test` — run the app test suite
+  It requires no network access, credentials, containers, or external services.
+  Run `mix deps.get` inside `app/` once after cloning or after updating
+  `app/mix.lock`, then run `mix precommit` as often as you like.
 
-  Pull request metadata does not exist before a pull request is opened, so
-  local runs skip only the title guard. GitHub Actions sets both
-  `PULL_REQUEST_TITLE_REQUIRED=true` and `PULL_REQUEST_TITLE` from the event;
-  a missing, empty, or non-conventional title then fails this task. Commit
-  subjects are always validated.
+  Steps:
 
-  Steps 1-4 run from the repo root; steps 5-11 run inside `app/`.
+    1. `mix format --check-formatted` — check root project formatting
+    2. `mix test` — run the root project test suite (validator and task tests)
+    3. `mix format --check-formatted` — check app formatting
+    4. `mix credo --strict` — run static analysis on the app
+    5. `mix test --exclude ci_only` — run the app unit test suite
+
+  Steps 1-2 run from the repo root; steps 3-5 run inside `app/`.
+  App tests tagged `@moduletag :ci_only` are excluded only from this local
+  gate. `mix ci` runs the complete app suite without a test-selection flag.
+
+  For the complete integration gate — dependency bootstrap and audits,
+  PR-title and commit-range validation, and CI-classified tests — use `mix ci`.
   """
 
   use Mix.Task
@@ -44,17 +41,11 @@ defmodule Mix.Tasks.Precommit do
 
   @doc false
   def run([], shell) do
-    shell.("./ci/validate_pull_request_title.sh", [], [])
-    shell.("./ci/validate_commit_range.sh", [], [])
     shell.("mix", ["format", "--check-formatted"], [])
     shell.("mix", ["test"], [])
-    shell.("mix", ["deps.get"], cd: "app")
-    shell.("mix", ["hex.audit"], cd: "app")
-    shell.("mix", ["deps.audit"], cd: "app")
     shell.("mix", ["format", "--check-formatted"], cd: "app")
     shell.("mix", ["credo", "--strict"], cd: "app")
-    shell.("mix", ["usage_rules.sync", "--check"], cd: "app")
-    shell.("mix", ["test"], cd: "app")
+    shell.("mix", ["test", "--exclude", "ci_only"], cd: "app")
     :ok
   end
 

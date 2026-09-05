@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.GitHooks do
-  @shortdoc "Installs this repo's commit-msg and pre-push validation hooks"
+  @shortdoc "Installs this repo's commit-msg and pre-push quality hooks"
 
   @moduledoc """
   #{@shortdoc}.
@@ -7,7 +7,9 @@ defmodule Mix.Tasks.GitHooks do
       mix git_hooks
 
   Sets `core.hooksPath` to `git-hooks/`: its `commit-msg` hook enforces
-  Conventional Commits, and its `pre-push` hook runs `mix precommit`.
+  Conventional Commits on each commit subject, and its `pre-push` hook
+  validates all commit subjects introduced by the push before running Hex's
+  dependency security audit.
   This is idempotent and safe to run repeatedly: setting the same Git config
   value twice is a no-op. Wired into `mix setup` - see that task.
   """

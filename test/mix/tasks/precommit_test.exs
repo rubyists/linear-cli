@@ -3,7 +3,7 @@ defmodule Mix.Tasks.PrecommitTest do
 
   alias Mix.Tasks.Precommit
 
-  test "runs metadata guards before all quality gate steps" do
+  test "runs only local checks in order" do
     caller = self()
 
     shell = fn cmd, args, opts ->
@@ -13,17 +13,36 @@ defmodule Mix.Tasks.PrecommitTest do
 
     assert :ok = Precommit.run([], shell)
 
-    assert_received {:run, "./ci/validate_pull_request_title.sh", [], []}
-    assert_received {:run, "./ci/validate_commit_range.sh", [], []}
     assert_received {:run, "mix", ["format", "--check-formatted"], []}
     assert_received {:run, "mix", ["test"], []}
-    assert_received {:run, "mix", ["deps.get"], [cd: "app"]}
-    assert_received {:run, "mix", ["hex.audit"], [cd: "app"]}
-    assert_received {:run, "mix", ["deps.audit"], [cd: "app"]}
     assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
     assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
-    assert_received {:run, "mix", ["usage_rules.sync", "--check"], [cd: "app"]}
-    assert_received {:run, "mix", ["test"], [cd: "app"]}
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], [cd: "app"]}
+  end
+
+  test "does not run CI-only steps" do
+    caller = self()
+
+    shell = fn cmd, args, opts ->
+      send(caller, {:run, cmd, args, opts})
+      :ok
+    end
+
+    Precommit.run([], shell)
+
+    refute_received {:run, "./ci/validate_pull_request_title.sh", _, _}
+    refute_received {:run, "./ci/validate_commit_range.sh", _, _}
+    refute_received {:run, "mix", ["deps.get"], _}
+    refute_received {:run, "mix", ["hex.audit"], _}
+    refute_received {:run, "mix", ["deps.audit"], _}
+    refute_received {:run, "mix", ["usage_rules.sync", "--check"], _}
+    refute_received {:run, "mix", ["test", "--only", "ci_only"], _}
+  end
+
+  test "does not globally exclude CI-only tests" do
+    helper = Path.expand("../../../app/test/test_helper.exs", __DIR__)
+
+    refute File.read!(helper) =~ "ExUnit.start(exclude: [:ci_only])"
   end
 
   test "rejects arguments" do

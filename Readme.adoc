@@ -461,7 +461,8 @@ $ lproj list --mine
 == Development
 
 First, activate the repo's git hooks (enforces conventional-commit subjects
-on every commit, and again on every commit about to be pushed):
+on every commit and push, and runs a Hex dependency security audit before a
+push):
 
 [source,sh]
 ----
@@ -479,11 +480,22 @@ $ mix lc whoami
 $ mix lc issue list --output json
 ----
 
-The project uses ExUnit and `mix format`. Run the full quality gate with:
+The project uses ExUnit and `mix format`. During development, run the fast
+local gate repeatedly (format, static analysis, unit tests — no network
+required after a one-time `mix deps.get` inside `app/`):
 
 [source,sh]
 ----
 $ mix precommit
+----
+
+Before opening a pull request, or to reproduce CI locally, run the complete
+integration gate (includes dependency audits, PR-title and commit-range
+validation, and any CI-classified tests):
+
+[source,sh]
+----
+$ mix ci
 ----
 
 To run only the app test suite or format check directly:

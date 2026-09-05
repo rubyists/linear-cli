@@ -78,8 +78,15 @@ than relying on an undocumented alias.
 
 == Current implementation
 
-At the time of this decision, `mix ci` delegates directly to `mix precommit`,
-and `mix precommit` performs dependency retrieval, dependency audits, and the
-full application suite. That arrangement does not satisfy this decision.
-Implementation work must split the tasks so `mix precommit` has the local
-contract above and `mix ci` composes it with the CI-only work.
+`mix precommit` runs only source-local checks (root and app formatting,
+static analysis, and unit tests). It requires no network access and no
+installed services beyond the language toolchain and already-fetched
+dependencies.
+
+`mix ci` is an independent orchestrator. It installs dependencies, runs fast
+metadata guards (PR-title and commit-range validation), invokes `mix precommit`
+in full, and then performs the CI-only checks (Hex and dependency security
+audits and usage-rule drift), followed by the unfiltered app test suite. That
+final test run includes both ordinary tests and any future tests tagged
+`ci_only`; the tag is excluded only by `mix precommit`, never globally. GitHub
+Actions calls `mix ci`, not `mix precommit`.

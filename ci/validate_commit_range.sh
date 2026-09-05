@@ -105,8 +105,32 @@ base_sha=$(git_or_die merge-base HEAD "$base_ref")
 
 validation_status=0
 
-while IFS= read -r -d '' subject
+# GitHub's "Update branch" button creates a non-Conventional-Commit merge
+# subject. Exempt only its trusted, canonical form; ordinary contributor merge
+# commits must still pass subject validation. See
+# documents/github-update-branch-validation-decision.adoc.
+github_update_branch_merge_pattern="^Merge branch '[^']+' into .+"
+
+while IFS= read -r -d '' entry
 do
+    IFS=$'\x01' read -r parents committer_name committer_email subject <<< "$entry"
+
+    if [ -n "$parents" ]
+    then
+        IFS=' ' read -ra parents_array <<< "$parents"
+        parent_count=${#parents_array[@]}
+    else
+        parent_count=0
+    fi
+
+    if [ "$parent_count" -eq 2 ] \
+        && [ "$committer_name" = "GitHub" ] \
+        && [ "$committer_email" = "noreply@github.com" ] \
+        && [[ "$subject" =~ $github_update_branch_merge_pattern ]]
+    then
+        continue
+    fi
+
     "$validator" --subject "$subject"
     status=$?
 
@@ -114,6 +138,6 @@ do
     then
         validation_status=$status
     fi
-done < <(git log -z --format='%s' "$base_sha..HEAD")
+done < <(git log -z --format='%P%x01%cn%x01%ce%x01%s' "$base_sha..HEAD")
 
 exit "$validation_status"
