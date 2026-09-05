@@ -989,6 +989,24 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
+  @doc """
+  Lists the relationships for a single issue — both outbound (issues this one
+  blocks/is-related-to/is-duplicate-of) and inbound (issues that block this
+  one, etc.).
+
+  Calls `Linear.issue_relations/1` which fetches both `relations` and
+  `inverseRelations` from Linear and tags each with a direction.
+  """
+  @spec issue_relation_list(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_relation_list(%{args: %{issue_id: issue_id}, options: options}) do
+    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+
+    with {:ok, relations} <- Linear.issue_relations(expanded_id) do
+      Display.show(relations, %{output: options.output, relations: true})
+      :ok
+    end
+  end
+
   defp resolve_optional_status(_issue, nil), do: {:ok, nil}
 
   defp resolve_optional_status(issue, name) do
