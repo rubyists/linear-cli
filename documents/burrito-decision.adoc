@@ -1,5 +1,5 @@
 = Burrito distribution decision
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :revdate: Sep 04, 2026
 :icons: font
 :env-github:

@@ -1,5 +1,5 @@
 = {my-title}
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :revdate: Aug 23, 2026
 :my-title: Phase 12 plan: bulk issue move between projects (`lc issue move`)
 :icons: font

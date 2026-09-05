@@ -1,5 +1,5 @@
 = {my-title}
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :revdate: Aug 07, 2026
 :my-title: Initial Plan for porting linear-cli to elixir
 :icons: font
