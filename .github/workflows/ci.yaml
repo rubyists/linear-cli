@@ -203,11 +203,12 @@ jobs:
     # "Validate Commit Subjects" as a required check. The Test job above runs
     # the same ci/validate_commit_range.sh via mix precommit and is the
     # authoritative gate; this job will be removed in EXT-33 after the required-
-    # check set is migrated to "Test" only. Condition mirrors the Test job:
-    # skip only when main.yaml explicitly passes pull_request_title_required=false
-    # for a non-PR event (not when inputs is absent, which is the direct
-    # pull_request trigger).
-    if: inputs.pull_request_title_required != false
+    # check set is migrated to "Test" only.
+    # Run for all direct triggers (pull_request, workflow_dispatch); skip only
+    # when main.yaml calls this workflow for a non-PR event and explicitly sets
+    # pull_request_title_required to false — those are post-merge runs where
+    # there is no open PR to gate on Validate Commit Subjects.
+    if: github.event_name != 'workflow_call' || inputs.pull_request_title_required
     name: Validate Commit Subjects
     runs-on: ubuntu-latest
     steps:
