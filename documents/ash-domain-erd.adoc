@@ -1,5 +1,5 @@
 = {my-title}
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :revdate: Aug 18, 2026
 :my-title: Ash domain ERD: LinearCli.Linear
 :icons: font

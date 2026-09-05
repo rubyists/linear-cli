@@ -1,0 +1,48 @@
+= --body-file: context-specific file input
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 4, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+`--body-file PATH` supplies the long, multi-line text input for the command
+where it appears. It is deliberately a context-specific argument, rather than
+a global synonym for one particular field: `PATH` is read verbatim, and `-`
+reads from standard input.
+
+This avoids placing a multi-line document in one shell argument. It also makes
+the command's purpose clear at the call site: the surrounding subcommand says
+which body is being supplied.
+
+== Current contexts
+
+* `lc issue create --body-file PATH` supplies the new issue's *description*.
+  It is mutually exclusive with `--description`.
+* `lc issue comment ISSUE_ID --body-file PATH` supplies the new *comment
+  body*. It is mutually exclusive with `--comment`.
+
+== Planned update context
+
+`lc issue update ISSUE_ID --body-file PATH` will supply the issue
+*description* being updated. It will be mutually exclusive with
+`--description`; it must not change the meaning of `--comment`, `--reason`,
+or any other update input.
+
+For example:
+
+[source,sh]
+----
+$ lc issue create --title "Design notes" --body-file design-notes.md
+$ lc issue comment EXT-123 --body-file review.md
+$ lc issue update EXT-123 --body-file revised-description.md
+$ printf '%s\\n' 'A comment from stdin' | lc issue comment EXT-123 --body-file -
+----
+
+The update example above documents the intended interface; it becomes usable
+when the corresponding `issue update` work is implemented.
