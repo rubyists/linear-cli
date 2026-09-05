@@ -262,7 +262,9 @@ defmodule GitHooksTest do
   test "the Hex audit wrapper runs the app Mix task" do
     wrapper = Path.expand("../ci/hex-audit.sh", __DIR__) |> File.read!()
 
-    assert wrapper =~ "cd \"$repo_top/app\""
+    refute wrapper =~ "set -euo pipefail"
+    assert wrapper =~ "app_dir=\"$repo_top/app\""
+    assert wrapper =~ "if ! cd \"$app_dir\""
     assert wrapper =~ "exec mix hex.audit"
   end
 
