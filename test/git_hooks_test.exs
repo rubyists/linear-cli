@@ -252,6 +252,41 @@ defmodule GitHooksTest do
     assert entries == ["commit-msg", "pre-push"]
   end
 
+  test "the pre-push adapter validates refs before running the Hex audit" do
+    {worktree, ci_dir} = setup_ci_worktree!()
+    audit_marker = Path.join(worktree, "hex-audit-ran")
+    hook = install_pre_push_hook!(worktree, ci_dir)
+
+    {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    base_sha = String.trim(base_sha)
+    valid_stdin = "refs/heads/main #{base_sha} refs/heads/main #{base_sha}\n"
+
+    assert {"", 0} =
+             run_with_stdin(hook, valid_stdin,
+               cd: worktree,
+               env: [{"HEX_AUDIT_MARKER", audit_marker}]
+             )
+
+    assert File.read!(audit_marker) == "audited\n"
+    File.rm!(audit_marker)
+
+    File.write!(Path.join(worktree, "invalid"), "commit\n")
+    git!(worktree, ["add", "invalid"])
+    git!(worktree, ["commit", "-m", "not conventional"])
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    head_sha = String.trim(head_sha)
+    invalid_stdin = "refs/heads/main #{head_sha} refs/heads/main #{base_sha}\n"
+
+    assert {output, 1} =
+             run_with_stdin(hook, invalid_stdin,
+               cd: worktree,
+               env: [{"HEX_AUDIT_MARKER", audit_marker}]
+             )
+
+    assert output =~ "not conventional"
+    refute File.exists?(audit_marker)
+  end
+
   # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
   # branch. Defaults simulate GitHub's "Update branch" identity and subject;
   # these remain subject to validation because commit metadata is forgeable.
@@ -315,6 +350,21 @@ defmodule GitHooksTest do
     end
 
     {worktree, ci_dir}
+  end
+
+  defp install_pre_push_hook!(worktree, ci_dir) do
+    hooks_dir = Path.join(worktree, "git-hooks")
+    File.mkdir_p!(hooks_dir)
+
+    hook = Path.join(hooks_dir, "pre-push")
+    File.cp!(Path.expand("../git-hooks/pre-push", __DIR__), hook)
+    File.chmod!(hook, 0o755)
+
+    audit = Path.join(ci_dir, "hex-audit.sh")
+    File.write!(audit, "#!/bin/sh\nprintf 'audited\\n' > \"$HEX_AUDIT_MARKER\"\n")
+    File.chmod!(audit, 0o755)
+
+    hook
   end
 
   defp run_with_stdin(command, stdin_content, opts) do
