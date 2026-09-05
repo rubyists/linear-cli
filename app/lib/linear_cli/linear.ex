@@ -59,6 +59,7 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.IssueRelation do
       define :issue_relations, action: :list, args: [:issue_id]
+      define :create_issue_relation, action: :create, args: [:issue_id, :related_issue_id, :type]
     end
   end
 end

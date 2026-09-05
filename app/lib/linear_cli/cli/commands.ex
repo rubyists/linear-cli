@@ -1007,6 +1007,146 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
+  @doc """
+  Adds a relationship from `ISSUE` to one or more `RELATED_ISSUE`s.
+
+  The first element of `unknown` is the subject issue; the remaining
+  elements are the related issues.  `--type` controls direction:
+
+  * `blocks`     — subject blocks each related issue (wire: `blocks`, subject → related)
+  * `blocked-by` — subject is blocked by each related issue (wire: `blocks`, reversed: related → subject)
+  * `related`    — subject is related to each related issue
+  * `duplicate`  — subject is a duplicate of each related issue
+
+  Each target is processed independently; partial failures do not roll back
+  successful mutations.  All results are printed before returning; a non-zero
+  exit identifies the overall failure count if any target failed.
+  """
+  @spec issue_relation_add(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_relation_add(%{unknown: []}),
+    do: {:error, {:smells_bad, "ISSUE and at least one RELATED_ISSUE are required"}}
+
+  def issue_relation_add(%{unknown: [_subject]}),
+    do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
+
+  def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}) do
+    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    user_type = options.type
+
+    results =
+      Enum.map(related_ids, fn related_id ->
+        expanded_related = IssueHelpers.expand_issue_id(related_id)
+        add_single_relation(expanded_subject, expanded_related, user_type)
+      end)
+
+    print_relation_add_results(results, options.output)
+
+    failed_count =
+      Enum.count(results, fn r -> match?({:failed, _, _}, r) or match?({:self_link, _}, r) end)
+
+    if failed_count > 0 do
+      {:error, {:smells_bad, "#{failed_count} relation(s) failed to be created"}}
+    else
+      :ok
+    end
+  end
+
+  defp add_single_relation(subject_id, related_id, _user_type) when subject_id == related_id do
+    {:self_link, subject_id}
+  end
+
+  defp add_single_relation(subject_id, related_id, user_type) do
+    {wire_issue_id, wire_related_id, wire_type, direction} =
+      if user_type == "blocked-by" do
+        {related_id, subject_id, "blocks", :inbound}
+      else
+        {subject_id, related_id, user_type, :outbound}
+      end
+
+    case Linear.create_issue_relation(wire_issue_id, wire_related_id, wire_type) do
+      {:ok, relation} ->
+        {:created, related_id, %{relation | direction: direction}}
+
+      {:error, %Ash.Error.Unknown{errors: [%{value: [{:duplicate_relation, _}]} | _]}} ->
+        {:exists, related_id}
+
+      {:error, reason} ->
+        {:failed, related_id, reason}
+    end
+  end
+
+  defp print_relation_add_results(results, output) do
+    if output == "json" do
+      results
+      |> Enum.map(&relation_add_result_to_plain/1)
+      |> Jason.encode!(pretty: true)
+      |> IO.puts()
+    else
+      Enum.each(results, &print_relation_add_result_text/1)
+    end
+  end
+
+  defp relation_add_result_to_plain({:created, related_id, relation}) do
+    %{
+      "target" => related_id,
+      "status" => "created",
+      "relation" => Display.relation_to_plain(relation)
+    }
+  end
+
+  defp relation_add_result_to_plain({:exists, related_id}) do
+    %{"target" => related_id, "status" => "exists"}
+  end
+
+  defp relation_add_result_to_plain({:self_link, id}) do
+    %{
+      "target" => id,
+      "status" => "error",
+      "message" => "self-link: an issue cannot be related to itself"
+    }
+  end
+
+  defp relation_add_result_to_plain({:failed, related_id, _reason}) do
+    %{"target" => related_id, "status" => "error", "message" => "failed to create relation"}
+  end
+
+  defp print_relation_add_result_text({:created, _related_id, relation}) do
+    IO.puts(relation_add_created_text(relation))
+  end
+
+  defp print_relation_add_result_text({:exists, related_id}) do
+    Prompt.ok("#{related_id}: relation already exists (no change)")
+  end
+
+  defp print_relation_add_result_text({:self_link, id}) do
+    IO.puts(:stderr, "#{id}: self-link — an issue cannot be related to itself")
+  end
+
+  defp print_relation_add_result_text({:failed, related_id, reason}) do
+    msg = relation_add_error_message(reason)
+    IO.puts(:stderr, "#{related_id}: #{msg}")
+  end
+
+  defp relation_add_created_text(%{type: "blocks", issue: issue, related_issue: related}) do
+    "#{issue.identifier} now blocks #{related.identifier}"
+  end
+
+  defp relation_add_created_text(%{type: type, issue: issue, related_issue: related}) do
+    "#{issue.identifier} is now #{type} of #{related.identifier}"
+  end
+
+  defp relation_add_error_message(%Ash.Error.Unknown{
+         errors: [%{value: [{:graphql_errors, [%{"message" => msg} | _]}]} | _]
+       }),
+       do: "Linear API error: #{msg}"
+
+  defp relation_add_error_message(%Ash.Error.Unknown{
+         errors: [%Ash.Error.Unknown.UnknownError{error: "unknown error: :missing_api_key"} | _]
+       }),
+       do: "LINEAR_API_KEY is not set"
+
+  defp relation_add_error_message(_reason), do: "unexpected error"
+
   defp resolve_optional_status(_issue, nil), do: {:ok, nil}
 
   defp resolve_optional_status(issue, name) do
