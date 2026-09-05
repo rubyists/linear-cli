@@ -1,0 +1,172 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+:revdate: Sep 04, 2026
+:my-title: Phase 15 plan: separate developer and CI quality gates
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Give the repository two purposeful validation entry points:
+
+* `mix precommit` is a quick, self-contained command developers can run
+  repeatedly while editing; and
+* `mix ci` is the complete, potentially slower integration gate used by GitHub
+  Actions and by developers who want CI-equivalent assurance.
+
+The goal is not merely to rename commands. It is to prevent CI-only work from
+silently accumulating in the everyday developer command.
+
+== Context and supersession
+
+Phase 14, decision 7, made `mix precommit` the comprehensive repository gate
+and made `mix ci` a compatibility alias. The resulting implementation runs
+dependency retrieval, security audits, repository-range validation, root and
+app suites, and static analysis through `mix precommit`.
+
+That is the wrong boundary for routine local use. This plan supersedes only
+Phase 14 decision 7 and its related task/workflow wording. Phase 14's goals
+for Conventional Commit and pull-request-title enforcement remain in force;
+they move to the CI gate where they can use the PR event data and a complete
+Git history. EXT-32 and EXT-33 must be reconciled with this plan before their
+remaining work merges.
+
+The enduring policy is recorded in
+`documents/quality-gates-decision.adoc`.
+
+== Gate contracts
+
+=== `mix precommit`: frequent local feedback
+
+`mix precommit` must be usable from an ordinary checkout after dependencies
+are already installed. It must not download packages, fetch Git refs, require
+credentials, start a database or other service, invoke a container runtime, or
+build/package release artifacts.
+
+It owns deterministic, source-local feedback:
+
+. root formatting and root unit tests;
+. app formatting, compilation/static analysis, and only the app tests that are
+   explicitly classified as fast unit tests; and
+. any similarly local check added later.
+
+The implementation target is a warm run in no more than five seconds on an ordinary
+developer checkout. Measure it and record the result in the task documentation
+or its test/issue evidence. A check that materially exceeds that budget belongs
+in `mix ci` unless there is a deliberate revision of this plan.
+
+=== `mix ci`: complete integration assurance
+
+`mix ci` is the canonical pull-request and merge gate. It prepares the
+environment, runs `mix precommit`, then runs the remaining CI-only work.
+It may fetch dependencies and Git history, consume PR metadata, access
+networked advisory services, provision databases or other test services, and
+run integration, end-to-end, packaging, native-target, or release checks.
+
+The required relationship is:
+
+----
+mix precommit  ⊂  mix ci
+----
+
+CI-only checks must be listed in `mix help ci` and remain independently
+identifiable in workflow output. A green `mix precommit` means the local gate
+passed; it must not be presented as a prediction that all CI checks will pass.
+
+== Implementation plan
+
+=== 1. Classify the current checks and tests
+
+Inventory every command currently run by `mix precommit`, `mix ci`, and the
+GitHub workflows. For each, record its owner, dependencies, network/service
+requirements, and warm-run cost.
+
+Split the app suite deliberately rather than relying on a naming convention or
+a vague assumption that all `mix test` tests are local. Add an explicit test
+classification mechanism for slow, integration, service-backed, native, or
+end-to-end tests. The default app test command used by `precommit` must select
+only the fast unit category; `ci` must run both that category and the excluded
+CI category. SQLite files created privately by tests are acceptable only when
+they remain self-contained and within the local time budget; an externally
+managed database is CI-only.
+
+=== 2. Implement the local gate
+
+Replace the comprehensive `Mix.Tasks.Precommit` sequence with the classified
+local checks. It must reject arguments consistently, preserve injectable task
+execution for unit tests, and document that dependencies must already exist.
+
+Remove from it, at minimum, `deps.get`, Hex/dependency audits, pull-request
+title validation, remote/range Git validation that can fetch, and every
+CI-classified test. Add regression tests that assert both the included order
+and the absence of CI-only commands.
+
+=== 3. Implement the CI gate
+
+Make `Mix.Tasks.Ci` an independent orchestrator, not an alias. It performs
+environment/bootstrap work as needed, invokes the local gate, and then runs
+the CI-only checks. It owns dependency and security audits, PR-title and
+commit-range validation, and the classified integration/service suites.
+
+Design the task so local CI-equivalent runs can state their prerequisites and
+fail clearly if a required service is unavailable. Do not conceal external
+setup inside a nominally local task. Add unit tests for sequencing, error
+propagation, and the strict-superset relationship.
+
+=== 4. Rewire workflows and guidance
+
+Update `.github/workflows/ci.yaml` to run `mix ci`, supplying the Git history
+and pull-request-title environment only to the CI gate. Retain the Phase 14
+security rule: user-controlled titles are environment data, never shell source.
+Ensure the root required workflow still exercises Conventional Commit and PR
+title validation after it stops calling `mix precommit` directly.
+
+Update the README, task module documentation, agent prompts, and Phase 14
+references that currently call `mix precommit` the full gate. They must make
+the distinction clear: run `mix precommit` frequently; run `mix ci` before a
+PR when practical and rely on it as the required remote gate.
+
+=== 5. Verify the contracts
+
+Verify from a warm checkout that `mix precommit` neither uses the network nor
+starts/depends on external services. Verify that a clean CI environment can
+run `mix ci` end to end, including its bootstrap and service-backed checks.
+
+Test failures at each boundary: a formatting/unit-test failure must fail both
+commands; a CI-only audit, metadata, or integration failure must fail only
+`mix ci`. Confirm workflow runs report the CI gate and preserve Phase 14's
+required protection behavior.
+
+== Linear issue decomposition
+
+1. *Classify test and check tiers.* Define the explicit fast-versus-CI-only
+   test selection, inventory current costs/dependencies, and add enforcement
+   tests for the classification.
+2. *Restore `mix precommit` as a local gate.* Implement the lightweight task,
+   documentation, and task tests after classification is available.
+3. *Make `mix ci` the full integration gate.* Implement CI orchestration,
+   bootstrap/audits/metadata/integration checks, workflow rewiring, and
+   guidance updates. This follows the first two issues and reconciles EXT-32
+   and EXT-33 before their remaining changes land.
+
+== Acceptance criteria
+
+* `mix ci` is no longer an alias for `mix precommit`.
+* A warm `mix precommit` completes in no more than five seconds on an ordinary
+  developer checkout.
+* `mix precommit` needs no network, credentials, Git fetch, container runtime,
+  externally managed database, or other service after dependencies are present.
+* `mix ci` runs every `mix precommit` check plus documented CI-only checks.
+* Tests enforce both the command sequences and the excluded CI-only work.
+* GitHub Actions calls `mix ci`; Conventional Commit and PR-title validation
+  remain required CI behavior.
+* Developer documentation describes the two commands without calling the local
+  gate a complete CI prediction.

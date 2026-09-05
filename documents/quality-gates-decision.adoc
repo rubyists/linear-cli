@@ -1,0 +1,85 @@
+= Development and CI Quality Gates
+:toc:
+:toc-placement: preamble
+
+== Context
+
+The repository needs two validation commands with different operating
+constraints. Developers run `mix precommit` repeatedly while making a change,
+often without a database, containers, credentials, or reliable network access.
+Continuous integration can provision those dependencies and may spend more time
+on broader checks.
+
+Giving both commands the same expanding list of checks makes the local command
+slow and fragile. Developers then stop running it, defeating the feedback loop
+that the name promises. Conversely, excluding integration coverage from CI
+would leave changes unverified until after merge.
+
+== Decision
+
+`mix precommit` is the fast, self-contained developer gate. `mix ci` is the
+complete integration gate. The commands have distinct contracts; `mix ci` is
+not an alias for `mix precommit`.
+
+=== `mix precommit`
+
+Use `mix precommit` before committing, before pushing, and throughout normal
+development. It must be practical to run repeatedly on an ordinary developer
+checkout: on a warm checkout with dependencies already installed, it must
+complete in no more than five seconds.
+
+It may include deterministic checks that need only the checked-out source,
+the language toolchain, and already-installed project dependencies. Typical
+examples are formatting, compilation, static analysis, unit tests, and local
+repository metadata checks.
+
+It must not:
+
+* start or require a database, container runtime, queue, browser, or other
+  service;
+* require credentials or access to an external service;
+* download dependencies or otherwise require network access as part of its
+  normal run;
+* run packaging, release, cross-platform, or end-to-end integration checks;
+* grow beyond the five-second local-gate budget.
+
+If a proposed check needs one of those things, it belongs in `mix ci` or in a
+separately named, opt-in command—not in `mix precommit`.
+
+=== `mix ci`
+
+Use `mix ci` as the pull-request and merge gate, and locally when a developer
+wants confidence equivalent to CI. It runs everything in `mix precommit`, plus
+checks that need additional setup, take materially longer, or verify
+integration boundaries.
+
+`mix ci` may install dependencies, start databases or other services, provision
+test fixtures, and run slower checks such as integration, end-to-end,
+cross-platform, native-package, release, and security scans. CI configuration
+is responsible for providing the prerequisites and making failures actionable.
+
+=== Relationship and maintenance rules
+
+The gate relationship is one-way:
+
+----
+mix precommit  ⊂  mix ci
+----
+
+Every check in `mix precommit` must also run through `mix ci`, in the same
+meaningful form. A check may move from `precommit` to `ci` when it no longer
+meets the local-gate contract; it must not move in the other direction merely
+to make CI faster.
+
+When adding or changing a check, document which gate owns it and why. Preserve
+the `precommit` constraints above unless this decision is deliberately revised.
+The task documentation and CI workflow must name the gate they invoke rather
+than relying on an undocumented alias.
+
+== Current implementation
+
+At the time of this decision, `mix ci` delegates directly to `mix precommit`,
+and `mix precommit` performs dependency retrieval, dependency audits, and the
+full application suite. That arrangement does not satisfy this decision.
+Implementation work must split the tasks so `mix precommit` has the local
+contract above and `mix ci` composes it with the CI-only work.
