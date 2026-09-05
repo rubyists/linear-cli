@@ -2,6 +2,7 @@ defmodule GitHooksTest do
   use ExUnit.Case, async: true
 
   @subject_guard Path.expand("../ci/validate_conventional_subject.sh", __DIR__)
+  @branch_guard Path.expand("../ci/validate_commit_branch.sh", __DIR__)
   @title_guard Path.expand("../ci/validate_pull_request_title.sh", __DIR__)
   @range_guard Path.expand("../ci/validate_commit_range.sh", __DIR__)
   @push_refs_guard Path.expand("../ci/validate_push_refs.sh", __DIR__)
@@ -246,10 +247,42 @@ defmodule GitHooksTest do
     assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
   end
 
-  test "git-hooks/ directory contains only the commit-msg and pre-push adapters" do
+  test "git-hooks/ directory contains the pre-commit, commit-msg, and pre-push adapters" do
     hooks_dir = Path.expand("../git-hooks", __DIR__)
     entries = File.ls!(hooks_dir) |> Enum.sort()
-    assert entries == ["commit-msg", "pre-push"]
+    assert entries == ["commit-msg", "pre-commit", "pre-push"]
+  end
+
+  test "the pre-commit adapter rejects main before running the quality gate" do
+    {worktree, ci_dir} = setup_ci_worktree!()
+    marker = Path.join(worktree, "precommit-ran")
+    hook = install_pre_commit_hook!(worktree, ci_dir)
+    fake_bin = install_fake_mix!(worktree)
+
+    assert {output, 1} =
+             run(hook, [],
+               cd: worktree,
+               env: [{"MIX_MARKER", marker}, {"PATH", fake_bin <> ":" <> System.get_env("PATH")}]
+             )
+
+    assert output =~ "committing directly to main is not allowed"
+    refute File.exists?(marker)
+  end
+
+  test "the pre-commit adapter runs mix precommit on a feature branch" do
+    {worktree, ci_dir} = setup_ci_worktree!()
+    marker = Path.join(worktree, "precommit-ran")
+    hook = install_pre_commit_hook!(worktree, ci_dir)
+    fake_bin = install_fake_mix!(worktree)
+    git!(worktree, ["checkout", "-b", "feature"])
+
+    assert {"", 0} =
+             run(hook, [],
+               cd: worktree,
+               env: [{"MIX_MARKER", marker}, {"PATH", fake_bin <> ":" <> System.get_env("PATH")}]
+             )
+
+    assert File.read!(marker) == "precommit\n"
   end
 
   test "the pre-push adapter validates refs before running the Hex audit" do
@@ -343,13 +376,32 @@ defmodule GitHooksTest do
     ci_dir = Path.join(worktree, "ci")
     File.mkdir_p!(ci_dir)
 
-    for guard <- [@subject_guard, @range_guard, @push_refs_guard] do
+    for guard <- [@subject_guard, @branch_guard, @range_guard, @push_refs_guard] do
       destination = Path.join(ci_dir, Path.basename(guard))
       File.cp!(guard, destination)
       File.chmod!(destination, 0o755)
     end
 
     {worktree, ci_dir}
+  end
+
+  defp install_pre_commit_hook!(worktree, _ci_dir) do
+    hooks_dir = Path.join(worktree, "git-hooks")
+    File.mkdir_p!(hooks_dir)
+
+    hook = Path.join(hooks_dir, "pre-commit")
+    File.cp!(Path.expand("../git-hooks/pre-commit", __DIR__), hook)
+    File.chmod!(hook, 0o755)
+    hook
+  end
+
+  defp install_fake_mix!(worktree) do
+    fake_bin = Path.join(worktree, "fake-bin")
+    File.mkdir!(fake_bin)
+    fake_mix = Path.join(fake_bin, "mix")
+    File.write!(fake_mix, "#!/bin/sh\nprintf 'precommit\\n' > \"$MIX_MARKER\"\n")
+    File.chmod!(fake_mix, 0o755)
+    fake_bin
   end
 
   defp install_pre_push_hook!(worktree, ci_dir) do

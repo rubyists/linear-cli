@@ -7,7 +7,7 @@ defmodule Mix.Tasks.Precommit do
       mix precommit
 
   A fast, self-contained command designed for frequent developer use: between
-  edits, before committing, and as the pre-push hook target. On a warm checkout
+  edits and before committing. The repository's pre-commit hook invokes it. On a warm checkout
   with dependencies already installed, it completes in under five seconds.
 
   It requires no network access, credentials, containers, or external services.

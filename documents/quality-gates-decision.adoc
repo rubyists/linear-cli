@@ -90,3 +90,8 @@ audits and usage-rule drift), followed by the unfiltered app test suite. That
 final test run includes both ordinary tests and any future tests tagged
 `ci_only`; the tag is excluded only by `mix precommit`, never globally. GitHub
 Actions calls `mix ci`, not `mix precommit`.
+
+The repository's `pre-commit` hook refuses commits directly on `main` and then
+invokes `mix precommit`. The subsequent `commit-msg` hook validates the commit
+message after Git writes it; the `pre-push` hook remains the final local guard
+for every pushed commit subject and the Hex audit.

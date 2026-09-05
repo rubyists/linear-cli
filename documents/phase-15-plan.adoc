@@ -184,10 +184,6 @@ preserve Phase 14's required protection behavior.
 * `mix precommit` needs no network, credentials, Git fetch, container runtime,
   externally managed database, or other service after dependencies are present.
 * `mix ci` runs every `mix precommit` check plus documented CI-only checks.
-* Tests enforce both command sequences: `precommit` uses
-  `mix test --exclude ci_only`; `ci` uses unfiltered `mix test`; neither uses
-  `--only`; and no global `ci_only` exclusion is configured. Future plans may
-  add real tagged tests to this established boundary.
 * GitHub Actions calls `mix ci`; Conventional Commit and PR-title validation
   remain required CI behavior.
 * Developer documentation describes the two commands without calling the local
