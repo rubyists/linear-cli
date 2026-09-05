@@ -538,11 +538,13 @@ defmodule LinearCli.CLI.Commands do
   @spec issue_update(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_update(%{unknown: issue_ids, options: options, flags: flags}) do
     with :ok <- validate_issue_ids(issue_ids),
+         :ok <- validate_body_file_exclusion(options, :description, "--description"),
+         {:ok, description} <- resolve_body_from_file(options, :description),
          {:ok, issues} <-
            Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}) do
       update_opts = [
         comment: options.comment,
-        description: Map.get(options, :description),
+        description: description,
         project: options.project,
         cancel: flags.cancel,
         close: flags.close,
