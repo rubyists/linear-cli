@@ -152,22 +152,12 @@ defmodule GitHooksTest do
     refute output =~ "feat: valid commit"
   end
 
-  test "the range guard skips a GitHub Update-branch merge commit matching all three predicates" do
+  test "the range guard validates a GitHub Update-branch merge commit" do
     {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree)
 
-    assert {"", 0} = run(@range_guard, [], cd: worktree)
-  end
-
-  test "the range guard skips a GitHub pull-request test merge commit" do
-    {worktree, _} = setup_ci_worktree!()
-
-    subject =
-      "Merge #{String.duplicate("a", 40)} into #{String.duplicate("b", 40)}"
-
-    add_github_merge!(worktree, subject: subject)
-
-    assert {"", 0} = run(@range_guard, [], cd: worktree)
+    assert {output, 1} = run(@range_guard, [], cd: worktree)
+    assert output =~ "Merge branch 'main' into feature"
   end
 
   test "the range guard validates when the committer name is not GitHub" do
@@ -271,8 +261,8 @@ defmodule GitHooksTest do
   end
 
   # Creates a no-fast-forward merge commit on `main` from a throwaway `feature`
-  # branch. Defaults simulate GitHub's "Update branch" committer identity and
-  # subject so the predicate in validate_commit_range.sh matches.
+  # branch. Defaults simulate GitHub's "Update branch" identity and subject;
+  # these remain subject to validation because commit metadata is forgeable.
   defp add_github_merge!(worktree, opts \\ []) do
     committer_name = Keyword.get(opts, :committer_name, "GitHub")
     committer_email = Keyword.get(opts, :committer_email, "noreply@github.com")

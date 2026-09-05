@@ -33,6 +33,11 @@ jobs:
           # the merge base. Retain the full range so its shell guard can
           # resolve that base without a second network fetch.
           fetch-depth: 0
+          # pull_request otherwise checks out GitHub's synthetic test-merge
+          # commit. Validate the contributor's actual branch tip instead;
+          # the shell guard must never exempt a commit based on forgeable
+          # subject or committer metadata.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
         uses: erlef/setup-beam@v1
         with:
