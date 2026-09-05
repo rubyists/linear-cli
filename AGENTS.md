@@ -128,6 +128,12 @@ not need a structural-doc update.
   change** whenever an Ash resource, action, code interface, association
   attribute, or shared helper is added, removed, renamed, or materially
   changed.
+- GitHub Update-branch validation decision:
+  documents/github-update-branch-validation-decision.adoc — canonical
+  security rationale and required regression behavior for the narrowly scoped
+  exception that permits GitHub's trusted **Update branch** merge commits.
+  **Must be read and preserved** whenever changing commit-subject validation,
+  `ci/validate_commit_range.sh`, Git hooks, or CI quality-gate orchestration.
 
 ## Standards
 

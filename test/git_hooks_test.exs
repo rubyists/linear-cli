@@ -145,12 +145,11 @@ defmodule GitHooksTest do
     refute output =~ "feat: valid commit"
   end
 
-  test "the range guard validates a GitHub Update-branch merge commit" do
+  test "the range guard skips a GitHub Update-branch merge commit matching all three predicates" do
     {worktree, _} = setup_ci_worktree!()
     add_github_merge!(worktree)
 
-    assert {output, 1} = run(@range_guard, [], cd: worktree)
-    assert output =~ "Merge branch 'main' into feature"
+    assert {"", 0} = run(@range_guard, [], cd: worktree)
   end
 
   test "the range guard validates when the committer name is not GitHub" do
