@@ -1220,22 +1220,22 @@ defmodule LinearCli.CLI.Commands do
   end
 
   defp remove_single_relation(subject_id, related_id, user_type, all_relations) do
-    matches = find_matching_relations(subject_id, related_id, user_type, all_relations)
+    subject_id
+    |> find_matching_relations(related_id, user_type, all_relations)
+    |> do_remove(related_id)
+  end
 
-    case matches do
-      [] ->
-        {:absent, related_id}
+  defp do_remove([], related_id), do: {:absent, related_id}
 
-      [relation] ->
-        case Linear.delete_issue_relation(relation) do
-          :ok -> {:removed, related_id, relation}
-          {:error, reason} -> {:failed, related_id, reason}
-        end
-
-      multiple ->
-        ids = Enum.map(multiple, & &1.id)
-        {:ambiguous, related_id, ids}
+  defp do_remove([relation], related_id) do
+    case Linear.delete_issue_relation(relation) do
+      :ok -> {:removed, related_id, relation}
+      {:error, reason} -> {:failed, related_id, reason}
     end
+  end
+
+  defp do_remove(relations, related_id) do
+    {:ambiguous, related_id, Enum.map(relations, & &1.id)}
   end
 
   # Finds stored relations that match the user-facing type and the given endpoint pair.
