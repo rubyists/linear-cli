@@ -4458,4 +4458,420 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "EXT-1 is now a duplicate of EXT-2"
     end
   end
+
+  describe "issue relation remove" do
+    defp remove_parse_result(subject, related_ids, type) do
+      %{
+        unknown: [subject | related_ids],
+        options: %{output: "text", type: type}
+      }
+    end
+
+    # Builds a stub that returns the given relations for the list query and
+    # a success response for the delete mutation.
+    defp remove_relations_stub(out_nodes, inv_nodes) do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+
+        cond do
+          String.contains?(body, "issueRelationDelete") ->
+            %{"variables" => %{"id" => id}} = decoded
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueRelationDelete" => %{"success" => true, "entityId" => id}
+              }
+            })
+
+          String.contains?(body, "inverseRelations") ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" => %{
+                  "inverseRelations" => %{
+                    "edges" => Enum.map(inv_nodes, &%{"node" => &1, "cursor" => "c"}),
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            })
+
+          true ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" => %{
+                  "relations" => %{
+                    "edges" => Enum.map(out_nodes, &%{"node" => &1, "cursor" => "c"}),
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            })
+        end
+      end)
+    end
+
+    defp remove_relation_node(id, type, src_ident, rel_ident) do
+      %{
+        "id" => id,
+        "type" => type,
+        "issue" => %{
+          "id" => "i-src",
+          "identifier" => src_ident,
+          "title" => "#{src_ident} title",
+          "url" => "https://example.com/#{src_ident}"
+        },
+        "relatedIssue" => %{
+          "id" => "i-rel",
+          "identifier" => rel_ident,
+          "title" => "#{rel_ident} title",
+          "url" => "https://example.com/#{rel_ident}"
+        }
+      }
+    end
+
+    test "removes a blocks relation and prints the result" do
+      remove_relations_stub(
+        [remove_relation_node("r1", "blocks", "EXT-1", "EXT-2")],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-2"], "blocks")
+                   )
+        end)
+
+      assert output =~ "EXT-1 no longer blocks EXT-2"
+    end
+
+    test "removes a related relation and prints correct text" do
+      remove_relations_stub(
+        [remove_relation_node("r1", "related", "EXT-1", "EXT-2")],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-2"], "related")
+                   )
+        end)
+
+      assert output =~ "EXT-1 is no longer related to EXT-2"
+    end
+
+    test "removes a duplicate relation and prints correct text" do
+      remove_relations_stub(
+        [remove_relation_node("r1", "duplicate", "EXT-1", "EXT-2")],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-2"], "duplicate")
+                   )
+        end)
+
+      assert output =~ "EXT-1 is no longer a duplicate of EXT-2"
+    end
+
+    test "absent relation is a no-op and returns :ok" do
+      remove_relations_stub([], [])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-2"], "blocks")
+                   )
+        end)
+
+      assert output =~ "not found"
+    end
+
+    test "blocked-by matches the inbound blocks relation" do
+      # EXT-3 blocks EXT-1: stored as an inbound blocks relation on EXT-1
+      # The relation node from Linear's perspective: issue=EXT-3, relatedIssue=EXT-1
+      remove_relations_stub(
+        [],
+        [remove_relation_node("r1", "blocks", "EXT-3", "EXT-1")]
+      )
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-3"], "blocked-by")
+                   )
+        end)
+
+      assert output =~ "EXT-3 no longer blocks EXT-1"
+    end
+
+    test "blocked-by with no matching inbound relation is a no-op" do
+      remove_relations_stub([], [])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-3"], "blocked-by")
+                   )
+        end)
+
+      assert output =~ "not found"
+    end
+
+    test "processes multiple related issues independently" do
+      remove_relations_stub(
+        [
+          remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+          remove_relation_node("r2", "blocks", "EXT-1", "EXT-3")
+        ],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Commands.issue_relation_remove(
+                     remove_parse_result("EXT-1", ["EXT-2", "EXT-3"], "blocks")
+                   )
+        end)
+
+      assert output =~ "EXT-1 no longer blocks EXT-2"
+      assert output =~ "EXT-1 no longer blocks EXT-3"
+    end
+
+    test "rejects self-link without calling the delete mutation" do
+      # The list call is allowed; the delete mutation must not be called.
+      remove_relations_stub([], [])
+
+      output_stderr =
+        capture_io(:stderr, fn ->
+          result =
+            Commands.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-1"], "blocks"))
+
+          assert {:error, {:smells_bad, _}} = result
+        end)
+
+      assert output_stderr =~ "self-link"
+    end
+
+    test "returns error when no related issues provided" do
+      assert {:error, {:smells_bad, _}} =
+               Commands.issue_relation_remove(%{
+                 unknown: ["EXT-1"],
+                 options: %{output: "text", type: "blocks"}
+               })
+    end
+
+    test "returns error when no issue ids provided" do
+      assert {:error, {:smells_bad, _}} =
+               Commands.issue_relation_remove(%{
+                 unknown: [],
+                 options: %{output: "text", type: "blocks"}
+               })
+    end
+
+    test "ambiguous match fails that target and lists all matching ids" do
+      # Two separate blocks relations to EXT-2 (legacy/bug state)
+      remove_relations_stub(
+        [
+          remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+          remove_relation_node("r2", "blocks", "EXT-1", "EXT-2")
+        ],
+        []
+      )
+
+      output_stderr =
+        capture_io(:stderr, fn ->
+          result =
+            capture_io(fn ->
+              Commands.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-2"], "blocks"))
+            end)
+
+          _ = result
+        end)
+
+      assert output_stderr =~ "ambiguous"
+      assert output_stderr =~ "r1"
+      assert output_stderr =~ "r2"
+    end
+
+    test "ambiguous match exits non-zero" do
+      remove_relations_stub(
+        [
+          remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+          remove_relation_node("r2", "blocks", "EXT-1", "EXT-2")
+        ],
+        []
+      )
+
+      {result, _output} =
+        with_io(fn ->
+          Commands.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-2"], "blocks"))
+        end)
+
+      assert {:error, {:smells_bad, msg}} = result
+      assert msg =~ "failed"
+    end
+
+    test "partial failure: succeeds for absent target, errors for ambiguous" do
+      remove_relations_stub(
+        [
+          remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+          remove_relation_node("r2", "blocks", "EXT-1", "EXT-2")
+        ],
+        []
+      )
+
+      {result, _output} =
+        with_io(fn ->
+          Commands.issue_relation_remove(
+            remove_parse_result("EXT-1", ["EXT-2", "EXT-3"], "blocks")
+          )
+        end)
+
+      assert {:error, {:smells_bad, _}} = result
+    end
+
+    test "API error on delete causes that target to fail" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        if String.contains?(body, "issueRelationDelete") do
+          Req.Test.json(conn, %{"errors" => [%{"message" => "Unauthorized"}]})
+        else
+          data =
+            if String.contains?(body, "inverseRelations") do
+              %{
+                "data" => %{
+                  "issue" => %{
+                    "inverseRelations" => %{
+                      "edges" => [],
+                      "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                    }
+                  }
+                }
+              }
+            else
+              %{
+                "data" => %{
+                  "issue" => %{
+                    "relations" => %{
+                      "edges" => [
+                        %{
+                          "node" => remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+                          "cursor" => "c"
+                        }
+                      ],
+                      "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                    }
+                  }
+                }
+              }
+            end
+
+          Req.Test.json(conn, data)
+        end
+      end)
+
+      {result, _output} =
+        with_io(fn ->
+          Commands.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-2"], "blocks"))
+        end)
+
+      assert {:error, {:smells_bad, _}} = result
+    end
+
+    test "JSON output shows removed status with relation for success" do
+      remove_relations_stub(
+        [remove_relation_node("r1", "blocks", "EXT-1", "EXT-2")],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_remove(%{
+            unknown: ["EXT-1", "EXT-2"],
+            options: %{output: "json", type: "blocks"}
+          })
+        end)
+
+      [entry] = Jason.decode!(output)
+      assert entry["status"] == "removed"
+      assert entry["target"] == "EXT-2"
+      assert entry["relation"]["type"] == "blocks"
+    end
+
+    test "JSON output shows absent status for missing relation" do
+      remove_relations_stub([], [])
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_remove(%{
+            unknown: ["EXT-1", "EXT-2"],
+            options: %{output: "json", type: "blocks"}
+          })
+        end)
+
+      [entry] = Jason.decode!(output)
+      assert entry["status"] == "absent"
+      assert entry["target"] == "EXT-2"
+    end
+
+    test "JSON output shows error with all ids for ambiguous match" do
+      remove_relations_stub(
+        [
+          remove_relation_node("r1", "blocks", "EXT-1", "EXT-2"),
+          remove_relation_node("r2", "blocks", "EXT-1", "EXT-2")
+        ],
+        []
+      )
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_remove(%{
+            unknown: ["EXT-1", "EXT-2"],
+            options: %{output: "json", type: "blocks"}
+          })
+        end)
+
+      [entry] = Jason.decode!(output)
+      assert entry["status"] == "error"
+      assert entry["target"] == "EXT-2"
+      assert entry["message"] =~ "ambiguous"
+      assert entry["message"] =~ "r1"
+      assert entry["message"] =~ "r2"
+    end
+
+    test "JSON output shows error for self-link" do
+      # The list call is allowed; the delete mutation must not be called.
+      remove_relations_stub([], [])
+
+      output =
+        capture_io(:stderr, fn ->
+          output_stdout =
+            capture_io(fn ->
+              Commands.issue_relation_remove(%{
+                unknown: ["EXT-1", "EXT-1"],
+                options: %{output: "json", type: "blocks"}
+              })
+            end)
+
+          [entry] = Jason.decode!(output_stdout)
+          assert entry["status"] == "error"
+          assert entry["message"] =~ "self-link"
+        end)
+
+      assert output == ""
+    end
+  end
 end

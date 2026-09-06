@@ -1161,6 +1161,201 @@ defmodule LinearCli.CLI.Commands do
 
   defp truncate_message(msg, _max), do: msg
 
+  @doc """
+  Removes a relationship from `ISSUE` to one or more `RELATED_ISSUE`s.
+
+  The first element of `unknown` is the subject issue; the remaining elements
+  are the related issues.  `--type` controls which stored relation to match:
+
+  * `blocks`     — removes the relation where subject blocks each related issue
+  * `blocked-by` — removes the relation where each related issue blocks subject
+  * `related`    — removes the related relation
+  * `duplicate`  — removes the duplicate relation
+
+  Removing an absent relation is a per-target no-op (not an error).  If more
+  than one stored relation matches for a target, that target fails and every
+  matching relation ID is listed — nothing is deleted arbitrarily.
+
+  Each target is processed independently; partial failures do not roll back
+  successful deletions.  All results are printed before returning; a non-zero
+  exit identifies the overall failure count if any target failed.
+  """
+  @spec issue_relation_remove(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_relation_remove(%{unknown: []}),
+    do: {:error, {:smells_bad, "ISSUE and at least one RELATED_ISSUE are required"}}
+
+  def issue_relation_remove(%{unknown: [_subject]}),
+    do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
+
+  def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}) do
+    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    user_type = options.type
+
+    with {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
+      results =
+        Enum.map(related_ids, fn related_id ->
+          expanded_related = IssueHelpers.expand_issue_id(related_id)
+          remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
+        end)
+
+      print_relation_remove_results(results, options.output)
+
+      failed_count =
+        Enum.count(results, fn r ->
+          match?({:failed, _, _}, r) or match?({:ambiguous, _, _}, r) or
+            match?({:self_link, _}, r)
+        end)
+
+      if failed_count > 0 do
+        {:error, {:smells_bad, "#{failed_count} relation(s) failed to be removed"}}
+      else
+        :ok
+      end
+    end
+  end
+
+  defp remove_single_relation(subject_id, related_id, _user_type, _relations)
+       when subject_id == related_id do
+    {:self_link, subject_id}
+  end
+
+  defp remove_single_relation(subject_id, related_id, user_type, all_relations) do
+    matches = find_matching_relations(subject_id, related_id, user_type, all_relations)
+
+    case matches do
+      [] ->
+        {:absent, related_id}
+
+      [relation] ->
+        case Linear.delete_issue_relation(relation) do
+          :ok -> {:removed, related_id, relation}
+          {:error, reason} -> {:failed, related_id, reason}
+        end
+
+      multiple ->
+        ids = Enum.map(multiple, & &1.id)
+        {:ambiguous, related_id, ids}
+    end
+  end
+
+  # Finds stored relations that match the user-facing type and the given endpoint pair.
+  # For `blocked-by`: the stored relation is `blocks` in the inbound direction, meaning
+  # the related_id issue is the source (`issue`) and subject is the destination (`related_issue`).
+  # For all other types: the stored relation is outbound with the subject as source.
+  defp find_matching_relations(_subject_id, related_id, "blocked-by", all_relations) do
+    Enum.filter(all_relations, fn rel ->
+      rel.direction == :inbound and
+        rel.type == "blocks" and
+        rel.issue != nil and
+        rel.issue.identifier == related_id
+    end)
+  end
+
+  defp find_matching_relations(_subject_id, related_id, user_type, all_relations) do
+    Enum.filter(all_relations, fn rel ->
+      rel.direction == :outbound and
+        rel.type == user_type and
+        rel.related_issue != nil and
+        rel.related_issue.identifier == related_id
+    end)
+  end
+
+  defp print_relation_remove_results(results, output) do
+    if output == "json" do
+      results
+      |> Enum.map(&relation_remove_result_to_plain/1)
+      |> Jason.encode!(pretty: true)
+      |> IO.puts()
+    else
+      Enum.each(results, &print_relation_remove_result_text/1)
+    end
+  end
+
+  defp relation_remove_result_to_plain({:removed, related_id, relation}) do
+    %{
+      "target" => related_id,
+      "status" => "removed",
+      "relation" => Display.relation_to_plain(relation)
+    }
+  end
+
+  defp relation_remove_result_to_plain({:absent, related_id}) do
+    %{"target" => related_id, "status" => "absent"}
+  end
+
+  defp relation_remove_result_to_plain({:self_link, id}) do
+    %{
+      "target" => id,
+      "status" => "error",
+      "message" => "self-link: an issue cannot be related to itself"
+    }
+  end
+
+  defp relation_remove_result_to_plain({:ambiguous, related_id, ids}) do
+    %{
+      "target" => related_id,
+      "status" => "error",
+      "message" => "ambiguous: multiple matching relations found: #{Enum.join(ids, ", ")}"
+    }
+  end
+
+  defp relation_remove_result_to_plain({:failed, related_id, reason}) do
+    msg = reason |> relation_remove_error_message() |> truncate_message(200)
+    %{"target" => related_id, "status" => "error", "message" => msg}
+  end
+
+  defp print_relation_remove_result_text({:removed, _related_id, relation}) do
+    IO.puts(relation_remove_removed_text(relation))
+  end
+
+  defp print_relation_remove_result_text({:absent, related_id}) do
+    Prompt.ok("#{related_id}: relation not found (no change)")
+  end
+
+  defp print_relation_remove_result_text({:self_link, id}) do
+    IO.puts(:stderr, "#{id}: self-link — an issue cannot be related to itself")
+  end
+
+  defp print_relation_remove_result_text({:ambiguous, related_id, ids}) do
+    IO.puts(
+      :stderr,
+      "#{related_id}: ambiguous — #{length(ids)} matching relations: #{Enum.join(ids, ", ")}"
+    )
+  end
+
+  defp print_relation_remove_result_text({:failed, related_id, reason}) do
+    msg = relation_remove_error_message(reason)
+    IO.puts(:stderr, "#{related_id}: #{msg}")
+  end
+
+  defp relation_remove_removed_text(%{type: "blocks", issue: issue, related_issue: related}) do
+    "#{issue.identifier} no longer blocks #{related.identifier}"
+  end
+
+  defp relation_remove_removed_text(%{type: "related", issue: issue, related_issue: related}) do
+    "#{issue.identifier} is no longer related to #{related.identifier}"
+  end
+
+  defp relation_remove_removed_text(%{type: "duplicate", issue: issue, related_issue: related}) do
+    "#{issue.identifier} is no longer a duplicate of #{related.identifier}"
+  end
+
+  defp relation_remove_removed_text(%{type: type, issue: issue, related_issue: related}) do
+    "#{issue.identifier} is no longer a #{type} of #{related.identifier}"
+  end
+
+  defp relation_remove_error_message(%Ash.Error.Unknown{
+         errors: [%{value: [{:graphql_errors, [%{"message" => msg} | _]}]} | _]
+       }),
+       do: "Linear API error: #{msg}"
+
+  defp relation_remove_error_message(%Ash.Error.Unknown{
+         errors: [%Ash.Error.Unknown.UnknownError{error: "unknown error: :missing_api_key"} | _]
+       }),
+       do: "LINEAR_API_KEY is not set"
+
+  defp relation_remove_error_message(_reason), do: "unexpected error"
+
   defp resolve_optional_status(_issue, nil), do: {:ok, nil}
 
   defp resolve_optional_status(issue, name) do

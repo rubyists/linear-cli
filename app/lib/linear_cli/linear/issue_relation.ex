@@ -24,6 +24,10 @@ defmodule LinearCli.Linear.IssueRelation do
       argument :type, :string, allow_nil?: false
       manual LinearCli.Linear.IssueRelation.Create
     end
+
+    destroy :destroy do
+      manual LinearCli.Linear.IssueRelation.Destroy
+    end
   end
 
   attributes do
@@ -104,6 +108,32 @@ defmodule LinearCli.Linear.IssueRelation.Create do
 
   defp document do
     "mutation($issueId: String!, $relatedIssueId: String!, $type: IssueRelationType!) { issueRelationCreate(input: { issueId: $issueId, relatedIssueId: $relatedIssueId, type: $type }) { issueRelation { #{IssueRelation.relation_fields()} } success } }"
+  end
+end
+
+defmodule LinearCli.Linear.IssueRelation.Destroy do
+  @moduledoc false
+  use Ash.Resource.ManualDestroy
+
+  alias LinearCli.Api
+
+  def destroy(changeset, _opts, _context) do
+    relation_id = changeset.data.id
+
+    case Api.call(document(), %{"id" => relation_id}) do
+      {:ok, %{"issueRelationDelete" => %{"success" => true}}} ->
+        {:ok, changeset.data}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp document do
+    "mutation($id: String!) { issueRelationDelete(id: $id) { success entityId } }"
   end
 end
 
