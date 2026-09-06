@@ -1106,8 +1106,9 @@ defmodule LinearCli.CLI.Commands do
     }
   end
 
-  defp relation_add_result_to_plain({:failed, related_id, _reason}) do
-    %{"target" => related_id, "status" => "error", "message" => "failed to create relation"}
+  defp relation_add_result_to_plain({:failed, related_id, reason}) do
+    msg = reason |> relation_add_error_message() |> truncate_message(200)
+    %{"target" => related_id, "status" => "error", "message" => msg}
   end
 
   defp print_relation_add_result_text({:created, _related_id, relation}) do
@@ -1131,8 +1132,16 @@ defmodule LinearCli.CLI.Commands do
     "#{issue.identifier} now blocks #{related.identifier}"
   end
 
+  defp relation_add_created_text(%{type: "related", issue: issue, related_issue: related}) do
+    "#{issue.identifier} is now related to #{related.identifier}"
+  end
+
+  defp relation_add_created_text(%{type: "duplicate", issue: issue, related_issue: related}) do
+    "#{issue.identifier} is now a duplicate of #{related.identifier}"
+  end
+
   defp relation_add_created_text(%{type: type, issue: issue, related_issue: related}) do
-    "#{issue.identifier} is now #{type} of #{related.identifier}"
+    "#{issue.identifier} is now a #{type} of #{related.identifier}"
   end
 
   defp relation_add_error_message(%Ash.Error.Unknown{
@@ -1146,6 +1155,11 @@ defmodule LinearCli.CLI.Commands do
        do: "LINEAR_API_KEY is not set"
 
   defp relation_add_error_message(_reason), do: "unexpected error"
+
+  defp truncate_message(msg, max) when byte_size(msg) > max,
+    do: String.slice(msg, 0, max) <> "…"
+
+  defp truncate_message(msg, _max), do: msg
 
   defp resolve_optional_status(_issue, nil), do: {:ok, nil}
 

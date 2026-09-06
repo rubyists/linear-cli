@@ -4412,5 +4412,50 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
       assert output == ""
     end
+
+    test "JSON output shows actual error message for API failures" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, create_error_response("Unauthorized"))
+      end)
+
+      {_result, output} =
+        with_io(fn ->
+          Commands.issue_relation_add(%{
+            unknown: ["EXT-1", "EXT-2"],
+            options: %{output: "json", type: "blocks"}
+          })
+        end)
+
+      [entry] = Jason.decode!(output)
+      assert entry["status"] == "error"
+      assert entry["target"] == "EXT-2"
+      assert entry["message"] =~ "Unauthorized"
+    end
+
+    test "creates a related relation and prints grammatically correct text" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, create_success_response("r1", "related", "EXT-1", "EXT-2"))
+      end)
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_add(add_parse_result("EXT-1", ["EXT-2"], "related"))
+        end)
+
+      assert output =~ "EXT-1 is now related to EXT-2"
+    end
+
+    test "creates a duplicate relation and prints grammatically correct text" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, create_success_response("r1", "duplicate", "EXT-1", "EXT-2"))
+      end)
+
+      output =
+        capture_io(fn ->
+          Commands.issue_relation_add(add_parse_result("EXT-1", ["EXT-2"], "duplicate"))
+        end)
+
+      assert output =~ "EXT-1 is now a duplicate of EXT-2"
+    end
   end
 end
