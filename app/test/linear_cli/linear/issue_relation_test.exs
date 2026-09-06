@@ -198,4 +198,79 @@ defmodule LinearCli.Linear.IssueRelationTest do
     assert rel.issue.identifier == "EXT-3"
     assert rel.related_issue.identifier == "EXT-1"
   end
+
+  describe "create_issue_relation/3" do
+    defp create_relation_payload(id, type, src_ident, rel_ident) do
+      %{
+        "data" => %{
+          "issueRelationCreate" => %{
+            "success" => true,
+            "issueRelation" => relation_node(id, type, "i-src", src_ident, "i-rel", rel_ident)
+          }
+        }
+      }
+    end
+
+    test "creates a relation and returns it tagged :outbound" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, create_relation_payload("rel-new", "blocks", "EXT-1", "EXT-2"))
+      end)
+
+      assert {:ok, relation} = Linear.create_issue_relation("EXT-1", "EXT-2", "blocks")
+      assert relation.id == "rel-new"
+      assert relation.type == "blocks"
+      assert relation.direction == :outbound
+      assert relation.issue.identifier == "EXT-1"
+      assert relation.related_issue.identifier == "EXT-2"
+    end
+
+    test "creates a related relation" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, create_relation_payload("rel-r", "related", "EXT-1", "EXT-3"))
+      end)
+
+      assert {:ok, relation} = Linear.create_issue_relation("EXT-1", "EXT-3", "related")
+      assert relation.type == "related"
+      assert relation.direction == :outbound
+    end
+
+    test "returns error when API returns a graphql error" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "errors" => [%{"message" => "Unauthorized"}]
+        })
+      end)
+
+      assert {:error, _} = Linear.create_issue_relation("EXT-1", "EXT-2", "blocks")
+    end
+
+    test "returns error tagged :duplicate_relation when relation already exists" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "errors" => [
+            %{"message" => "A relation of this type already exists between these issues"}
+          ]
+        })
+      end)
+
+      assert {:error, %Ash.Error.Unknown{errors: [%{value: [{:duplicate_relation, _msg}]} | _]}} =
+               Linear.create_issue_relation("EXT-1", "EXT-2", "blocks")
+    end
+
+    test "sends issueId, relatedIssueId, and type to the API" do
+      parent = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => vars} = Jason.decode!(body)
+        send(parent, {:vars, vars})
+        Req.Test.json(conn, create_relation_payload("r1", "blocks", "EXT-1", "EXT-2"))
+      end)
+
+      Linear.create_issue_relation("EXT-1", "EXT-2", "blocks")
+
+      assert_received {:vars,
+                       %{"issueId" => "EXT-1", "relatedIssueId" => "EXT-2", "type" => "blocks"}}
+    end
+  end
 end

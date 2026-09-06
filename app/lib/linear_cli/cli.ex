@@ -119,7 +119,7 @@ defmodule LinearCli.CLI do
 
   @nested_subcommand_aliases %{
     "issue" => %{
-      "relation" => %{"l" => "list", "ls" => "list"}
+      "relation" => %{"l" => "list", "ls" => "list", "a" => "add"}
     }
   }
 
@@ -244,6 +244,9 @@ defmodule LinearCli.CLI do
 
   defp dispatch([:issue, :relation, :list], result, halt),
     do: run(&Commands.issue_relation_list/1, result, halt)
+
+  defp dispatch([:issue, :relation, :add], result, halt),
+    do: run(&Commands.issue_relation_add/1, result, halt)
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
   # with nothing after it) - Optimus itself doesn't require reaching a leaf,
@@ -931,6 +934,37 @@ defmodule LinearCli.CLI do
                       value_name: "ISSUE",
                       help: "The issue to list relationships for (e.g. EXT-1)",
                       required: true
+                    ]
+                  ]
+                ],
+                add: [
+                  name: "add",
+                  about: """
+                  Add a relationship from ISSUE to one or more RELATED_ISSUEs (alias: a).
+
+                  Direction table:
+                    blocks     — ISSUE blocks each RELATED_ISSUE
+                    blocked-by — ISSUE is blocked by each RELATED_ISSUE
+                    related    — ISSUE is related to each RELATED_ISSUE
+                    duplicate  — ISSUE is a duplicate of each RELATED_ISSUE
+
+                  Adding an already-existing identical relation is a no-op.
+                  """,
+                  allow_unknown_args: true,
+                  options: [
+                    type: [
+                      short: "-t",
+                      long: "--type",
+                      help: "Relationship type: blocks, blocked-by, related, duplicate",
+                      required: true,
+                      parser: fn
+                        v when v in ["blocks", "blocked-by", "related", "duplicate"] ->
+                          {:ok, v}
+
+                        v ->
+                          {:error,
+                           "must be one of: blocks, blocked-by, related, duplicate (got #{inspect(v)})"}
+                      end
                     ]
                   ]
                 ]

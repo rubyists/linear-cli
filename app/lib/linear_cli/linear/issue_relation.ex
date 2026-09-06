@@ -17,6 +17,13 @@ defmodule LinearCli.Linear.IssueRelation do
       argument :issue_id, :string, allow_nil?: false
       manual LinearCli.Linear.IssueRelation.Read.List
     end
+
+    create :create do
+      argument :issue_id, :string, allow_nil?: false
+      argument :related_issue_id, :string, allow_nil?: false
+      argument :type, :string, allow_nil?: false
+      manual LinearCli.Linear.IssueRelation.Create
+    end
   end
 
   attributes do
@@ -54,6 +61,49 @@ defmodule LinearCli.Linear.IssueRelation do
 
   defp endpoint_from_map(map) do
     %{id: map["id"], identifier: map["identifier"], title: map["title"], url: map["url"]}
+  end
+end
+
+defmodule LinearCli.Linear.IssueRelation.Create do
+  @moduledoc false
+  use Ash.Resource.ManualCreate
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.IssueRelation
+
+  def create(changeset, _opts, _context) do
+    args = changeset.arguments
+
+    case Api.call(document(), %{
+           "issueId" => args.issue_id,
+           "relatedIssueId" => args.related_issue_id,
+           "type" => args.type
+         }) do
+      {:ok, %{"issueRelationCreate" => %{"issueRelation" => rel_map}}} when is_map(rel_map) ->
+        {:ok, IssueRelation.from_map(rel_map, :outbound)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:graphql_errors, [%{"message" => message} | _] = errors}} ->
+        if duplicate_error?(message) do
+          {:error, {:duplicate_relation, message}}
+        else
+          {:error, {:graphql_errors, errors}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp duplicate_error?(message) do
+    message = String.downcase(message)
+    String.contains?(message, "already exists") or String.contains?(message, "duplicate")
+  end
+
+  defp document do
+    "mutation($issueId: String!, $relatedIssueId: String!, $type: IssueRelationType!) { issueRelationCreate(input: { issueId: $issueId, relatedIssueId: $relatedIssueId, type: $type }) { issueRelation { #{IssueRelation.relation_fields()} } success } }"
   end
 end
 

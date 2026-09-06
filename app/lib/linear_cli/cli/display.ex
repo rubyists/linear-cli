@@ -185,6 +185,9 @@ defmodule LinearCli.CLI.Display do
     "  #{String.pad_trailing(identifier, 10)} #{title} [#{type}/#{id}]"
   end
 
+  @doc "Returns a plain-map representation of an IssueRelation suitable for JSON encoding."
+  def relation_to_plain(%IssueRelation{} = relation), do: to_plain(relation)
+
   defp to_plain(list) when is_list(list), do: Enum.map(list, &to_plain/1)
 
   defp to_plain(%_struct{} = record) do
