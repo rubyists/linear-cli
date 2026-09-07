@@ -701,6 +701,281 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert output =~ "CRY-1"
       refute output =~ "[Bug]"
     end
+
+    test "--include-labels requests label fields and shows them in compact output" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        send(test_pid, {:query, query})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--include-labels"])
+        end)
+
+      assert_received {:query, query}
+      assert String.contains?(query, "labels")
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug]"
+    end
+
+    test "-i short flag requests label fields and shows them in compact output" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        send(test_pid, {:query, query})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "-i"])
+        end)
+
+      assert_received {:query, query}
+      assert String.contains?(query, "labels")
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug]"
+    end
+
+    test "-N --include-labels --all sends no assignee/date filter, no label filter, requests label fields" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Feature", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        send(test_pid, {:query, decoded["query"]})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "list",
+                     "-N",
+                     "--include-labels",
+                     "--all"
+                   ])
+        end)
+
+      assert_received {:filter, filter}
+      assert_received {:query, query}
+      refute Map.has_key?(filter, "assignee")
+      refute Map.has_key?(filter, "completedAt")
+      refute Map.has_key?(filter, "canceledAt")
+      refute Map.has_key?(filter, "labels")
+      assert String.contains?(query, "labels")
+      assert output =~ "CRY-1"
+      assert output =~ "[Feature]"
+    end
+
+    test "-N -i --all is the same as -N --include-labels --all" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Feature", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "-N", "-i", "--all"])
+        end)
+
+      assert_received {:filter, filter}
+      refute Map.has_key?(filter, "assignee")
+      refute Map.has_key?(filter, "labels")
+      assert output =~ "[Feature]"
+    end
+
+    test "--labels --all exits 1 (Optimus parse error, no API request)" do
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(fn ->
+          assert catch_throw(
+                   LinearCli.CLI.main(
+                     ["issue", "list", "--labels", "--all"],
+                     fn code -> throw({:halted, code}) end
+                   )
+                 ) == {:halted, 1}
+        end)
+
+      assert output =~ "--labels"
+    end
+
+    test "-s/--status composes with --include-labels" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:filter, decoded["variables"]["filter"]})
+        send(test_pid, {:query, decoded["query"]})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "list",
+                     "--status",
+                     "Human Review",
+                     "--include-labels"
+                   ])
+        end)
+
+      assert_received {:filter, filter}
+      assert_received {:query, query}
+      assert filter["state"] == %{"name" => %{"eqIgnoreCase" => "Human Review"}}
+      assert String.contains?(query, "labels")
+      assert output =~ "CRY-1"
+      assert output =~ "[Bug]"
+    end
+
+    test "positional issue identifier with --include-labels uses full lookup and renders labels" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        send(test_pid, {:query, query})
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" =>
+              issue_map(%{
+                "labels" => %{
+                  "nodes" => [
+                    %{
+                      "id" => "l1",
+                      "name" => "Bug",
+                      "description" => nil,
+                      "isGroup" => false
+                    }
+                  ]
+                },
+                "comments" => %{"nodes" => []},
+                "relations" => %{
+                  "edges" => [],
+                  "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                },
+                "inverseRelations" => %{
+                  "edges" => [],
+                  "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                }
+              })
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "list", "CRY-1", "--include-labels"])
+        end)
+
+      assert_received {:query, query}
+      assert String.contains?(query, "issue(id: $id)")
+      assert output =~ "CRY-1"
+      assert output =~ "Bug"
+    end
+
+    test "--output json --include-labels contains fetched label objects in stdout" do
+      test_pid = self()
+
+      labeled_issue =
+        issue_map(%{
+          "labels" => %{
+            "nodes" => [
+              %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+            ]
+          }
+        })
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+        send(test_pid, {:query, query})
+        Req.Test.json(conn, issues_response([labeled_issue]))
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "list",
+                     "--output",
+                     "json",
+                     "--include-labels"
+                   ])
+        end)
+
+      assert_received {:query, query}
+      assert String.contains?(query, "labels")
+      assert {:ok, [decoded]} = Jason.decode(output)
+      assert [label] = decoded["labels"]
+      assert label["name"] == "Bug"
+    end
   end
 
   describe "issue view" do

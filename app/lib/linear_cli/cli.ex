@@ -488,7 +488,18 @@ defmodule LinearCli.CLI do
 
   defp parse_statuses(value), do: {:ok, split_filter_values(value)}
 
-  defp parse_labels(value), do: {:ok, split_filter_values(value)}
+  defp parse_labels(value) do
+    values = split_filter_values(value)
+
+    case Enum.find(values, &String.starts_with?(&1, "-")) do
+      nil ->
+        {:ok, values}
+
+      bad ->
+        {:error,
+         "invalid value #{inspect(bad)} for --labels: looks like an option token, not a label name"}
+    end
+  end
 
   defp split_filter_values(value) do
     value
@@ -699,6 +710,11 @@ defmodule LinearCli.CLI do
                 all: [
                   long: "--all",
                   help: "Show all issues including completed and cancelled"
+                ],
+                include_labels: [
+                  short: "-i",
+                  long: "--include-labels",
+                  help: "Include labels in issue list output"
                 ]
               ],
               options: [

@@ -677,4 +677,78 @@ defmodule LinearCli.Linear.IssueTest do
       assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
     end
   end
+
+  describe "issues/1 include_labels field selection" do
+    test "include_labels: true, labels: [] requests label fields without adding a label filter" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels")
+        refute Map.has_key?(filter, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix",
+                    "branchName" => "cry-1-fix",
+                    "description" => nil,
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                    "labels" => %{
+                      "nodes" => [
+                        %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+                      ]
+                    }
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{include_labels: true, labels: [], mine: false})
+      assert [label] = issue.labels
+      assert label.name == "Bug"
+    end
+
+    test "include_labels: false, labels: [] uses the base selection without label fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        refute String.contains?(query, "labels { nodes")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{include_labels: false, labels: [], mine: false})
+    end
+
+    test "non-empty labels defensively selects label fields even when include_labels is false" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{include_labels: false, labels: ["Bug"], mine: false})
+    end
+  end
 end
