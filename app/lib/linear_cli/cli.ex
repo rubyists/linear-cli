@@ -490,16 +490,16 @@ defmodule LinearCli.CLI do
 
   defp parse_labels(value) do
     values = split_filter_values(value)
-
-    case Enum.find(values, &String.starts_with?(&1, "-")) do
-      nil ->
-        {:ok, values}
-
-      bad ->
-        {:error,
-         "invalid value #{inspect(bad)} for --labels: looks like an option token, not a label name"}
-    end
+    bad = Enum.find(values, &String.starts_with?(&1, "-"))
+    parse_labels_result(values, bad)
   end
+
+  defp parse_labels_result(values, nil), do: {:ok, values}
+
+  defp parse_labels_result(_values, bad),
+    do:
+      {:error,
+       "invalid value #{inspect(bad)} for --labels: looks like an option token, not a label name"}
 
   defp split_filter_values(value) do
     value
