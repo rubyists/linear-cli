@@ -260,7 +260,8 @@ data, not from declared Ash relationships.
 === Notes on unidirectional associations
 
 * `Label` is stored as an association attribute on `Issue` (`labels`, `{:array, :term}`) —
-  populated from `issue.labels.nodes` in `full_fields` responses only.
+  populated from `issue.labels.nodes` in `full_fields` responses and in compact list
+  responses when `include_labels: true` or `labels` is non-empty (via `list_fields_with_labels/0`).
   However, `Label` itself has no stored back-reference to its team; the
   `team_id` is passed as an action argument to `Label.Read.ByTeam` only.
 * `WorkflowState` has no stored association attributes.
@@ -351,10 +352,12 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:list`
 | read
 | `Linear.Issue.Read.List`
-| `issues(filter:, first:, after:)` paginated (base), with `state` filtering
-  workflow-state types, `status` filtering friendly workflow-state names, and
-  `labels` filtering by label name (case-insensitive OR match via
-  `IssueLabelCollectionFilter.some`); or `issue(id:)` per id (full, fanned concurrently)
+| `issues(filter:, first:, after:)` paginated; `state` filters workflow-state types,
+  `status` filters friendly workflow-state names, `labels` filters by label name
+  (case-insensitive OR match via `IssueLabelCollectionFilter.some`); `include_labels`
+  (boolean, default `false`) selects label fields in the response without adding a
+  label filter — `labels` non-empty also forces label-field selection as a defensive
+  invariant; or `issue(id:)` per id (full, fanned concurrently)
 
 | `Issue`
 | `create_issue`
