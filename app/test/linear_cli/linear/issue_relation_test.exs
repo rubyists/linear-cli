@@ -273,4 +273,70 @@ defmodule LinearCli.Linear.IssueRelationTest do
                        %{"issueId" => "EXT-1", "relatedIssueId" => "EXT-2", "type" => "blocks"}}
     end
   end
+
+  describe "delete_issue_relation/1" do
+    defp delete_success_response(entity_id) do
+      %{
+        "data" => %{
+          "issueRelationDelete" => %{
+            "success" => true,
+            "entityId" => entity_id
+          }
+        }
+      }
+    end
+
+    defp make_relation(id) do
+      IssueRelation.from_map(
+        %{
+          "id" => id,
+          "type" => "blocks",
+          "issue" => %{"id" => "i1", "identifier" => "EXT-1", "title" => "t", "url" => "u"},
+          "relatedIssue" => %{"id" => "i2", "identifier" => "EXT-2", "title" => "t", "url" => "u"}
+        },
+        :outbound
+      )
+    end
+
+    test "deletes a relation and returns :ok" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, delete_success_response("rel-1"))
+      end)
+
+      assert :ok = Linear.delete_issue_relation(make_relation("rel-1"))
+    end
+
+    test "sends the relation id to the API" do
+      parent = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => vars} = Jason.decode!(body)
+        send(parent, {:vars, vars})
+        Req.Test.json(conn, delete_success_response("rel-xyz"))
+      end)
+
+      Linear.delete_issue_relation(make_relation("rel-xyz"))
+
+      assert_received {:vars, %{"id" => "rel-xyz"}}
+    end
+
+    test "returns error when API returns a graphql error" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "Unauthorized"}]})
+      end)
+
+      assert {:error, _} = Linear.delete_issue_relation(make_relation("rel-1"))
+    end
+
+    test "returns error on unexpected response shape" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{"issueRelationDelete" => %{"success" => false, "entityId" => nil}}
+        })
+      end)
+
+      assert {:error, _} = Linear.delete_issue_relation(make_relation("rel-1"))
+    end
+  end
 end

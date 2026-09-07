@@ -325,6 +325,22 @@ defmodule LinearCli.CLITest do
              "--type",
              "blocks"
            ]) == ["issue", "relation", "add", "EXT-1", "EXT-2", "--type", "blocks"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "r", "EXT-1"]) ==
+             ["issue", "relation", "remove", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "rm", "EXT-1"]) ==
+             ["issue", "relation", "remove", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases([
+             "i",
+             "relation",
+             "rm",
+             "EXT-1",
+             "EXT-2",
+             "--type",
+             "blocks"
+           ]) == ["issue", "relation", "remove", "EXT-1", "EXT-2", "--type", "blocks"]
   end
 
   test "aliased subcommands actually dispatch end to end" do

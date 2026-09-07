@@ -119,7 +119,13 @@ defmodule LinearCli.CLI do
 
   @nested_subcommand_aliases %{
     "issue" => %{
-      "relation" => %{"l" => "list", "ls" => "list", "a" => "add"}
+      "relation" => %{
+        "l" => "list",
+        "ls" => "list",
+        "a" => "add",
+        "r" => "remove",
+        "rm" => "remove"
+      }
     }
   }
 
@@ -247,6 +253,9 @@ defmodule LinearCli.CLI do
 
   defp dispatch([:issue, :relation, :add], result, halt),
     do: run(&Commands.issue_relation_add/1, result, halt)
+
+  defp dispatch([:issue, :relation, :remove], result, halt),
+    do: run(&Commands.issue_relation_remove/1, result, halt)
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
   # with nothing after it) - Optimus itself doesn't require reaching a leaf,
@@ -949,6 +958,39 @@ defmodule LinearCli.CLI do
                     duplicate  — ISSUE is a duplicate of each RELATED_ISSUE
 
                   Adding an already-existing identical relation is a no-op.
+                  """,
+                  allow_unknown_args: true,
+                  options: [
+                    type: [
+                      short: "-t",
+                      long: "--type",
+                      help: "Relationship type: blocks, blocked-by, related, duplicate",
+                      required: true,
+                      parser: fn
+                        v when v in ["blocks", "blocked-by", "related", "duplicate"] ->
+                          {:ok, v}
+
+                        v ->
+                          {:error,
+                           "must be one of: blocks, blocked-by, related, duplicate (got #{inspect(v)})"}
+                      end
+                    ]
+                  ]
+                ],
+                remove: [
+                  name: "remove",
+                  about: """
+                  Remove a relationship from ISSUE to one or more RELATED_ISSUEs (aliases: r, rm).
+
+                  Direction table:
+                    blocks     — remove the relation where ISSUE blocks each RELATED_ISSUE
+                    blocked-by — remove the relation where each RELATED_ISSUE blocks ISSUE
+                    related    — remove the related relation
+                    duplicate  — remove the duplicate relation
+
+                  Removing an absent relation is a per-target no-op.
+                  If multiple stored relations match, that target fails and every matching
+                  relation ID is listed — nothing is deleted arbitrarily.
                   """,
                   allow_unknown_args: true,
                   options: [

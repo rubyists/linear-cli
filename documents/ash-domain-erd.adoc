@@ -406,6 +406,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `Linear.IssueRelation.Create`
 | `issueRelationCreate(input: { issueId, relatedIssueId, type })` mutation; returns `issueRelation { id type issue { ... } relatedIssue { ... } }`. Arguments: `issue_id` (string), `related_issue_id` (string), `type` (string, wire GraphQL enum value: `blocks`, `related`, `duplicate`). The `:create` action always receives the wire-direction values; `blocked-by` reversal happens in the CLI layer. Duplicate relation errors from Linear are surfaced to the CLI as `{:duplicate_relation, message}`.
 
+| `IssueRelation`
+| `delete_issue_relation`
+| `:destroy`
+| destroy
+| `Linear.IssueRelation.Destroy`
+| `issueRelationDelete(id: $id)` mutation returning `DeletePayload { success entityId }`. Takes an `IssueRelation` struct as its argument; the relation UUID is read from `changeset.data.id`. The CLI layer resolves the exact relation (by listing the subject issue's relations and matching by wire type, direction, and endpoint identifier) before calling this interface, so no resolution logic lives in the domain layer.
+
 | `Label`
 | `labels_by_names`
 | `:by_names`
