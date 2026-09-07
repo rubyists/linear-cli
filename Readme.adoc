@@ -210,11 +210,21 @@ $ lcls -N <1>
 $ lcls --state started <2>
 $ lcls --status "Human Review" <3>
 $ lcls --state started --status "Human Review,Gate Approved" <4>
+$ lcls --include-labels <5>
+$ lcls -N -i --all <6>
+$ lcls --labels Bug <7>
+$ lcls --labels Bug,Feature <8>
+$ lcls --labels Bug --include-labels <9>
 ----
 <1> Include issues not assigned to you (short for `--no-mine`)
 <2> Filter by Linear's internal workflow state type
 <3> Filter by a friendly workflow status name (case-insensitive)
 <4> Combine state and status filters; both must match
+<5> Include each issue's labels in the compact listing (presentation only — does not filter which issues are returned)
+<6> Short forms: `-i` for `--include-labels`, `-N` for `--no-mine`; `--all` includes completed and cancelled issues
+<7> Filter to issues carrying the "Bug" label (case-insensitive); labels are shown automatically
+<8> Filter to issues carrying "Bug" or "Feature" (case-insensitive OR); all labels on each match are shown
+<9> Explicit `--include-labels` is redundant when `--labels` is also present; both work together
 
 ==== View an Issue
 
