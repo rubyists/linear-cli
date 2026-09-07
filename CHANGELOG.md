@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.8.1](https://github.com/rubyists/linear-cli/compare/v2.8.0...v2.8.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* run local gate before push audit ([#256](https://github.com/rubyists/linear-cli/issues/256)) ([30b3963](https://github.com/rubyists/linear-cli/commit/30b3963fdb0f64124145781b6f6067398ea64dea))
+
 ## [2.8.0](https://github.com/rubyists/linear-cli/compare/v2.7.0...v2.8.0) (2026-09-06)
 
 
