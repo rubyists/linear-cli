@@ -9,8 +9,8 @@ defmodule Mix.Tasks.GitHooks do
   Sets `core.hooksPath` to `git-hooks/`: its `pre-commit` hook prevents direct
   commits to `main` and runs `mix precommit`; its `commit-msg` hook enforces
   Conventional Commits on each commit subject; and its `pre-push` hook validates
-  all commit subjects introduced by the push before running Hex's dependency
-  security audit.
+  all commit subjects introduced by the push, reruns `mix precommit`, and then
+  runs Hex's dependency security audit.
   This is idempotent and safe to run repeatedly: setting the same Git config
   value twice is a no-op. Wired into `mix setup` - see that task.
   """

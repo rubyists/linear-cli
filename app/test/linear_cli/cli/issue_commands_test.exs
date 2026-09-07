@@ -4318,13 +4318,14 @@ defmodule LinearCli.CLI.IssueCommandsTest do
         Req.Test.json(conn, create_error_response("Unauthorized"))
       end)
 
-      {result, _output} =
-        with_io(fn ->
-          Commands.issue_relation_add(add_parse_result("EXT-1", ["EXT-2"], "blocks"))
+      stderr =
+        capture_io(:stderr, fn ->
+          result = Commands.issue_relation_add(add_parse_result("EXT-1", ["EXT-2"], "blocks"))
+          assert {:error, {:smells_bad, msg}} = result
+          assert msg =~ "failed"
         end)
 
-      assert {:error, {:smells_bad, msg}} = result
-      assert msg =~ "failed"
+      assert stderr =~ "EXT-2: Linear API error: Unauthorized"
     end
 
     test "partial failure: succeeds for valid targets, errors for failed targets" do
@@ -4342,15 +4343,24 @@ defmodule LinearCli.CLI.IssueCommandsTest do
         end
       end)
 
-      output =
-        capture_io(fn ->
-          result =
-            Commands.issue_relation_add(add_parse_result("EXT-1", ["EXT-2", "EXT-bad"], "blocks"))
+      stderr =
+        capture_io(:stderr, fn ->
+          output =
+            capture_io(fn ->
+              result =
+                Commands.issue_relation_add(
+                  add_parse_result("EXT-1", ["EXT-2", "EXT-bad"], "blocks")
+                )
 
-          assert {:error, {:smells_bad, _}} = result
+              assert {:error, {:smells_bad, _}} = result
+            end)
+
+          send(self(), {:relation_add_output, output})
         end)
 
+      assert_received {:relation_add_output, output}
       assert output =~ "EXT-1 now blocks EXT-2"
+      assert stderr =~ "EXT-bad: Linear API error: Unauthorized"
       assert :counters.get(call_count, 1) == 2
     end
 
