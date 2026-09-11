@@ -798,7 +798,8 @@ defmodule LinearCli.CLI do
               ],
               flags: [
                 develop: [long: "--dev", help: "Start development after creating the issue"],
-                yes: [short: "-y", long: "--yes", help: "Skip all interactive prompts"]
+                yes: [short: "-y", long: "--yes", help: "Skip all interactive prompts"],
+                no_take: [long: "--no-take", help: "Do not assign the new issue to yourself"]
               ]
             ],
             develop: [

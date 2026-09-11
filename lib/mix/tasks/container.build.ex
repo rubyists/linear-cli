@@ -13,9 +13,9 @@ defmodule Mix.Tasks.Container.Build do
   container image itself via `ci/build_image.sh`. With `--push` (`-p`),
   chains straight into `mix container.publish TAG` afterward.
 
-  This is the exact flow `.github/workflows/main.yaml`'s `container` job
-  runs - CI and a local `mix container.build v1.2.3 --push` do the
-  identical thing, so there's one place to fix if either ever breaks.
+  This builds a local x86_64 image. Release CI reuses each native Linux
+  Burrito artifact to build x86_64 and ARM64 images, then publishes one
+  multi-architecture manifest under the release tag.
   """
 
   use Mix.Task

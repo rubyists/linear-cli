@@ -18,14 +18,14 @@ defmodule Mix.Tasks.Precommit do
   Steps:
 
     1. `mix format --check-formatted` — check root project formatting
-    2. `mix test` — run the root project test suite (validator and task tests)
+    2. `mix test --exclude ci_only` — run the root project test suite
     3. `mix format --check-formatted` — check app formatting
     4. `mix credo --strict` — run static analysis on the app
     5. `mix test --exclude ci_only` — run the app unit test suite
 
   Steps 1-2 run from the repo root; steps 3-5 run inside `app/`.
-  App tests tagged `@moduletag :ci_only` are excluded only from this local
-  gate. `mix ci` runs the complete app suite without a test-selection flag.
+  Tests tagged `@moduletag :ci_only` are excluded only from this local gate.
+  `mix ci` runs both complete test suites without a test-selection flag.
 
   For the complete integration gate — dependency bootstrap and audits,
   PR-title and commit-range validation, and CI-classified tests — use `mix ci`.
@@ -43,7 +43,7 @@ defmodule Mix.Tasks.Precommit do
   @doc false
   def run([], shell) do
     shell.("mix", ["format", "--check-formatted"], [])
-    shell.("mix", ["test"], [])
+    shell.("mix", ["test", "--exclude", "ci_only"], [])
     shell.("mix", ["format", "--check-formatted"], cd: "app")
     shell.("mix", ["credo", "--strict"], cd: "app")
     shell.("mix", ["test", "--exclude", "ci_only"], cd: "app")

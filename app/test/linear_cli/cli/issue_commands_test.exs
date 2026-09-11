@@ -1412,6 +1412,75 @@ defmodule LinearCli.CLI.IssueCommandsTest do
       assert_received {:halted, _code}
     end
 
+    test "--no-take keeps a -y/--yes-created issue unassigned" do
+      created_issue =
+        issue_map(%{
+          "id" => "i2",
+          "identifier" => "CRY-2",
+          "title" => "New thing",
+          "branchName" => "cry-2-new-thing",
+          "description" => "Some description",
+          "assignee" => nil
+        })
+
+      stub_responses([
+        {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
+        {"projects(first: 100", team_projects([])},
+        {"issueCreate", %{"data" => %{"issueCreate" => %{"issue" => created_issue}}}}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "create",
+                     "--title",
+                     "New thing",
+                     "--description",
+                     "Some description",
+                     "--team",
+                     "ENG",
+                     "--yes",
+                     "--no-take"
+                   ])
+        end)
+
+      refute output =~ "Do you want to take this issue?"
+      refute output =~ "Assigning issue"
+      assert output =~ "CRY-2"
+    end
+
+    test "--no-take cannot be combined with --dev" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      output =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "create",
+              "--title",
+              "New thing",
+              "--description",
+              "Some description",
+              "--team",
+              "ENG",
+              "--yes",
+              "--no-take",
+              "--dev"
+            ],
+            halt
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "--no-take cannot be used with --dev"
+    end
+
     test "-y/--yes with all required flags creates and self-assigns without any prompts" do
       created_issue =
         issue_map(%{

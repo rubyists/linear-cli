@@ -17,3 +17,11 @@ python = "3.14.1"
 #CLAUDE_CODE_SUBAGENT_MODEL = "user.Qwen3.6-35B-A3B-ThinkingCoder"
 #CLAUDE_CODE_ATTRIBUTION_HEADER = 0
 #CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1
+
+[hooks]
+# Keep a freshly cloned checkout protected without rerunning setup after it is installed.
+enter = '''
+if [ "$(git config --get core.hooksPath 2>/dev/null)" != "git-hooks" ]; then
+  mix setup
+fi
+'''

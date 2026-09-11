@@ -350,58 +350,34 @@ jobs:
 
   container:
     needs: [burrito-package]
-    name: Build and publish container image
-    runs-on: ubuntu-latest
+    name: Build and publish ${{ matrix.arch }} container image
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: linux_x86_64
+            arch: amd64
+            runner: ubuntu-latest
+          - target: linux_aarch64
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       -
         uses: actions/checkout@v7
       -
-        uses: erlef/setup-beam@v1
+        # Reuse the matching native binary from burrito-build. Building the
+        # image on a matching runner means Alpine and the packaged executable
+        # have the same architecture without emulation.
+        name: Download the ${{ matrix.target }} container payload
+        uses: actions/download-artifact@v7
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
-          disable_problem_matchers: true
-      -
-        # Same Burrito build as the `burrito-build` job above, so it needs
-        # the same pinned Zig (see that job's comment) - missing here would
-        # fail this job's build at `mix release` time even though
-        # `burrito-build` succeeds.
-        uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: "0.16.0"
-      -
-        run: mix deps.get
-        working-directory: app
-      -
-        # Same two-stage preparation as the Linux burrito-build legs: Syntect
-        # must finish compiling with its host NIF before that artifact can be
-        # replaced with the musl build.
-        name: Compile makeup_syntect with its host NIF
-        env:
-          MIX_ENV: prod
-        run: mix deps.compile castore rustler_precompiled makeup_syntect
-        working-directory: app
-      -
-        name: Pre-compile mdex_native with its musl NIF
-        env:
-          MIX_ENV: prod
-          TARGET_ABI: musl
-        run: mix deps.compile mdex_native
-        working-directory: app
-      -
-        # Install Syntect's musl artifact and apply the same libgcc repair to
-        # both Rust NIFs as the standalone Linux binaries.
-        name: Install and repair the musl NIFs
-        run: ../ci/prepare_musl_nifs.sh
-        working-directory: app
-      -
-        name: Build the linux_x86_64 target (container's payload)
-        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
-        working-directory: app
+          name: burrito-${{ matrix.target }}
+          path: app/burrito_out
       -
         name: Build the image
         env:
           APP_VERSION: ${{ needs.burrito-package.outputs.tag_name }}
+          BURRITO_TARGET: ${{ matrix.target }}
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Verify the musl NIF actually loads on Alpine before publishing.
@@ -409,12 +385,9 @@ jobs:
         # Markdown renders, forcing the MDEx and Syntect NIFs, their bundled
         # libgcc runtimes, Makeup, and the Elixir/Ruby lexers to load. It then
         # prints the version and exits 0; no API key or network is needed.
-        # ci/build_image.sh prefers
-        # Podman, so the image lives in Podman's local storage; we run it
-        # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
-        # overridden to false (the image bakes in true so the default CMD
-        # starts the daemon; without this override the app ignores `version`
-        # and stays alive as a daemon, timing out the step). See EXT-7.
+        # Podman owns the image built above, so run it directly. Overriding
+        # LINEAR_CLI_DAEMON lets `lc version` exit instead of starting the
+        # daemon. See EXT-7.
         name: Smoke-test the container image Markdown runtime on Alpine/musl
         timeout-minutes: 1
         run: |
@@ -433,7 +406,7 @@ jobs:
         name: Save the image to a tarball for Trivy to scan directly
         id: save
         run: |
-          tarball="$RUNNER_TEMP/linear-cli.tar"
+          tarball="$RUNNER_TEMP/linear-cli-${{ matrix.arch }}.tar"
           ./ci/save_image.sh "${{ needs.burrito-package.outputs.tag_name }}" "$tarball"
           printf 'tarball_path=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
       -
@@ -450,12 +423,13 @@ jobs:
           input: ${{ steps.save.outputs.tarball_path }}
           scan-type: image
           format: cyclonedx
-          output: container-sbom.cdx.json
+          output: container-sbom-${{ matrix.arch }}.cdx.json
       -
-        name: Publish the image
+        name: Publish the ${{ matrix.arch }} image
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY_TAG_SUFFIX: -${{ matrix.arch }}
         run: ./ci/publish.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Can't attach this to the GitHub release the burrito-package job
@@ -465,9 +439,35 @@ jobs:
         name: Upload the container SBOM as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: container-sbom
-          path: container-sbom.cdx.json
+          name: container-sbom-${{ matrix.arch }}
+          path: container-sbom-${{ matrix.arch }}.cdx.json
           retention-days: 90
+
+  container-manifest:
+    needs: [burrito-package, container]
+    name: Publish multi-architecture container manifest
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Publish the amd64 and arm64 image manifest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          TAG: ${{ needs.burrito-package.outputs.tag_name }}
+        run: |
+          image_repo=ghcr.io/rubyists/linear-cli
+          printf '%s' "$GITHUB_TOKEN" | podman login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+
+          mapfile -t tags < <(echo "$TAG" | awk -F'.' 'NF==3{print; print $1"."$2; print $1; next} NF==2{print; print $1; next} {print}')
+
+          for published_tag in "${tags[@]}"
+          do
+              manifest="$image_repo:$published_tag"
+              podman manifest create "$manifest"
+              podman manifest add "$manifest" "docker://$image_repo:${published_tag}-amd64"
+              podman manifest add "$manifest" "docker://$image_repo:${published_tag}-arm64"
+              podman manifest push --all "$manifest" "docker://$manifest"
+          done
 
   homebrew-tap-bump:
     needs: [burrito-package]

@@ -1,6 +1,8 @@
 defmodule GitHooksTest do
   use ExUnit.Case, async: true
 
+  @moduletag :ci_only
+
   @subject_guard Path.expand("../ci/validate_conventional_subject.sh", __DIR__)
   @branch_guard Path.expand("../ci/validate_commit_branch.sh", __DIR__)
   @title_guard Path.expand("../ci/validate_pull_request_title.sh", __DIR__)

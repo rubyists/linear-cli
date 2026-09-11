@@ -1,15 +1,16 @@
-# Wraps the already-built Linux x86_64 Burrito binary (see
+# Wraps the already-built Linux Burrito binary (see
 # documents/phase-8-plan.adoc) rather than a separate Elixir build stage -
 # one build artifact, reused for both the CLI distribution and this image.
 # Build with ci/build_image.sh (which finds this via its
 # Dockerfile/Containerfile/oci/Containerfile search order - build context
 # is still the repo root, so the COPY paths below are unaffected by this
-# file's own location) after app/burrito_out/lc_linux_x86_64
-# already exists (`MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release
+# file's own location) after the matching `app/burrito_out/lc_linux_*`
+# binary already exists (`MIX_ENV=prod BURRITO_TARGET=linux_* mix release
 # lc`).
 FROM alpine:3.22
 
 ARG APP_VERSION
+ARG BURRITO_TARGET=linux_x86_64
 LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 # ca-certificates: Linear's API is HTTPS-only, and Alpine's base image
@@ -24,7 +25,7 @@ RUN apk add --no-cache ca-certificates bash
 # `exec lc ...`, resolving it via PATH - both go in /usr/local/bin/ together
 # so that resolution actually works, rather than the bare `/lc` this used
 # before (which isn't on PATH at all).
-COPY app/burrito_out/lc_linux_x86_64 /usr/local/bin/lc
+COPY app/burrito_out/lc_${BURRITO_TARGET} /usr/local/bin/lc
 COPY bin/lcreate bin/lcls bin/lclose bin/lcomment bin/lproj /usr/local/bin/
 RUN chmod +x /usr/local/bin/lc /usr/local/bin/lcreate /usr/local/bin/lcls \
         /usr/local/bin/lclose /usr/local/bin/lcomment /usr/local/bin/lproj

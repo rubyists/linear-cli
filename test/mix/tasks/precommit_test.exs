@@ -14,7 +14,7 @@ defmodule Mix.Tasks.PrecommitTest do
     assert :ok = Precommit.run([], shell)
 
     assert_received {:run, "mix", ["format", "--check-formatted"], []}
-    assert_received {:run, "mix", ["test"], []}
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], []}
     assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
     assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
     assert_received {:run, "mix", ["test", "--exclude", "ci_only"], [cd: "app"]}
@@ -43,6 +43,9 @@ defmodule Mix.Tasks.PrecommitTest do
     helper = Path.expand("../../../app/test/test_helper.exs", __DIR__)
 
     refute File.read!(helper) =~ "ExUnit.start(exclude: [:ci_only])"
+
+    root_ci_only_test = Path.expand("../../git_hooks_test.exs", __DIR__)
+    assert File.read!(root_ci_only_test) =~ "@moduletag :ci_only"
   end
 
   test "rejects arguments" do
