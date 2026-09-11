@@ -491,9 +491,10 @@ $ lproj list --mine
 
 == Development
 
-First, activate the repo's git hooks (enforces conventional-commit subjects
-on every commit and push, and runs a Hex dependency security audit before a
-push):
+In a shell with Mise activated, entering the checkout installs the repo's git
+hooks when needed. Otherwise, activate them manually (they enforce
+conventional-commit subjects on every commit and push, and run a Hex dependency
+security audit before a push):
 
 [source,sh]
 ----
