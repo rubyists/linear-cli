@@ -22,9 +22,11 @@ defmodule Mix.Tasks.Ci do
     5. `mix hex.audit` — reject retired or vulnerable Hex packages
     6. `mix deps.audit` — scan dependencies for known security advisories
     7. `mix usage_rules.sync --check` — catch usage-rule drift after dep bumps
-    8. `mix test` — run the complete app test suite, including CI-classified tests
+    8. `mix test` — run the complete root test suite, including CI-classified tests
+    9. `mix test` — run the complete app test suite, including CI-classified tests
 
-  Step 1 and steps 5-8 run inside `app/`. Steps 2-3 run from the repo root.
+  Step 1 and steps 5-7 and 9 run inside `app/`. Steps 2-3 and 8 run from the
+  repo root.
   Step 4 expands to all of `mix precommit`'s steps in place.
 
   Every check in `mix precommit` also runs through `mix ci`. The relationship
@@ -59,6 +61,7 @@ defmodule Mix.Tasks.Ci do
     shell.("mix", ["hex.audit"], cd: "app")
     shell.("mix", ["deps.audit"], cd: "app")
     shell.("mix", ["usage_rules.sync", "--check"], cd: "app")
+    shell.("mix", ["test"], [])
     shell.("mix", ["test"], cd: "app")
     :ok
   end
