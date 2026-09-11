@@ -1,7 +1,7 @@
 = {my-title}
 Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
-:revdate: Sep 11, 2026
-:my-title: Phase 17 plan: split issue command helpers by workflow
+:revdate: Sep 07, 2026
+:my-title: Phase 17 plan: separate issue-list label display from label filtering
 :icons: font
 :env-github:
 ifdef::env-github[]
@@ -15,398 +15,297 @@ endif::[]
 
 == Goal
 
-Replace the monolithic `LinearCli.CLI.IssueHelpers` and
-`LinearCli.CLI.Commands` modules with small, workflow-oriented CLI modules.
-Preserve every existing command, output, interactive prompt, error shape, and
-return contract while making each issue workflow independently understandable
-and testable.
+Give issue listing an explicit presentation flag. `-i/--include-labels`
+includes each issue's labels in the output without selecting a subset of
+issues. Keep the existing `-l/--labels NAME[,NAME...]` spelling for label-name
+filtering and `-s/--status STATUS` spelling for friendly-status filtering.
+Every existing option keeps its contract; this phase adds only the missing
+presentation control:
 
-This is a structural refactor. It introduces no user-facing command, no
-Linear GraphQL operation, no Ash resource/action/code interface, and no change
-to the persisted profile or favorites format.
+[source,sh]
+----
+# Include labels on the normal compact listing without filtering its issues.
+lcls --include-labels
+lcls -i
 
-== Context
+# Include every assignee and every lifecycle state, with labels in the output.
+lcls -N --include-labels --all
+lcls -N -i --all
 
-`app/lib/linear_cli/cli/issue_helpers.ex` is 618 lines and exposes fourteen
-public operations. Its 916-line test file covers comment, close/cancel,
-workflow-state selection, pull requests, project attachment, update dispatch,
-creation, bare-ID expansion, and self-assignment.
+# Return issues carrying Bug, and include their labels in the output.
+lcls --labels Bug
+lcls -l Bug
 
-`app/lib/linear_cli/cli/commands.ex` is larger still at 1,440 lines. It owns
-unrelated top-level commands (whoami/version, team, project, and profile) and
-every issue command from list/view through relation management. Its
-`issue_commands_test.exs` counterpart is 4,877 lines. Both files have become
-the default landing place for unrelated command work simply because their
-names are broad.
+# Match Bug or Feature, case-insensitively.
+lcls --labels Bug,Feature
 
-The module started as a 401-line Phase 6 port of Ruby's single
-`CLI::Issue` object. Subsequent phases correctly reused its available entry
-points, but added distinct responsibilities:
+# Show labels for a specifically named issue.
+lcls CRY-123 --include-labels
 
-* Phase 9 added active-profile defaults to issue creation.
-* Phase 11 added bare numeric-ID expansion through profiles, favorites, and a
-  team prompt.
-* Phase 12 added project moves using a pre-resolved project.
-* Later issue work added non-interactive creation and status resolution.
+# Existing status filtering composes without changing its short option.
+lcls -s "Human Review" --include-labels
+----
 
-The result is not a set of closely related low-level helpers. It is the CLI
-orchestration boundary for several independent issue workflows. The generic
-`IssueHelpers` name obscures that boundary and makes routine changes touch a
-large, highly coupled source and test file.
+== Context and failure mode
+
+Versions 2.7.0 and 2.8.0 expose `-l/--labels LABELS` on `issue list` as a
+value-taking filter. Commit `f966f14` introduced the filter; commit `8073f9a`
+then made compact label rendering conditional on that same filter being
+present. That coupled three different concerns:
+
+* which issues the API selects;
+* whether the GraphQL selection retrieves each issue's labels; and
+* whether the CLI renders those labels.
+
+The coupling produces a silent and misleading failure for the motivating
+command:
+
+[source,sh]
+----
+lcls -N --labels --all
+----
+
+Optimus treats `--labels` as an option requiring a value and consumes `--all`
+as that value. `parse_labels/1` accepts it as the label name `"--all"`, so the
+real `--all` flag is never set. The CLI sends a case-insensitive filter for a
+label literally named `--all`; Linear returns no issues; formatting the empty
+list produces only a newline and exit status zero. The user's real labels are
+irrelevant because the request accidentally names a label that does not exist.
+
+The behavior was reproduced against the installed 2.8.0 binary. Supplying the
+intended value (`lcls -N --labels Bug --all`) returned the existing Bug-labeled
+issues, confirming that authentication, label data, and the Linear API were
+all working.
+
+Phase 17 does not reinterpret that malformed command as presentation. It gives
+presentation the explicit `--include-labels` name and makes the malformed
+`--labels --all` form fail clearly. The corrected presentation command is
+`lcls -N --include-labels --all`.
 
 == Decisions
 
-=== Keep the behavior in the CLI layer
+1. *`-i/--include-labels` is the boolean issue-list display flag.* It requests
+   label data and includes every returned issue's labels in text and JSON
+   output. It never adds a label filter. In compact text, labels remain the
+   existing trailing bracketed list (`[Bug, Feature]`); an issue with no labels
+   gets no empty bracket marker. `-i` is unused by `issue list` and by the
+   inherited global options; the top-level bare `i` subcommand alias is a
+   different token and does not conflict.
+2. *`-l/--labels` remains the issue-list label filter.* It takes one label name
+   or a comma-separated list and preserves the existing case-insensitive OR
+   semantics. A label filter continues to imply label display so a user can see
+   all labels on every match without also spelling `--include-labels`.
+3. *Presentation and filtering compose but do not imply each other in the
+   other direction.* `--include-labels` alone changes only fetched/rendered
+   fields; `--labels Bug` filters and displays; using both is valid and
+   equivalent to the filter alone for label retrieval and rendering.
+4. *`-s/--status` stays exactly as it is.* Reusing `-s` for presentation would
+   break an established issue-list contract, so it is explicitly out of scope.
+   `-l/--labels`, `-s/--status`, and every other existing short and long option
+   retain their current spelling and meaning.
+5. *An option token must not silently become a label-filter value.* The
+   `--labels` parser must reject a following recognized option such as `--all`
+   with a clear missing-value/invalid-value error before any API call. Moving
+   presentation to a new flag without closing the original parser hole would
+   leave the motivating silent failure intact.
+6. *`issue create` is unchanged.* Its existing `-l/--labels Bug,Feature`
+   option assigns labels to a new issue and remains value-taking. Optimus
+   scopes options to their leaf subcommand; the create and list forms happen to
+   retain the same value-taking labels spelling but have independent parsers.
+7. *Do not fetch label fields by default.* A normal list without
+   `--include-labels` or `--labels VALUE` keeps the smaller GraphQL selection and
+   existing compact output. The new behavior is opt-in and does not add
+   avoidable response weight to every listing.
 
-The split remains under `LinearCli.CLI`. These functions resolve interactive
-input through `WhatFor`/`Prompt`, print confirmations, and consult `Profiles`
-and `Favorites`. Moving them into `LinearCli.Linear` would make the Ash domain
-aware of terminal interaction and local CLI defaults, breaking the established
-top-to-bottom layering.
+== Verified implementation boundaries
 
-The domain continues to own only API-facing actions such as
-`Linear.create_issue/4`, `Linear.assign_issue/3`,
-`Linear.workflow_states_by_team/1`, and `Linear.attach_issue_to_project/2`.
+* `app/lib/linear_cli/cli.ex` defines `issue list`'s current
+  `-l/--labels` entry under `options`, routed through `parse_labels/1`. The
+  same list spec binds `-s` to `--status`; both existing entries stay intact.
+  The separately scoped `issue create` labels option also does not change in
+  this phase.
+* `LinearCli.CLI.Commands.issue_list/1` currently copies
+  `options.labels` into the domain input and passes
+  `labels: input.labels != []` to `Display.show/2`. This is the CLI-layer
+  coupling point to split.
+* `LinearCli.Linear.Issue`'s `:list` action currently has one `labels` array
+  argument, used as the server-side filter. `Issue.Read.List.read/4` also uses
+  `args.labels != []` to choose between the base GraphQL document and the
+  label-bearing document. The filter argument can stay intact; a separate
+  `include_labels` boolean is needed for field selection.
+* `Issue.from_map/1` already parses `issue.labels.nodes` into `%Label{}`
+  structs, and `Issue.list_fields_with_labels/0` already supplies the needed
+  GraphQL selection. No new resource or response mapper is required.
+* `LinearCli.CLI.Display` already accepts a boolean `labels` display option and
+  has tests for showing and hiding trailing label brackets. That internal
+  contract and the current accessible, linear text format can remain intact.
+* ID-driven `issue list` calls use `Issue.full_fields/0`, which already fetches
+  labels. `--include-labels` controls whether compact output prints them; the
+  existing full-output `Labels:` line remains unchanged.
 
-=== Split by durable user workflow, not one module per function
+== Implementation design
 
-Create these modules in `app/lib/linear_cli/cli/issue/`:
+=== CLI parsing
 
-[cols="1,2,3", options="header"]
-|===
-| Module
-| Public responsibility
-| Existing `IssueHelpers` responsibilities moved there
+In `app/lib/linear_cli/cli.ex`:
 
-| `LinearCli.CLI.Issue.Identifiers`
-| Normalize an issue identifier before lookup.
-| `expand_issue_id/1`, including active-profile, favorite-team, and prompt
-  fallback.
+* add `include_labels` to the `issue list` `flags` block with short name `-i`,
+  long name `--include-labels`, and help text such as
+  `Include labels in issue list output`;
+* retain the value-taking `labels` option as `-l/--labels LABELS` and preserve
+  its comma-separated, case-insensitive OR parser;
+* retain the existing `-s/--status STATUS` option unchanged; and
+* make `parse_labels/1` reject a recognized flag token supplied as
+  `--labels`' would-be value, so `lcls --labels --all` exits as a usage error
+  and makes no GraphQL request.
 
-| `LinearCli.CLI.Issue.WorkflowStates`
-| Resolve a completed, cancelled, or explicitly named workflow state for an
-  already-loaded issue.
-| `cancelled_state_for/2`, `completed_state_for/2`, and the exact/unique-prefix
-  matching used by assignment status selection.
+Do not change the separately scoped `issue create` labels option or its
+parser.
 
-| `LinearCli.CLI.Issue.Actions`
-| Perform mutations on an already-loaded issue and coordinate `issue update`.
-| Comment, close, cancel, description update, project attachment/move, and
-  update precedence/normalization.
+=== Command and domain inputs
 
-| `LinearCli.CLI.Issue.Creation`
-| Create an issue interactively or under `--yes`.
-| `make_da_issue!/1`, required-field validation, strict team resolution, and
-  optional-project parameter construction.
+In `LinearCli.CLI.Commands.issue_list/1`:
 
-| `LinearCli.CLI.Issue.Assignment`
-| Look up an issue and assign it to the current user when needed.
-| `gimme_da_issue!/2`, viewer resolution, status-ID resolution, and
-  already-assigned confirmation.
+* retain `label_filter = Map.get(options, :labels) || []`;
+* derive `include_labels` as
+  `Map.get(flags, :include_labels, false) || label_filter != []`;
+* pass the existing domain filter as `labels: label_filter`;
+* pass the new domain selection switch as
+  `include_labels: include_labels`; and
+* pass the existing `labels: include_labels` option to `Display.show/2`.
 
-| `LinearCli.CLI.Issue.PullRequest`
-| Gather PR text and invoke `gh pr create`.
-| `create_pr!/3` and `issue_pr/2`.
-|===
+In the `LinearCli.Linear.Issue` `:list` action, add
+`argument :include_labels, :boolean, default: false`. Keep `:labels` as the
+array of names used by `maybe_put_label_filter/2`; this avoids an unnecessary
+break in the domain code interface while giving each concern one explicit
+input.
 
-`Actions` deliberately groups mutations on an already-resolved issue rather
-than splitting comment, lifecycle, project, and update-dispatch code into
-single-function modules. That is the smallest useful boundary: they share
-confirmation/error conventions and `update_issue/2`'s documented precedence.
+`Issue.Read.List` chooses `list_document_with_labels/0` from
+`args.include_labels`, not from whether `args.labels` is empty. Filtering still
+comes exclusively from `maybe_put_label_filter/2`. As a defensive domain
+invariant, a non-empty `args.labels` value should also force label field
+selection even if a future caller forgets to set `include_labels`; the CLI
+sets both deliberately, while the manual read remains safe for direct domain
+callers.
 
-=== Remove the generic facade after one coordinated call-site migration
+=== Display and output formats
 
-Do not retain `IssueHelpers` as a permanent delegating compatibility facade.
-All production callers are internal to this application, so a facade would
-leave the misleading abstraction in place and add one more indirection without
-protecting a supported external API.
+Keep the internal boolean `labels` display option unchanged. Compact text
+continues to append all returned label names in brackets when enabled. It does
+not show only the name used to filter: an issue matching `Bug` but also carrying
+`Feature` renders both.
 
-Migrate `Commands` and the one incidental internal reference directly to the
-new modules in the same change, then delete `issue_helpers.ex`. Use local
-aliases in `Commands` so command bodies remain readable. The resulting names
-retain the established operation names within an explicit workflow namespace:
-`Identifiers.expand_issue_id/1`, `Creation.make_da_issue!/1`, and
-`Assignment.gimme_da_issue!/2`, for example. Update their specs and docs in
-the same change.
+JSON output must contain the populated `labels` array whenever
+`--include-labels` or `--labels VALUE` requested label data. Without either
+switch, its current unloaded empty/default value remains unchanged; this phase
+does not make every JSON listing pay for nested label data.
 
-The refactor must not leave duplicate implementations or compatibility wrappers
-whose sole purpose is forwarding an old helper name.
+== Tests
 
-=== Preserve contracts exactly before improving them separately
+Extend the existing consolidated test files rather than introducing a new
+suite.
 
-This phase preserves current quirks and contracts, including:
+`app/test/linear_cli/cli/issue_commands_test.exs`:
 
-* `Actions.update/2` returns `:ok | {:error, reason}`, while the other
-  mutation functions retain their existing `{:ok, value} | {:error, reason}`
-  shapes.
-* Closing/cancelling remains idempotent; the same messages and `:trash`,
-  `:reason`, `:status`, and `:cancel` behavior remain intact.
-* Workflow states continue to select a sole result directly, prompt among
-  several results without an explicit status, and accept case-insensitive
-  exact or unique-prefix status names when supplied.
-* Bare numeric IDs retain the resolution order: active profile, one/many team
-  favorites, then `WhatFor.ask_for_team/0`. Non-numeric IDs still pass through
-  unchanged.
-* Interactive creation and `--yes` creation keep their present handling of
-  labels, project defaults, strict project lookup, and tagged `:smells_bad`
-  errors.
-* Pull-request invocation keeps its injectable runner and current stdout
-  behavior; this refactor must not change shell command arguments.
+* the desired command, `issue list -N --include-labels --all` (and its `-i`
+  spelling), parses both boolean flags, sends neither an assignee nor
+  lifecycle-date filter, sends no label filter, requests label fields, and
+  renders returned labels;
+* bare `--include-labels` requests label fields while leaving the API filter
+  free of a `labels` key;
+* `--labels Bug` and `-l Bug` preserve single-name case-insensitive filtering
+  and display labels;
+* `--labels Bug,Feature` preserves OR filtering and displays every label on a
+  matching issue;
+* `--labels no-such-label` returns the normal empty result;
+* `--labels` followed by `--all` is a clear usage error and sends no request;
+* `-s "Human Review"` and `--status "Human Review"` retain friendly-status
+  filtering and compose with `-i/--include-labels`;
+* a positional issue identifier composed with trailing `--include-labels` still
+  uses the full issue lookup and renders its labels;
+* with neither label switch, labels stay out of the compact GraphQL selection
+  and text; and
+* `--output json --include-labels` contains the fetched label objects without
+  human text mixed into stdout.
 
-Potential UX changes such as making unmatched project selection safe, changing
-the `smells_bad` vocabulary, or redesigning `issue update` precedence require
-their own approved plan and must not be folded into this move-only work.
+`app/test/linear_cli/linear/issue_test.exs`:
 
-=== Split commands by CLI command family and remove the forwarding facade
+* `include_labels: true, labels: []` selects and parses label fields without
+  adding a label filter;
+* `include_labels: false, labels: []` retains the base selection;
+* non-empty `labels` retains the existing single/multiple filter shapes and
+  defensively selects label fields; and
+* API errors and pagination behave identically for both document variants.
 
-Create these modules in `app/lib/linear_cli/cli/commands/`:
+`app/test/linear_cli/cli/display_test.exs` retains its existing boolean
+`labels` option coverage for multiple labels and an unlabeled issue; no display
+API rename is part of this phase.
 
-[cols="1,3", options="header"]
-|===
-| Module
-| Commands owned
+The focused verification command is:
 
-| `LinearCli.CLI.Commands.System`
-| `whoami` and `version`.
-
-| `LinearCli.CLI.Commands.Teams`
-| team list, favorite, and unfavorite.
-
-| `LinearCli.CLI.Commands.Projects`
-| project list, favorite, unfavorite, and update.
-
-| `LinearCli.CLI.Commands.Profiles`
-| profile create, list, use, show, clear, and delete.
-
-| `LinearCli.CLI.Commands.Issues.Read`
-| issue list and view.
-
-| `LinearCli.CLI.Commands.Issues.Create`
-| issue create.
-
-| `LinearCli.CLI.Commands.Issues.Development`
-| issue develop, PR, and take.
-
-| `LinearCli.CLI.Commands.Issues.Mutations`
-| issue update, comment, status, and assign.
-
-| `LinearCli.CLI.Commands.Issues.Move`
-| issue move, including its one- and bulk-project modes.
-
-| `LinearCli.CLI.Commands.Issues.Relations`
-| issue relation list, add, and remove, including their shared result
-  rendering and safe multi-target behavior.
-|===
-
-The goal is cohesive command-family files, not a file per leaf command.
-`Relations` and `Move` are intentionally separate because each has substantial
-command-specific resolution/reporting logic. `Mutations` keeps commands that
-change an already-resolved issue but do not constitute a larger standalone
-workflow. If any resulting module remains difficult to navigate, split it at a
-real subcommand boundary in the same namespace rather than restoring a generic
-catch-all module.
-
-`LinearCli.CLI` is the sole production dispatcher for the current
-`Commands.*` functions. Update it to alias and call the family modules
-directly, then delete `commands.ex`; do not retain a permanent
-`LinearCli.CLI.Commands` forwarding facade. Update tests to call the owning
-module directly. This is internal code, not a supported library API.
-
-== Verified call sites and dependency direction
-
-`LinearCli.CLI.Commands` is the substantive production consumer of
-`IssueHelpers`; it expands identifiers for list/update/status-style flows,
-creates issues, takes/develops issues through self-assignment, dispatches
-updates, and opens pull requests. `LinearCli.CLI` is the sole production
-consumer of `Commands`; it dispatches every parsed command through its public
-functions. `LinearCli.Profiles` mentions creation only in documentation; it
-has no runtime dependency requiring a compatibility facade. The existing test
-suite is the other direct consumer and must be split with the code.
-
-The dependency direction after the change is:
-
+[source,sh]
 ----
-Commands
-  -> CLI.Issue.{Identifiers, Creation, Assignment, Actions, PullRequest}
-  -> CLI.Issue.WorkflowStates       (Actions and Assignment only)
-  -> CLI.{WhatFor, Projects, Prompt} and {Profiles, Favorites}
-  -> Linear                         (domain code interfaces)
+cd app
+mix test \
+  test/linear_cli/cli/issue_commands_test.exs \
+  test/linear_cli/linear/issue_test.exs \
+  test/linear_cli/cli/display_test.exs
 ----
 
-After the command split, `CLI` replaces the first line with direct calls to
-`CLI.Commands.{System, Teams, Projects, Profiles, Issues.*}`. Command-family
-modules may depend on the focused `CLI.Issue.*` workflow modules, display and
-prompt helpers, and `Linear`; they must not call one another through a deleted
-`Commands` facade.
-
-`WorkflowStates` may depend on `Prompt` and `Linear`, but it must not depend
-on `Actions` or `Assignment`. `Identifiers` must remain independent of issue
-lookup and assignment. This keeps the modules acyclic and prevents a new
-catch-all module from re-forming around shared private functions.
-
-== Building blocks
-
-=== 1. Establish the namespace and move pure orchestration boundaries
-
-Add the six modules under `cli/issue/` with focused moduledocs, specs, and only
-the aliases each module needs. Move code without semantic edits first. Private
-helpers move beside the public workflow that owns them; do not make private
-helpers public merely to avoid moving a few lines.
-
-Where both lifecycle and assignment need state-name matching, expose one small,
-well-named `WorkflowStates` operation rather than copying its
-case-insensitive exact/unique-prefix algorithm. Keep the distinct lifecycle
-selection rule (sole state/prompt/no matching state) in that module too, since
-it is one workflow-state policy.
-
-=== 2. Migrate CLI command wiring
-
-Replace the `IssueHelpers` alias in `Commands` with aliases for the specific
-workflow modules. Update every call site in one coherent change:
-
-* all bare-ID expansion uses `Identifiers`;
-* issue create uses `Creation`;
-* take/develop/PR preparation uses `Assignment`;
-* update/comment/project/lifecycle work uses `Actions`; and
-* PR creation uses `PullRequest`.
-
-Use the resulting explicit names in command moduledocs and nearby comments.
-Update references in `display.ex`, `profiles.ex`, and any other internal
-documentation so no stale `IssueHelpers` module reference remains.
-
-Delete `app/lib/linear_cli/cli/issue_helpers.ex` only after `rg` confirms no
-production, test, or documentation reference remains, except the historical
-context in this plan and prior plans.
-
-=== 3. Split helper tests by the same boundary
-
-Replace `issue_helpers_test.exs` with focused test modules:
-
-* identifiers and workflow-state resolution;
-* actions/update dispatch;
-* creation;
-* assignment; and
-* pull-request behavior.
-
-Extract only genuinely shared test fixtures and request stubbing into a small
-test-support module. It may provide constructed issue/team/user records and
-the existing operation-name-based GraphQL response stub, but it must not hide
-the behavior each test is asserting. Tests keep their current async safety and
-must not introduce shared mutable profile/favorites state outside the existing
-profile-aware test setup.
-
-Do not duplicate command-level coverage. The refactor must retain the targeted
-unit coverage for each workflow and the existing command tests prove that the
-renamed wiring still reaches the same authoritative GraphQL boundary.
-
-=== 4. Extract command families and migrate the dispatcher
-
-Move each `Commands` function with its private helpers into the command-family
-module that owns its user-facing command. Preserve injectable options used by
-tests (`cwd`, `me`, `runner`, and `halt` where applicable), function arities,
-and parser-result input shapes. Private helpers stay with their command family;
-they do not become broad shared utilities merely to reduce a few lines of
-repetition.
-
-Update `CLI`'s dispatch clauses directly to the new modules. Keep parsing,
-dispatch selection, `run/3`, and central error handling in `CLI`; this phase
-does not move Optimus specifications or alter command dispatch semantics.
-
-Split `issue_commands_test.exs` into focused command-family test modules:
-read/create/development, mutations, move, and relations. Extract only shared
-fixture and Req-test response helpers needed by more than one module. Also
-move the smaller favorites command tests to the owning teams/projects modules
-when doing so removes a stale `Commands` reference. Preserve profile-default
-coverage in its existing focused test module while updating its aliases.
-
-Delete `app/lib/linear_cli/cli/commands.ex` and its old giant issue-command
-test file only after all dispatch, production, test, and documentation
-references have moved.
-
-== Tests and verification
-
-Run the app formatter and the focused replacement test modules while moving
-each workflow. Before considering the work complete, run the complete app
-suite and the repository's normal local gate.
-
-At the behavioral boundary, compare the pre- and post-refactor test coverage
-for all of these cases:
-
-* comment success/error; close/cancel success, idempotency, state selection,
-  trash option, and error propagation;
-* `issue update` comment-first precedence, every recognized action, description
-  update, and no-option result;
-* interactive and `--yes` issue creation, required fields, profile defaults,
-  strict team/project failures, labels, and API errors;
-* bare and already-expanded/UUID identifiers, each profile/favorites/prompt
-  fallback, self-assignment, explicit status ID, exact status, unique prefix,
-  unknown status, and ambiguous status; and
-* injectable PR runner, generated title/body selection, and emitted output;
-  and
-* every top-level/team/project/profile/issue dispatch route, including bulk
-  move and multi-target relation reporting, with unchanged human and JSON
-  output contracts.
-
-Use `git diff --check` and `rg` for stale `IssueHelpers` references. No live
-Linear mutation is needed: the existing Req-test GraphQL stubs are the
-authoritative boundary for this move-only refactor.
+Finish with the repository's complete `mix precommit` gate from the root.
 
 == Documentation
 
-Add this Phase 17 document to `AGENTS.md`'s plan index as part of planning.
-The implementation updates code moduledocs, stale cross-references, and the
-current `AGENTS.md` CLI-layer diagram so it names `CLI.Commands.*` and
-`CLI.Issue.*` rather than the deleted broad modules. It does not change the
-README because CLI behavior and command syntax are unchanged.
+* `Readme.adoc`'s List Issues section gains the command contract shown in the
+  Goal, including the explicit distinction between `--include-labels`
+  (presentation) and `--labels` (filtering). No migration note is needed for
+  existing valid commands because their contracts do not change.
+* Optimus-generated `issue list --help` must add `-i, --include-labels` under
+  FLAGS while retaining `-l, --labels LABELS` and `-s, --status STATUS` under
+  OPTIONS.
+* `documents/ash-domain-erd.adoc` must be updated in the implementation change
+  because adding the `include_labels` Ash action argument and materially
+  clarifying the `labels` argument changes the canonical domain inventory.
+* Release notes call out the additive `-i/--include-labels` flag. Do not edit
+  historical changelog entries that accurately describe 2.7/2.8.
+* `AGENTS.md` indexes this Phase 17 plan. No repository-layout or module-tree
+  update is needed because the phase adds no top-level directory or major
+  architectural layer.
 
-Do not update `documents/ash-domain-erd.adoc`: no Ash resource, action, code
-interface, association, or shared domain helper changes in this phase. If
-implementation discovers a necessary domain change, stop and plan that change
-separately rather than silently expanding this refactor.
+== Sequencing
 
-== Linear issue decomposition
+This phase depends on the label-filter and compact-label work already released
+in 2.7.0 and 2.8.0 and is based on `origin/main` at v2.8.0.
 
-1. *Introduce issue identifiers and workflow-state modules.* Move bare-ID
-   expansion and all workflow-state selection/matching code, update direct
-   callers, and split their focused tests. This establishes the shared
-   dependency used by later work.
-2. *Extract issue lifecycle actions.* Move comment, close/cancel, description,
-   project move/attachment, and update-dispatch behavior into `Actions`; update
-   command wiring and tests. Depends on issue 1 for workflow-state resolution.
-3. *Extract issue creation and assignment workflows.* Move both interactive and
-   `--yes` creation plus self-assignment/status handling into `Creation` and
-   `Assignment`; migrate callers and focused tests. Depends on issue 1;
-   otherwise independent of issue 2.
-4. *Extract pull-request workflow and remove IssueHelpers.* Move PR behavior,
-   complete the coordinated helper call-site/documentation migration, delete
-   the old module and test file, and verify no stale helper references. Depends
-   on issues 2 and 3.
-5. *Extract non-issue command families.* Move system, team, project, and
-   profile commands; rewire their `CLI` dispatch clauses and focused tests.
-   This is independent of issues 1-4.
-6. *Extract ordinary issue command families.* Move read, create, development,
-   and mutation commands; rewire dispatch and split their tests. Depends on
-   issues 1-4 because the commands use the focused issue workflows.
-7. *Extract issue move and relation commands; remove Commands.* Move the move
-   and relation families, migrate remaining dispatch/test/documentation
-   references, delete `commands.ex` and the giant issue-command test file, run
-   complete validation, and confirm no stale `Commands` references remain.
-   Depends on issues 5 and 6.
+1. Change the `issue list` Optimus contract and add parser-level regression
+   coverage, including `-N --include-labels --all`, `-i`, unchanged `-s`
+   status filtering, and a clear failure for the motivating malformed
+   `--labels --all` ordering.
+2. Split filter names from label-field selection through
+   `Commands.issue_list/1` and the `Issue` read action; update domain tests and
+   `documents/ash-domain-erd.adoc` in the same change.
+3. Route the new flag through the existing display switch, update text/JSON
+   tests, and preserve the existing output format.
+4. Update the README, generated help, and release notes.
+5. Run focused tests, `mix precommit`, and manual dogfooding through
+   `mix lc` (never an alternate Linear client).
+
+Implementation should use a feature branch from the then-current `main`; the
+plan branch contains documentation only. Conventional commit type: `feat`.
 
 == Acceptance criteria
 
-* `IssueHelpers`, `Commands`, and their monolithic test files are deleted; no
-  non-historical source, test, or documentation reference remains.
-* Each replacement module has one workflow responsibility and the dependency
-  graph remains acyclic.
-* Every existing CLI command keeps its command syntax, prompts, output,
-  GraphQL calls, return shapes, and error behavior.
-* Workflow-state matching exists in exactly one implementation and is reused by
-  lifecycle and assignment flows.
-* Focused tests retain all current behavior coverage without unnecessary
-  duplicated stubbing or command-level tests.
-* The complete app suite and normal repository local gate pass, and
-  `git diff --check` is clean.
-* `AGENTS.md` indexes this plan and describes the replacement CLI modules; no
-  Ash-domain document is changed unless the scope legitimately expands through
-  a separately approved plan.
+* `lcls -N --include-labels --all` and `lcls -N -i --all` list issues across
+  assignees and lifecycle states and include their labels without adding a
+  label filter.
+* `-i/--include-labels` never changes which issues match.
+* `-l/--labels` preserves case-insensitive, comma-separated OR filtering and
+  makes matched issues' labels visible.
+* `-s/--status` retains its existing friendly-status filtering contract.
+* `lcls --labels --all` fails clearly before any API request rather than
+  filtering for a label named `--all`.
+* `issue create -l/--labels VALUE` is unchanged.
+* Text and JSON output, paginated results, positional issue lookup, and the
+  no-label fast path all have regression coverage.
+* Help, README, release guidance, tests, and the Ash domain ERD describe the
+  same contract.

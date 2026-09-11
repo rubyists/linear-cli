@@ -94,4 +94,5 @@ Actions calls `mix ci`, not `mix precommit`.
 The repository's `pre-commit` hook refuses commits directly on `main` and then
 invokes `mix precommit`. The subsequent `commit-msg` hook validates the commit
 message after Git writes it; the `pre-push` hook remains the final local guard
-for every pushed commit subject and the Hex audit.
+by validating every pushed commit subject, rerunning `mix precommit`, and then
+performing the Hex audit.

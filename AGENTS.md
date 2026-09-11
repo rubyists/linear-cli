@@ -20,6 +20,7 @@ and best practices for agents to follow.
 - Phase 15 Plan: documents/phase-15-plan.adoc
 - Phase 16 Plan: documents/phase-16-plan.adoc
 - Phase 17 Plan: documents/phase-17-plan.adoc
+- Phase 18 Plan: documents/phase-18-plan.adoc
 - Burrito distribution decision: documents/burrito-decision.adoc
 - Development and CI quality gates decision: documents/quality-gates-decision.adoc
 

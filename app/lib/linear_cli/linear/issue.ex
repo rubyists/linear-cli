@@ -17,6 +17,7 @@ defmodule LinearCli.Linear.Issue do
       argument :state, {:array, :string}, default: []
       argument :status, {:array, :string}, default: []
       argument :labels, {:array, :string}, default: []
+      argument :include_labels, :boolean, default: false
       manual LinearCli.Linear.Issue.Read.List
     end
 
@@ -159,7 +160,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if args.ids != [] do
       find_by_ids(args.ids)
     else
-      list_all(build_filter(args), args.labels != [])
+      list_all(build_filter(args), args.include_labels || args.labels != [])
     end
   end
 

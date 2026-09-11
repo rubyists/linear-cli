@@ -269,6 +269,9 @@ defmodule LinearCli.CLI.Commands do
       options.project || unless no_profile, do: Profiles.default_project()
 
     with {:ok, project_id} <- resolve_project_id(project_source, team_key) do
+      label_filter = Map.get(options, :labels) || []
+      include_labels = Map.get(flags, :include_labels, false) || label_filter != []
+
       input = %{
         ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
         mine: !flags.no_mine,
@@ -278,14 +281,15 @@ defmodule LinearCli.CLI.Commands do
         all: Map.get(flags, :all, false),
         state: Map.get(options, :state) || [],
         status: Map.get(options, :status) || [],
-        labels: Map.get(options, :labels) || []
+        labels: label_filter,
+        include_labels: include_labels
       }
 
       with {:ok, issues} <- Linear.issues(input) do
         Display.show(issues, %{
           output: options.output,
           full: flags.full,
-          labels: input.labels != []
+          labels: include_labels
         })
 
         :ok
