@@ -70,7 +70,39 @@ entrypoint can also run as the long-lived Oban scheduling daemon. Override it
 to an empty value (as above) for one-off interactive CLI usage - otherwise
 `lc`/the wrapper scripts never see your command at all.
 
-=== Download a release binary (Most should use this)
+=== Homebrew (Recommended: macOS Apple Silicon, Linux x86_64, Linux ARM64)
+
+[source,sh]
+----
+$ brew tap rubyists/tap
+$ brew install lc
+----
+
+See https://github.com/rubyists/homebrew-tap for the formula itself.
+
+=== install.sh (for machines without Homebrew)
+
+[source,sh]
+----
+$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/install.sh | bash
+----
+
+Detects your platform, downloads and checksum-verifies the matching release
+tarball (the same one in the "Download a release binary" section below),
+and installs `lc` plus the `bin/` wrapper scripts onto a directory already on
+your `$PATH` - no Erlang/Elixir/Zig toolchain required. `LC_VERSION` pins a
+specific release tag instead of the latest one; `LC_INSTALL_DIR` pins a
+specific install directory.
+
+[source,sh]
+----
+$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/uninstall.sh | bash
+----
+
+Removes exactly what `install.sh` installed, by replaying the manifest it
+wrote - not a guess at where things ended up.
+
+=== Download a release binary
 
 Grab the tarball for your platform from the
 https://github.com/rubyists/linear-cli/releases[latest release] - macOS
@@ -103,39 +135,7 @@ so they're unaffected) since it isn't signed/notarized yet:
 $ xattr -d com.apple.quarantine /usr/local/bin/lc
 ----
 
-=== Homebrew (macOS Apple Silicon, Linux x86_64, Linux ARM64)
-
-[source,sh]
-----
-$ brew tap rubyists/tap
-$ brew install lc
-----
-
-See https://github.com/rubyists/homebrew-tap for the formula itself.
-
-=== install.sh (fetches a release binary, for machines without Homebrew)
-
-[source,sh]
-----
-$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/install.sh | bash
-----
-
-Detects your platform, downloads and checksum-verifies the matching release
-tarball (the same one the "Download a release binary" section above uses),
-and installs `lc` plus the `bin/` wrapper scripts onto a directory already on
-your `$PATH` - no Erlang/Elixir/Zig toolchain required. `LC_VERSION` pins a
-specific release tag instead of the latest one; `LC_INSTALL_DIR` pins a
-specific install directory.
-
-[source,sh]
-----
-$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/uninstall.sh | bash
-----
-
-Removes exactly what `install.sh` installed, by replaying the manifest it
-wrote - not a guess at where things ended up.
-
-=== From Source (You are obviously a developer)
+=== From Source (Developers only)
 
 [source,sh]
 ----
