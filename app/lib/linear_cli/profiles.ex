@@ -5,7 +5,7 @@ defmodule LinearCli.Profiles do
   `config/runtime.exs`'s `:profiles_db_path`), with at most one active at a
   time - enforced by a partial unique index (`active_idx`), not
   application-level bookkeeping. `default_team/0`/`default_project/0` are
-  what `LinearCli.CLI.IssueHelpers.make_da_issue!/1` and
+  what `LinearCli.CLI.Issue.Creation.make_da_issue!/1` and
   `LinearCli.CLI.Commands.issue_list/1` fall back to when `--team`/
   `--project` are omitted - see `documents/phase-9-plan.adoc`.
 
