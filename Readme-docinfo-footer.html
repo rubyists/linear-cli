@@ -1,0 +1,39 @@
+<style>
+.cast-preview a { cursor: zoom-in; }
+.cast-lightbox {
+  max-width: 96vw;
+  max-height: 96vh;
+  padding: 1rem;
+  background: #1d1f2b;
+  border: 0;
+  border-radius: .5rem;
+}
+.cast-lightbox::backdrop { background: rgb(0 0 0 / 80%); }
+.cast-lightbox img {
+  display: block;
+  max-width: 92vw;
+  max-height: 82vh;
+}
+.cast-lightbox form { margin: 0 0 .75rem; text-align: right; }
+.cast-lightbox button { cursor: pointer; }
+</style>
+<script>
+(() => {
+  const previews = document.querySelectorAll('.cast-preview a');
+  if (!previews.length || !HTMLDialogElement.prototype.showModal) return;
+
+  const dialog = document.createElement('dialog');
+  dialog.className = 'cast-lightbox';
+  dialog.innerHTML = '<form method="dialog"><button>Close</button></form><img>';
+  const image = dialog.querySelector('img');
+  document.body.append(dialog);
+
+  previews.forEach((preview) => preview.addEventListener('click', (event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    image.src = preview.href;
+    image.alt = preview.querySelector('img').alt;
+    dialog.showModal();
+  }));
+})();
+</script>

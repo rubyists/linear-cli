@@ -7,6 +7,8 @@ Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :tip-caption: 💡
 :note-caption: 📝
 :experimental:
+:docinfo: private
+:docinfodir: {docdir}
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -25,7 +27,20 @@ endif::[]
 A command line interface to https://linear.app - list, take, create, develop,
 and update issues without leaving your terminal.
 
-image::cinemas/listings.cinema.gif[]
+[cols="1,1",frame=none,grid=none]
+|===
+|Ruby CLI (The Original)
+|Elixir CLI (This Project)
+
+a|[.cast-preview]
+image::cinemas/listings.cinema.gif[Original Ruby CLI listing demo,link=cinemas/listings.cinema.gif,window=_blank]
+
+a|[.cast-preview]
+image::cinemas/elixir-lcls-demo.gif[Elixir CLI listing demo,link=cinemas/elixir-lcls-demo.gif,window=_blank]
+|===
+
+Click either recording to enlarge it. In the rendered HTML, press kbd:[Esc]
+or select *Close* to return here.
 
 This is an Elixir/OTP port of https://github.com/rubyists/linear-cli-rb[linear-cli-rb]
 (the original Ruby CLI): same commands, same wrapper scripts (`lcls`,
@@ -40,6 +55,7 @@ vs ~5s doing it one at a time.
 === I don't want to install
 
 You can run the CLI from the container image without installing anything.
+The image supports Linux x86_64 and ARM64 hosts.
 
 [source,sh,subs="attributes+"]
 ----
