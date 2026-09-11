@@ -37,17 +37,12 @@ defmodule LinearCli.CLI.IssueHelpers do
   and print `message` + `halt.(22)`, mirroring Ruby's `CLI::Caller#call`
   `rescue SmellsBad` clause (which maps to exit code 22).
 
-  ## `cancelled_state_for/1` / `completed_state_for/1`
+  ## Workflow-state helpers
 
-  Ruby has these on `BaseModel` (`#cancelled_states`/`#completed_states`,
-  filtering `issue.workflow_states`, itself `team.workflow_states`) plus
-  `CLI::WhatFor#cancelled_state_for`/`#completed_state_for` (the
-  first-if-only-one-else-prompt logic `close_issue`/`cancel_issue` call).
-  Neither made it into this port's `LinearCli.CLI.WhatFor`
-  (`app/lib/linear_cli/cli/what_for.ex`) or anywhere else yet, so both
-  layers are combined and added here as public functions - the only
-  reasonable place, since `close_issue/2`/`cancel_issue/2` (this module)
-  are their only callers.
+  `cancel_issue/2` and `close_issue/2` delegate to
+  `LinearCli.CLI.Issue.WorkflowStates.cancelled_state_for/2` and
+  `completed_state_for/2` respectively. See that module for the ported
+  Ruby logic and the rationale for combining both layers there.
 
   ## Project lookups
 
@@ -77,14 +72,9 @@ defmodule LinearCli.CLI.IssueHelpers do
   `LinearCli.Git`'s injectable `cwd:`.
   """
 
+  alias LinearCli.CLI.Issue.{Identifiers, WorkflowStates}
   alias LinearCli.CLI.{Projects, Prompt, WhatFor}
-  alias LinearCli.{Favorites, Linear, Profiles}
-
-  # A "bare" issue id is just digits - anything with a `-` (an already
-  # team-prefixed identifier, e.g. "CRY-1234") or that otherwise doesn't
-  # look like an id at all (a UUID) passes through `expand_issue_id/1`
-  # unchanged.
-  @bare_issue_id_regex ~r/^\d+$/
+  alias LinearCli.{Linear, Profiles}
 
   @doc """
   Adds a comment to `issue`, resolving `comment` (asking, or opening an
@@ -130,7 +120,7 @@ defmodule LinearCli.CLI.IssueHelpers do
         WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
 
       with {:ok, _comment} <- issue_comment(issue, reason),
-           {:ok, cancel_state} <- cancelled_state_for(issue, opts[:status]),
+           {:ok, cancel_state} <- WorkflowStates.cancelled_state_for(issue, opts[:status]),
            {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
         Prompt.ok("#{issue.identifier} was cancelled")
         {:ok, updated}
@@ -176,63 +166,8 @@ defmodule LinearCli.CLI.IssueHelpers do
     end
   end
 
-  defp state_for(true, issue, status), do: cancelled_state_for(issue, status)
-  defp state_for(_cancelled, issue, status), do: completed_state_for(issue, status)
-
-  @doc """
-  Resolves `issue`'s team's single cancelled workflow state directly, or
-  prompts (`LinearCli.CLI.Prompt.select/2`) among several. When `status` is
-  given, selects by case-insensitive exact name or unique prefix instead.
-
-  Ported from the combination of Ruby's `BaseModel#cancelled_states`
-  (`workflow_states.select { |ws| CANCELLED_STATES.include? ws.type }`) and
-  `CLI::WhatFor#cancelled_state_for` - see this module's moduledoc for why
-  both live here. Returns `{:error, {:smells_bad, message}}` if the team has
-  *no* cancelled-type workflow state - Ruby has no equivalent guard (its own
-  `states.first` on an empty array is silently `nil`).
-  """
-  @spec cancelled_state_for(%Linear.Issue{}, String.t() | nil) ::
-          {:ok, %Linear.WorkflowState{}} | {:error, term()}
-  def cancelled_state_for(issue, status \\ nil),
-    do: workflow_state_for(issue, ["cancelled", "canceled"], "cancelled", status)
-
-  @doc """
-  Resolves `issue`'s team's single completed workflow state directly, or
-  prompts (`LinearCli.CLI.Prompt.select/2`) among several. When `status` is
-  given, selects by case-insensitive exact name or unique prefix instead.
-
-  Ported from the combination of Ruby's `BaseModel#completed_states`
-  (`workflow_states.select { |ws| ws.type == 'completed' }`) and
-  `CLI::WhatFor#completed_state_for` - see this module's moduledoc. Returns
-  `{:error, {:smells_bad, message}}` if the team has no completed-type
-  workflow state.
-  """
-  @spec completed_state_for(%Linear.Issue{}, String.t() | nil) ::
-          {:ok, %Linear.WorkflowState{}} | {:error, term()}
-  def completed_state_for(issue, status \\ nil),
-    do: workflow_state_for(issue, ["completed"], "completed", status)
-
-  defp workflow_state_for(issue, types, label, status) do
-    with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id) do
-      states
-      |> Enum.filter(&(&1.type in types))
-      |> select_workflow_state(issue, label, status)
-    end
-  end
-
-  defp select_workflow_state([], issue, label, _status) do
-    smells_bad("No #{label} workflow states found for team #{issue.team.key || issue.team.id}")
-  end
-
-  defp select_workflow_state([state], _issue, _label, nil), do: {:ok, state}
-
-  defp select_workflow_state(states, _issue, label, nil) do
-    {:ok, Prompt.select("Choose a #{label} state", Enum.map(states, &{&1.name, &1}))}
-  end
-
-  defp select_workflow_state(states, _issue, _label, status) do
-    resolve_workflow_state(states, status)
-  end
+  defp state_for(true, issue, status), do: WorkflowStates.cancelled_state_for(issue, status)
+  defp state_for(_cancelled, issue, status), do: WorkflowStates.completed_state_for(issue, status)
 
   @doc """
   Shells out to `gh pr create -a @me --title TITLE --body BODY`, returning
@@ -493,42 +428,6 @@ defmodule LinearCli.CLI.IssueHelpers do
   defp maybe_put_project_id(params, project), do: Map.put(params, :project_id, project.id)
 
   @doc """
-  Expands a bare issue number (`~r/^\\d+$/`, e.g. `"1234"`) to a full
-  team-prefixed identifier (`"CRY-1234"`) by resolving a team key via
-  `resolve_bare_team/0`. Anything else (an already-prefixed identifier, a
-  UUID) is returned unchanged.
-
-  Team resolution order, never a hard error short of the user having no
-  teams at all: the active profile's team (`LinearCli.Profiles.default_team/0`)
-  -> favorited teams (`LinearCli.Favorites.list/1`, single favorite used
-  directly, several prompted) -> a prompt across every team the user
-  belongs to (`LinearCli.CLI.WhatFor.ask_for_team/0`).
-  """
-  @spec expand_issue_id(String.t()) :: String.t()
-  def expand_issue_id(issue_id) do
-    if Regex.match?(@bare_issue_id_regex, issue_id) do
-      "#{resolve_bare_team()}-#{issue_id}"
-    else
-      issue_id
-    end
-  end
-
-  defp resolve_bare_team do
-    case Profiles.default_team() do
-      nil -> resolve_bare_team_from_favorites()
-      team_key -> team_key
-    end
-  end
-
-  defp resolve_bare_team_from_favorites do
-    case Favorites.list("team") do
-      [] -> WhatFor.ask_for_team().key
-      [team_key] -> team_key
-      team_keys -> Prompt.select("Choose a team", Enum.map(team_keys, &{&1, &1}))
-    end
-  end
-
-  @doc """
   Looks up `issue_id` and self-assigns it to the caller, unless it's already
   assigned to them.
 
@@ -541,7 +440,7 @@ defmodule LinearCli.CLI.IssueHelpers do
   """
   @spec gimme_da_issue!(String.t(), keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def gimme_da_issue!(issue_id, opts \\ []) do
-    issue_id = expand_issue_id(issue_id)
+    issue_id = Identifiers.expand_issue_id(issue_id)
     status_opt = parse_status_opt(opts)
 
     with {:ok, me} <- resolve_me(opts),
@@ -563,38 +462,11 @@ defmodule LinearCli.CLI.IssueHelpers do
 
   defp resolve_status_for_issue(issue, {:name, name}) do
     with {:ok, states} <- Linear.workflow_states_by_team(issue.team.id) do
-      case resolve_workflow_state(states, name) do
+      case WorkflowStates.resolve_workflow_state(states, name) do
         {:ok, state} -> {:ok, state.id}
         error -> error
       end
     end
-  end
-
-  defp resolve_workflow_state(states, name) do
-    normalized = String.downcase(name)
-
-    states
-    |> Enum.filter(&(String.downcase(&1.name) == normalized))
-    |> use_prefix_state_matches_if_empty(states, normalized)
-    |> resolve_workflow_state_matches(states, name)
-  end
-
-  defp use_prefix_state_matches_if_empty([], states, name) do
-    Enum.filter(states, &String.starts_with?(String.downcase(&1.name), name))
-  end
-
-  defp use_prefix_state_matches_if_empty(matches, _states, _name), do: matches
-
-  defp resolve_workflow_state_matches([state], _states, _name), do: {:ok, state}
-
-  defp resolve_workflow_state_matches([], states, name) do
-    available = Enum.map_join(states, ", ", & &1.name)
-    smells_bad("Unknown status #{inspect(name)}. Available: #{available}")
-  end
-
-  defp resolve_workflow_state_matches(matches, _states, name) do
-    ambiguous = Enum.map_join(matches, ", ", & &1.name)
-    smells_bad("Ambiguous status #{inspect(name)}: matches #{ambiguous}")
   end
 
   defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id, nil) do
@@ -613,6 +485,4 @@ defmodule LinearCli.CLI.IssueHelpers do
       :error -> Linear.me()
     end
   end
-
-  defp smells_bad(message), do: {:error, {:smells_bad, message}}
 end

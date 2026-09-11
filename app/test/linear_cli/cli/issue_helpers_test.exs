@@ -93,63 +93,6 @@ defmodule LinearCli.CLI.IssueHelpersTest do
     end
   end
 
-  describe "cancelled_state_for/1 and completed_state_for/1" do
-    test "returns the sole matching state directly, no prompt" do
-      stub_responses([
-        {"states {",
-         workflow_states([
-           %{"id" => "s1", "name" => "Cancelled", "position" => 1.0, "type" => "cancelled"},
-           %{"id" => "s2", "name" => "Done", "position" => 2.0, "type" => "completed"}
-         ])}
-      ])
-
-      assert capture_io(fn ->
-               assert {:ok, %WorkflowState{id: "s1"}} =
-                        IssueHelpers.cancelled_state_for(issue())
-             end) == ""
-    end
-
-    test "also matches the American 'canceled' spelling" do
-      stub_responses([
-        {"states {",
-         workflow_states([
-           %{"id" => "s1", "name" => "Canceled", "position" => 1.0, "type" => "canceled"}
-         ])}
-      ])
-
-      assert {:ok, %WorkflowState{id: "s1"}} = IssueHelpers.cancelled_state_for(issue())
-    end
-
-    test "prompts to disambiguate when several states of the same type exist" do
-      stub_responses([
-        {"states {",
-         workflow_states([
-           %{"id" => "s1", "name" => "Done", "position" => 1.0, "type" => "completed"},
-           %{"id" => "s2", "name" => "Shipped", "position" => 2.0, "type" => "completed"}
-         ])}
-      ])
-
-      output =
-        capture_io([input: "2\n"], fn ->
-          assert {:ok, %WorkflowState{id: "s2"}} = IssueHelpers.completed_state_for(issue())
-        end)
-
-      assert output =~ "Choose a completed state"
-    end
-
-    test "returns a smells_bad error when the team has no state of that type" do
-      stub_responses([
-        {"states {",
-         workflow_states([
-           %{"id" => "s1", "name" => "Backlog", "position" => 1.0, "type" => "backlog"}
-         ])}
-      ])
-
-      assert {:error, {:smells_bad, message}} = IssueHelpers.cancelled_state_for(issue())
-      assert message =~ "No cancelled workflow states found for team ENG"
-    end
-  end
-
   describe "cancel_issue/2 (Ruby: CLI::Issue#cancel_issue)" do
     test "comments, resolves the cancelled state, and transitions the issue" do
       stub_responses([
