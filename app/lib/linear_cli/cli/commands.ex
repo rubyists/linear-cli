@@ -6,6 +6,7 @@ defmodule LinearCli.CLI.Commands do
 
   alias LinearCli.Browser
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
+  alias LinearCli.CLI.Issue.Identifiers
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
   @max_concurrent_issue_updates 20
@@ -273,7 +274,7 @@ defmodule LinearCli.CLI.Commands do
       include_labels = Map.get(flags, :include_labels, false) || label_filter != []
 
       input = %{
-        ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
+        ids: Enum.map(ids, &Identifiers.expand_issue_id/1),
         mine: !flags.no_mine,
         unassigned: flags.unassigned,
         team_key: team_key,
@@ -310,7 +311,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_view(result, opts \\ [])
 
   def issue_view(%{args: %{issue_id: issue_id}, flags: flags, options: options}, opts) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
       if flags.web do
@@ -554,7 +555,7 @@ defmodule LinearCli.CLI.Commands do
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}) do
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}) do
       update_opts = [
         comment: options.comment,
         description: description,
@@ -603,7 +604,7 @@ defmodule LinearCli.CLI.Commands do
          :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
          {:ok, comment_text} <- resolve_body_from_file(options, :comment),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          body = WhatFor.comment_for(hd(issues), comment_text),
          {:ok, pairs} <- add_comments_to_issues(issues, body) do
       unless options.output == "json" do
@@ -697,7 +698,7 @@ defmodule LinearCli.CLI.Commands do
   defp move_issues_by_id(issue_ids, options, flags) do
     with :ok <- validate_issue_ids(issue_ids),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          {:ok, project} <- resolve_move_project(issues, options) do
       print_move_plan(issues, project, options.output)
       execute_moves_if_confirmed(issues, project, flags, options.output)
@@ -890,7 +891,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_status(%{unknown: issue_ids, options: options}) do
     with :ok <- validate_issue_ids(issue_ids),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          {:ok, planned_updates} <- plan_status_updates(issues, options.status),
          {:ok, completed_updates} <- apply_status_updates(planned_updates, options.comment) do
       show_status_updates(completed_updates, options.output)
@@ -1012,7 +1013,7 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_relation_list(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_relation_list(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, relations} <- Linear.issue_relations(expanded_id) do
       Display.show(relations, %{output: options.output, relations: true})
@@ -1043,12 +1044,12 @@ defmodule LinearCli.CLI.Commands do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}) do
-    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
     results =
       Enum.map(related_ids, fn related_id ->
-        expanded_related = IssueHelpers.expand_issue_id(related_id)
+        expanded_related = Identifiers.expand_issue_id(related_id)
         add_single_relation(expanded_subject, expanded_related, user_type)
       end)
 
@@ -1201,13 +1202,13 @@ defmodule LinearCli.CLI.Commands do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}) do
-    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
     with {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
       results =
         Enum.map(related_ids, fn related_id ->
-          expanded_related = IssueHelpers.expand_issue_id(related_id)
+          expanded_related = Identifiers.expand_issue_id(related_id)
           remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
         end)
 
@@ -1387,7 +1388,7 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_assign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_assign(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
          {:ok, members} <- Linear.team_members(issue.team.id),
