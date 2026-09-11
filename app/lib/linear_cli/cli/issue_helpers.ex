@@ -1,62 +1,39 @@
 defmodule LinearCli.CLI.IssueHelpers do
   @moduledoc """
-  Shared issue-command helpers - comment, close, cancel, open a PR, attach a
-  project, dispatch an update, create, self-assign.
+  Shared issue-command helpers - open a PR, create, self-assign.
 
   Ported from `Rubyists::Linear::CLI::Issue`
-  (vendor/ruby-linear-cli/lib/linear/commands/issue.rb): `issue_comment`,
-  `cancel_issue`, `close_issue`, `create_pr!`, `issue_pr`, `attach_project`,
-  `update_issue`, `make_da_issue!`, `gimme_da_issue!`.
+  (vendor/ruby-linear-cli/lib/linear/commands/issue.rb): `create_pr!`,
+  `issue_pr`, `make_da_issue!`, `gimme_da_issue!`.
+
+  Lifecycle mutations (comment, close/cancel, description update, project
+  attachment/move, and update-dispatch) have been extracted to
+  `LinearCli.CLI.Issue.Actions`. Bare-ID expansion lives in
+  `LinearCli.CLI.Issue.Identifiers`. Workflow-state selection lives in
+  `LinearCli.CLI.Issue.WorkflowStates`.
 
   ## Return convention
 
   Every function here returns `{:ok, result}` or `{:error, reason}` (never
-  raises), *except* `update_issue/2`, which normalizes down to
-  `:ok | {:error, reason}` to match this codebase's CLI dispatch contract
-  (`LinearCli.CLI.run/3`, which expects exactly that shape from a command
-  handler) - it's the one function here a later phase is likely to wire
-  directly to a subcommand.
+  raises).
 
   `reason` is either whatever `LinearCli.Api`/an Ash manual action already
   surfaces (a transport/GraphQL/validation error - a genuine system
-  failure), or a new tagged tuple this module introduces for "the user gave
-  us something we can't act on, tell them clearly" cases, mirroring Ruby's
-  `SmellsBad` exception (`vendor/ruby-linear-cli/lib/linear/exceptions.rb`,
-  raised e.g. by `CLI::SubCommands#ask_for_team` when no team is found):
+  failure), or a tagged tuple for "the user gave us something we can't act
+  on, tell them clearly" cases, mirroring Ruby's `SmellsBad` exception:
 
       {:error, {:smells_bad, message}}
 
-  where `message` is a human-readable `String.t()`. The one case this module
-  itself raises it: `cancelled_state_for/1`/`completed_state_for/1` finding
-  *zero* matching workflow states for an issue's team (Ruby's own
-  `cancelled_states.first`/`completed_states.first` would silently return
-  `nil` there and blow up two calls later inside `close!`'s GraphQL
-  round-trip instead - this port catches it at the source with a clear
-  message). A later phase wiring this into `LinearCli.CLI.main/2`'s
-  dispatch can add a `handle_error` clause matching `{:smells_bad, message}`
-  and print `message` + `halt.(22)`, mirroring Ruby's `CLI::Caller#call`
-  `rescue SmellsBad` clause (which maps to exit code 22).
-
-  ## Workflow-state helpers
-
-  `cancel_issue/2` and `close_issue/2` delegate to
-  `LinearCli.CLI.Issue.WorkflowStates.cancelled_state_for/2` and
-  `completed_state_for/2` respectively. See that module for the ported
-  Ruby logic and the rationale for combining both layers there.
+  where `message` is a human-readable `String.t()`.
 
   ## Project lookups
 
-  `attach_project/2` (Ruby: `issue.team.projects`) and `make_da_issue!/1`
-  (Ruby: `team.projects`) both need a team's projects. Neither
+  `make_da_issue!/1` (Ruby: `team.projects`) needs a team's projects. Neither
   `LinearCli.Linear.Issue` nor `LinearCli.Linear.Team` stores a `:projects`
   field on their structs (Team's own GraphQL `full_fields/0` embeds a
   `projects` sub-selection, but `Team.from_map/1` never parses it into an
-  attribute - there's nowhere on the struct to put it), so both call the new
-  `LinearCli.Linear.projects_by_team/1` domain interface instead (added
-  alongside this module, wrapping the pre-existing
-  `LinearCli.Linear.Project` `:by_team` action the same way
-  `labels_by_team/1`/`workflow_states_by_team/1` already wrap their own
-  `:by_team` actions).
+  attribute - there's nowhere on the struct to put it), so it calls
+  `LinearCli.Linear.projects_by_team/1` domain interface instead.
 
   ## `create_pr!/3`
 
@@ -75,99 +52,6 @@ defmodule LinearCli.CLI.IssueHelpers do
   alias LinearCli.CLI.Issue.{Identifiers, WorkflowStates}
   alias LinearCli.CLI.{Projects, Prompt, WhatFor}
   alias LinearCli.{Linear, Profiles}
-
-  @doc """
-  Adds a comment to `issue`, resolving `comment` (asking, or opening an
-  editor, if not already given - via `LinearCli.CLI.WhatFor.comment_for/2`)
-  first.
-
-  Ported from `CLI::Issue#issue_comment`.
-  """
-  @spec issue_comment(%Linear.Issue{}, String.t() | nil) ::
-          {:ok, %Linear.Comment{}} | {:error, term()}
-  def issue_comment(issue, comment) do
-    body = WhatFor.comment_for(issue, comment)
-
-    case Linear.add_comment(issue.identifier, body) do
-      {:ok, created} ->
-        Prompt.ok("Comment added to #{issue.identifier}")
-        {:ok, created}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Cancels `issue`: comments with a resolved reason, then transitions it to
-  its team's cancelled workflow state.
-
-  `opts` (Ruby's `**options`, plus this port's `:status`):
-
-    * `:reason` - passed through to `LinearCli.CLI.WhatFor.reason_for/2`
-    * `:status` - cancelled workflow state name (exact or unique prefix)
-    * `:trash` - trashes the transitioned issue through `issueArchive`
-
-  Ported from `CLI::Issue#cancel_issue`.
-  """
-  @spec cancel_issue(%Linear.Issue{}, keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
-  def cancel_issue(issue, opts \\ []) do
-    if issue.state && issue.state.type in ["cancelled", "canceled"] do
-      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
-      {:ok, issue}
-    else
-      reason =
-        WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
-
-      with {:ok, _comment} <- issue_comment(issue, reason),
-           {:ok, cancel_state} <- WorkflowStates.cancelled_state_for(issue, opts[:status]),
-           {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
-        Prompt.ok("#{issue.identifier} was cancelled")
-        {:ok, updated}
-      end
-    end
-  end
-
-  @doc """
-  Closes (or, if `opts[:cancel]` is truthy, cancels) `issue`: comments with
-  a resolved reason, then transitions it to the appropriate workflow state.
-
-  `opts` (Ruby's `**options`, plus this port's `:status`): `:cancel`,
-  `:reason`, `:status`, `:trash` - same meaning as `cancel_issue/2`'s.
-
-  Ported from `CLI::Issue#close_issue`. Note this has its own internal
-  cancelled/completed branch (mirroring Ruby exactly) even though
-  `update_issue/2` never actually reaches it with `opts[:cancel]` truthy -
-  `update_issue/2` dispatches to `cancel_issue/2` directly for that case,
-  the same as Ruby does.
-  """
-  @spec close_issue(%Linear.Issue{}, keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
-  def close_issue(issue, opts \\ []) do
-    cancelled = opts[:cancel]
-    target_types = if cancelled, do: ["cancelled", "canceled"], else: ["completed"]
-    done = if cancelled, do: "cancelled", else: "closed"
-
-    if issue.state && issue.state.type in target_types do
-      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
-      {:ok, issue}
-    else
-      doing = if cancelled, do: "cancelling", else: "closing"
-
-      reason =
-        WhatFor.reason_for(opts[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
-
-      with {:ok, _comment} <- issue_comment(issue, reason),
-           {:ok, workflow_state} <- state_for(cancelled, issue, opts[:status]),
-           {:ok, updated} <-
-             Linear.close_issue(issue, workflow_state.id, %{trash: !!opts[:trash]}) do
-        Prompt.ok("#{issue.identifier} was #{done}")
-        {:ok, updated}
-      end
-    end
-  end
-
-  defp state_for(true, issue, status), do: WorkflowStates.cancelled_state_for(issue, status)
-  defp state_for(_cancelled, issue, status), do: WorkflowStates.completed_state_for(issue, status)
 
   @doc """
   Shells out to `gh pr create -a @me --title TITLE --body BODY`, returning
@@ -216,125 +100,6 @@ defmodule LinearCli.CLI.IssueHelpers do
     Prompt.warn(create_pr!(title, body, runner))
     :ok
   end
-
-  @doc """
-  Moves `issue` to the already-resolved `project`, calling
-  `LinearCli.Linear.attach_issue_to_project/2` and printing a confirmation.
-
-  Unlike `attach_project/2`, this function takes a pre-resolved
-  `%LinearCli.Linear.Project{}` struct rather than a search string. Callers
-  that need to resolve a search string first should use `attach_project/2`,
-  which delegates here after resolution.
-  """
-  @spec move_issue(%Linear.Issue{}, %Linear.Project{}) ::
-          {:ok, %Linear.Issue{}} | {:error, term()}
-  def move_issue(issue, project) do
-    case Linear.attach_issue_to_project(issue, project.id) do
-      {:ok, updated} ->
-        Prompt.ok("#{issue.identifier} was moved to #{project.name}")
-        {:ok, updated}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Attaches `issue` to a project matched against `project_search` among its
-  team's projects (`LinearCli.CLI.Projects.project_for/2`, prompting to
-  disambiguate if needed).
-
-  Ported from `CLI::Issue#attach_project`. Like Ruby, does not guard against
-  `project_search` matching nothing in an empty project list (`project_for`
-  returning `nil`) - the same faithfully-ported crash risk Ruby's own
-  `nil.id` would hit.
-
-  Resolves the project from the search string, then delegates to `move_issue/2`.
-  """
-  @spec attach_project(%Linear.Issue{}, String.t() | nil) ::
-          {:ok, %Linear.Issue{}} | {:error, term()}
-  def attach_project(issue, project_search) do
-    with {:ok, projects} <-
-           Linear.projects_by_team(issue.team.id, %{search: project_search}) do
-      project = Projects.project_for(projects, project_search)
-      move_issue(issue, project)
-    end
-  end
-
-  @doc """
-  Updates `issue`'s description to `description_input`, resolving it (asking,
-  or opening an editor, if not already given - via
-  `LinearCli.CLI.WhatFor.description_for/1`) first.
-  """
-  @spec update_description(%Linear.Issue{}, String.t() | nil) ::
-          {:ok, %Linear.Issue{}} | {:error, term()}
-  def update_description(issue, description_input) do
-    description = WhatFor.description_for(description_input)
-
-    case Linear.update_issue_description(issue, description) do
-      {:ok, updated} ->
-        Prompt.ok("#{issue.identifier} description updated")
-        {:ok, updated}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc """
-  Dispatches an issue update per whichever of `opts`' keys is set, in Ruby's
-  exact precedence order:
-
-    1. `:comment` - always applied first (via `issue_comment/2`) if given,
-       regardless of anything else
-    2. `:close` -> `close_issue/2`
-    3. `:cancel` -> `cancel_issue/2`
-    4. `:pr` -> `issue_pr/2`
-    5. `:project` -> `attach_project/2`
-    6. otherwise, if only `:comment` was given, stop silently
-    7. otherwise, warn "No action taken" and report "not updated"
-
-  Ported from `CLI::Issue#update_issue`. Unlike every other function in this
-  module, normalizes its result down to `:ok | {:error, reason}` (dropping
-  the `{:ok, term}` wrapper) to match `LinearCli.CLI.run/3`'s command-handler
-  contract - see this module's moduledoc.
-  """
-  @spec update_issue(%Linear.Issue{}, keyword()) :: :ok | {:error, term()}
-  def update_issue(issue, opts \\ []) do
-    with :ok <- maybe_comment(issue, opts[:comment]) do
-      dispatch_update(issue, opts)
-    end
-  end
-
-  defp maybe_comment(_issue, nil), do: :ok
-
-  defp maybe_comment(issue, comment) do
-    case issue_comment(issue, comment) do
-      {:ok, _comment} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  defp dispatch_update(issue, opts) do
-    cond do
-      opts[:close] -> normalize(close_issue(issue, opts))
-      opts[:cancel] -> normalize(cancel_issue(issue, opts))
-      opts[:pr] -> issue_pr(issue, opts)
-      opts[:project] -> normalize(attach_project(issue, opts[:project]))
-      opts[:description] -> normalize(update_description(issue, opts[:description]))
-      opts[:comment] -> :ok
-      true -> no_action_taken()
-    end
-  end
-
-  defp no_action_taken do
-    Prompt.warn("No action taken, no options specified")
-    Prompt.ok("Issue was not updated")
-    :ok
-  end
-
-  defp normalize({:ok, _result}), do: :ok
-  defp normalize({:error, reason}), do: {:error, reason}
 
   @doc """
   Creates a new issue, resolving every field that wasn't already given in

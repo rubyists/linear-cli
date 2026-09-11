@@ -6,7 +6,7 @@ defmodule LinearCli.CLI.Commands do
 
   alias LinearCli.Browser
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
-  alias LinearCli.CLI.Issue.Identifiers
+  alias LinearCli.CLI.Issue.{Actions, Identifiers}
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
   @max_concurrent_issue_updates 20
@@ -568,7 +568,7 @@ defmodule LinearCli.CLI.Commands do
       ]
 
       Enum.reduce_while(issues, :ok, fn issue, :ok ->
-        case IssueHelpers.update_issue(issue, update_opts) do
+        case Actions.update_issue(issue, update_opts) do
           :ok -> {:cont, :ok}
           {:error, reason} -> {:halt, {:error, reason}}
         end
@@ -997,7 +997,7 @@ defmodule LinearCli.CLI.Commands do
   defp maybe_add_status_comment(_issue, nil), do: :ok
 
   defp maybe_add_status_comment(issue, comment) do
-    case IssueHelpers.issue_comment(issue, comment) do
+    case Actions.issue_comment(issue, comment) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
