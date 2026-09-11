@@ -346,8 +346,9 @@ defmodule LinearCli.CLI.Commands do
   @doc """
   Ported from commands/issue/create.rb: resolves every field
   (`LinearCli.CLI.IssueHelpers.make_da_issue!/1`), optionally self-assigns it
-  (`prompt.yes?('Do you want to take this issue?')`), displays it, then, if
-  `--dev` was given, chains straight into the same flow as `issue_develop/2`
+  (`prompt.yes?('Do you want to take this issue?')`, unless `--no-take` was
+  given), displays it, then, if `--dev` was given, chains straight into the
+  same flow as `issue_develop/2`
   (Ruby: `Rubyists::Linear::CLI::Issue::Develop.new.call(issue_id: issue.id,
   **options)`).
 
@@ -362,7 +363,8 @@ defmodule LinearCli.CLI.Commands do
   def issue_create(result, opts \\ [])
 
   def issue_create(%{options: options, flags: flags}, opts) do
-    with :ok <- validate_body_file_exclusion(options, :description, "--description"),
+    with :ok <- validate_no_take_develop(flags),
+         :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          create_opts = [
            title: options.title,
@@ -373,20 +375,27 @@ defmodule LinearCli.CLI.Commands do
            yes: flags.yes
          ],
          {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
-         :ok <- maybe_take(issue, flags.yes, opts) do
+         :ok <- maybe_take(issue, flags, opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
     end
   end
 
-  defp maybe_take(issue, true, opts) do
+  defp validate_no_take_develop(%{no_take: true, develop: true}),
+    do: {:error, {:smells_bad, "--no-take cannot be used with --dev"}}
+
+  defp validate_no_take_develop(_flags), do: :ok
+
+  defp maybe_take(_issue, %{no_take: true}, _opts), do: :ok
+
+  defp maybe_take(issue, %{yes: true}, opts) do
     case IssueHelpers.gimme_da_issue!(issue.id, opts) do
       {:ok, _updated} -> :ok
       {:error, reason} -> {:error, reason}
     end
   end
 
-  defp maybe_take(issue, _yes, opts) do
+  defp maybe_take(issue, _flags, opts) do
     if Prompt.yes?("Do you want to take this issue?") do
       case IssueHelpers.gimme_da_issue!(issue.id, opts) do
         {:ok, _updated} -> :ok

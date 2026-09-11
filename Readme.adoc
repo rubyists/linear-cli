@@ -275,9 +275,14 @@ $ lc issue assign CRY-1234 <4>
 ----
 $ lc issue create --title "My new issue" --description "This is a new issue" --labels Bug,Feature --team CRY
 $ lc issue create -t "My new issue" -T CRY -l Improvement,Feature
+$ lc issue create --title "Unassigned issue" --description "Ready to triage" --team CRY --yes --no-take
 ----
 
 NOTE: If you don't provide a title, team, labels, or description, you will be prompted to enter them.
+
+NOTE: `--yes` creates and self-assigns an issue without prompting. Add
+`--no-take` to keep the new issue unassigned; it cannot be combined with
+`--dev`, which starts development by self-assigning the issue.
 
 TIP: When creating an issue, you can use the `--dev` (or `--develop`) option to immediately start development on the issue.
 
