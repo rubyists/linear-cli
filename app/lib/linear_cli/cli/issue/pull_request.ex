@@ -1,32 +1,17 @@
-defmodule LinearCli.CLI.IssueHelpers do
+defmodule LinearCli.CLI.Issue.PullRequest do
   @moduledoc """
-  Shared issue-command helpers - open a PR.
+  PR-creation workflow for an already-loaded issue: resolve a title/description
+  and shell out to `gh pr create`.
 
-  Ported from `Rubyists::Linear::CLI::Issue`
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. Ported from
+  `Rubyists::Linear::CLI::Issue`
   (vendor/ruby-linear-cli/lib/linear/commands/issue.rb): `create_pr!`,
   `issue_pr`.
 
-  Lifecycle mutations (comment, close/cancel, description update, project
-  attachment/move, and update-dispatch) have been extracted to
-  `LinearCli.CLI.Issue.Actions`. Bare-ID expansion lives in
-  `LinearCli.CLI.Issue.Identifiers`. Workflow-state selection lives in
-  `LinearCli.CLI.Issue.WorkflowStates`. Issue creation lives in
-  `LinearCli.CLI.Issue.Creation`. Self-assignment lives in
-  `LinearCli.CLI.Issue.Assignment`.
-
   ## Return convention
 
-  Every function here returns `{:ok, result}` or `{:error, reason}` (never
-  raises).
-
-  `reason` is either whatever `LinearCli.Api`/an Ash manual action already
-  surfaces (a transport/GraphQL/validation error - a genuine system
-  failure), or a tagged tuple for "the user gave us something we can't act
-  on, tell them clearly" cases, mirroring Ruby's `SmellsBad` exception:
-
-      {:error, {:smells_bad, message}}
-
-  where `message` is a human-readable `String.t()`.
+  `create_pr!/3` returns a `String.t()` (the runner's stdout — typically the
+  new PR's URL). `issue_pr/2` always returns `:ok`.
 
   ## `create_pr!/3`
 
@@ -37,7 +22,7 @@ defmodule LinearCli.CLI.IssueHelpers do
   why it never returns a Ruby-style `Tempfile` handle here), so only the
   `--body` shape applies. Takes an injectable `runner` (a `(title, body) ->
   String.t()` function), defaulting to a real `System.cmd/3` call, so tests
-  never actually shell out to a real `gh` - the same pattern this codebase
+  never actually shell out to a real `gh` — the same pattern this codebase
   already uses for `LinearCli.CLI.main/2`'s injectable `halt` and
   `LinearCli.Git`'s injectable `cwd:`.
   """
@@ -47,11 +32,11 @@ defmodule LinearCli.CLI.IssueHelpers do
 
   @doc """
   Shells out to `gh pr create -a @me --title TITLE --body BODY`, returning
-  whatever the command printed to stdout (Ruby's backtick-captured output -
+  whatever the command printed to stdout (Ruby's backtick-captured output —
   typically the created PR's URL).
 
   `runner`, a `(title, body) -> String.t()` function, defaults to a real
-  `System.cmd/3` call - pass an override in tests. Ported from
+  `System.cmd/3` call — pass an override in tests. Ported from
   `CLI::Issue#create_pr!`; see this module's moduledoc for why only the
   `--body` (never `--body-file`) shape applies here.
   """
@@ -76,7 +61,7 @@ defmodule LinearCli.CLI.IssueHelpers do
   already given in `opts`), then runs `create_pr!/3` and prints its output.
 
   `opts`: `:title`, `:description` (Ruby's implicit `options[:title]`/
-  `options[:description]` - note Ruby's own `update_issue` never actually
+  `options[:description]` — note Ruby's own `update_issue` never actually
   passes either through, always calling `issue_pr(issue)` bare, so both are
   ported for signature fidelity but are effectively always prompted for in
   practice); `:runner`, this port's addition, forwarded to `create_pr!/3`.

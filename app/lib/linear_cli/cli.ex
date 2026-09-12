@@ -373,7 +373,7 @@ defmodule LinearCli.CLI do
   end
 
   # Ported from CLI::Caller#call's `rescue SmellsBad` clause. See
-  # `LinearCli.CLI.IssueHelpers`'s moduledoc for where this tagged tuple
+  # `LinearCli.CLI.Issue.Actions`'s moduledoc for where this tagged tuple
   # comes from.
   defp handle_error({:smells_bad, message}, debug, halt) do
     IO.puts(:stderr, message)

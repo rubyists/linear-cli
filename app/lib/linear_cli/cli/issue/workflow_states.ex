@@ -3,19 +3,18 @@ defmodule LinearCli.CLI.Issue.WorkflowStates do
   Workflow-state selection and status-name matching for issue lifecycle
   commands.
 
-  Extracted from `LinearCli.CLI.IssueHelpers`. Provides two entry points for
-  type-filtered state selection (`cancelled_state_for/2`,
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. Provides two entry
+  points for type-filtered state selection (`cancelled_state_for/2`,
   `completed_state_for/2`) and one shared entry point for arbitrary
   name/prefix matching (`resolve_workflow_state/2`), which is also called
-  directly by `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` to resolve the
-  `--status` option without duplicating the matching logic.
+  directly by `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` to resolve
+  the `--status` option without duplicating the matching logic.
 
   ## Return shapes
 
   All public functions return `{:ok, result} | {:error, term()}`.
   `{:error, {:smells_bad, message}}` is returned for user-visible failures
-  (no matching state, ambiguous prefix, unknown status name) — the same
-  tagged-tuple convention as `LinearCli.CLI.IssueHelpers`.
+  (no matching state, ambiguous prefix, unknown status name).
 
   ## State selection / prompt behavior
 
@@ -74,8 +73,8 @@ defmodule LinearCli.CLI.Issue.WorkflowStates do
   multiple prefix matches (ambiguous status).
 
   Public so that callers outside this module (e.g.
-  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` resolving `--status`) can
-  use the same matching logic without duplicating it.
+  `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` resolving `--status`)
+  can use the same matching logic without duplicating it.
   """
   @spec resolve_workflow_state([%Linear.WorkflowState{}], String.t()) ::
           {:ok, %Linear.WorkflowState{}} | {:error, term()}

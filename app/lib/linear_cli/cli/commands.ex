@@ -9,8 +9,8 @@ defmodule LinearCli.CLI.Commands do
   """
 
   alias LinearCli.Browser
-  alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
-  alias LinearCli.CLI.Issue.{Actions, Assignment, Creation, Identifiers}
+  alias LinearCli.CLI.{Display, Projects, Prompt, WhatFor}
+  alias LinearCli.CLI.Issue.{Actions, Assignment, Creation, Identifiers, PullRequest}
   alias LinearCli.{Git, Linear, Profiles}
 
   @max_concurrent_issue_updates 20
@@ -224,7 +224,7 @@ defmodule LinearCli.CLI.Commands do
   Ported from commands/issue/pr.rb: resolves/self-assigns `issue_id`, checks
   out its branch (creating it first if needed - no pull/push here, unlike
   `issue_develop/2`), then opens a PR via
-  `LinearCli.CLI.IssueHelpers.issue_pr/2`.
+  `LinearCli.CLI.Issue.PullRequest.issue_pr/2`.
 
   `opts` (this port's addition): `:cwd` (forwarded to
   `LinearCli.Git.checkout_branch/2`), `:me` (forwarded to
@@ -243,7 +243,7 @@ defmodule LinearCli.CLI.Commands do
         [title: options.title, description: options.description]
         |> maybe_put(:runner, opts[:runner])
 
-      IssueHelpers.issue_pr(issue, pr_opts)
+      PullRequest.issue_pr(issue, pr_opts)
     end
   end
 
@@ -304,7 +304,7 @@ defmodule LinearCli.CLI.Commands do
   Ported from commands/issue/update.rb: looks up every issue id in `unknown`
   (see `issue_take/2`'s doc for why this is a variadic positional captured
   via `unknown` rather than a declared Optimus arg) and dispatches
-  `LinearCli.CLI.IssueHelpers.update_issue/2` against each, per whichever
+  `LinearCli.CLI.Issue.Actions.update_issue/2` against each, per whichever
   flags/options were given.
 
   Ports `raise SmellsBad, 'No issue IDs provided!' if issue_ids.empty?` as
@@ -358,7 +358,7 @@ defmodule LinearCli.CLI.Commands do
   `--body-file` is given) uses the first issue's context.
 
   Calls `Linear.add_comment/2` directly rather than
-  `LinearCli.CLI.IssueHelpers.issue_comment/2` so the confirmation can be
+  `LinearCli.CLI.Issue.Actions.issue_comment/2` so the confirmation can be
   suppressed under `--output json` - matching how `print_move_results/3`
   suppresses its own confirmation for `issue move --output json`.
 

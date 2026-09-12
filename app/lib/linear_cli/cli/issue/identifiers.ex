@@ -3,7 +3,7 @@ defmodule LinearCli.CLI.Issue.Identifiers do
   Bare-issue-ID expansion: turns a plain integer string (e.g. `"1234"`) into
   a team-prefixed identifier (`"CRY-1234"`) by resolving a team key.
 
-  Extracted from `LinearCli.CLI.IssueHelpers`. The single public function,
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. The single public function,
   `expand_issue_id/1`, is called by every command that accepts an issue
   identifier from the user so that bare numbers work wherever full identifiers
   do.
