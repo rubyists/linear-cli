@@ -1,7 +1,6 @@
 defmodule LinearCli.CLI.Commands.Issues.Relations do
   @moduledoc """
   Issue relation commands: list, add, and remove.
-  Ported from vendor/ruby-linear-cli/lib/linear/commands/issue/relation.rb.
   """
 
   alias LinearCli.CLI.{Display, Prompt}
