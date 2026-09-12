@@ -7,8 +7,7 @@ defmodule LinearCli.CLI do
   handling) plus each subcommand's own `commands/**` file for its flags.
   """
 
-  alias LinearCli.CLI.Commands
-  alias LinearCli.CLI.Commands.Issues.{Create, Development, Mutations, Read}
+  alias LinearCli.CLI.Commands.Issues.{Create, Development, Move, Mutations, Read, Relations}
   alias LinearCli.CLI.Commands.{Profiles, Projects, Teams}
   alias LinearCli.CLI.Commands.System, as: SystemCmds
 
@@ -238,7 +237,7 @@ defmodule LinearCli.CLI do
     do: run(&Development.issue_develop/1, result, halt)
 
   defp dispatch([:issue, :pr], result, halt), do: run(&Development.issue_pr/1, result, halt)
-  defp dispatch([:issue, :move], result, halt), do: run(&Commands.issue_move/1, result, halt)
+  defp dispatch([:issue, :move], result, halt), do: run(&Move.issue_move/1, result, halt)
 
   defp dispatch([:issue, :comment], result, halt),
     do: run(&Mutations.issue_comment/1, result, halt)
@@ -248,13 +247,13 @@ defmodule LinearCli.CLI do
   defp dispatch([:issue, :update], result, halt), do: run(&Mutations.issue_update/1, result, halt)
 
   defp dispatch([:issue, :relation, :list], result, halt),
-    do: run(&Commands.issue_relation_list/1, result, halt)
+    do: run(&Relations.issue_relation_list/1, result, halt)
 
   defp dispatch([:issue, :relation, :add], result, halt),
-    do: run(&Commands.issue_relation_add/1, result, halt)
+    do: run(&Relations.issue_relation_add/1, result, halt)
 
   defp dispatch([:issue, :relation, :remove], result, halt),
-    do: run(&Commands.issue_relation_remove/1, result, halt)
+    do: run(&Relations.issue_relation_remove/1, result, halt)
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
   # with nothing after it) - Optimus itself doesn't require reaching a leaf,
