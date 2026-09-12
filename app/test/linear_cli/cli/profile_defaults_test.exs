@@ -7,7 +7,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias LinearCli.CLI.Commands
+  alias LinearCli.CLI.Commands.Issues.{Development, Mutations, Read}
   alias LinearCli.CLI.Issue.Creation
   alias LinearCli.Linear.User
   alias LinearCli.Profiles
@@ -140,7 +140,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     path
   end
 
-  describe "Commands.issue_list/1 falls back to the active profile" do
+  describe "Read.issue_list/1 falls back to the active profile" do
     test "uses the active profile's team/project when both flags are omitted" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
       :ok = Profiles.activate("manhattan")
@@ -174,7 +174,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:filter, filter}
@@ -215,7 +215,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
@@ -251,7 +251,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:filter, filter}
@@ -284,7 +284,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
@@ -321,7 +321,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       refute Map.has_key?(filter, "team")
@@ -353,14 +353,14 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: ["42"]
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:id, "CRY-42"}
     end
   end
 
-  describe "Commands.issue_update/1 resolves bare issue numbers via the active profile" do
+  describe "Mutations.issue_update/1 resolves bare issue numbers via the active profile" do
     test "expands a bare positional id before looking it up" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -391,14 +391,14 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         flags: %{cancel: false, close: false, trash: false}
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_update(result) end)
+      output = capture_io(fn -> assert :ok = Mutations.issue_update(result) end)
 
       assert output =~ "Comment added to CRY-1"
       assert_received {:id, "CRY-42"}
     end
   end
 
-  describe "Commands.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
+  describe "Development.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
     test "issue_develop/2 expands the bare issue_id before self-assigning/checking it out" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -432,7 +432,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       output =
         capture_io(fn ->
-          assert :ok = Commands.issue_develop(result, cwd: repo, me: me)
+          assert :ok = Development.issue_develop(result, cwd: repo, me: me)
         end)
 
       assert output =~ "Checked out branch main"
@@ -473,7 +473,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       output =
         capture_io(fn ->
           assert :ok =
-                   Commands.issue_pr(result,
+                   Development.issue_pr(result,
                      cwd: repo,
                      me: me,
                      runner: fn _title, _body -> "https://github.com/x/y/pull/1" end
@@ -515,7 +515,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       output =
         capture_io(fn ->
-          assert :ok = Commands.issue_take(result, me: me)
+          assert :ok = Development.issue_take(result, me: me)
         end)
 
       assert output =~ "Assigning issue CRY-42 to ya"
