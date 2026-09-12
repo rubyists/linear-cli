@@ -130,6 +130,7 @@ defmodule LinearCli.CLI.Commands.Issues.GraphTest do
       assert "EXT-56" in ids
       assert "EXT-57" in ids
       assert graph.edges == [%{source: "EXT-56", target: "EXT-57"}]
+      assert Enum.find(graph.nodes, &(&1.identifier == "EXT-57")).status == "Todo"
     end
 
     test "single inbound blocks edge (EXT-40 blocks root)" do

@@ -91,6 +91,7 @@ LinearCli.CLI                        — Entry point; Optimus argument parsing a
   CLI.Commands.Issues.Mutations      — issue update/status/assign/comment subcommands
   CLI.Commands.Issues.Move           — issue move subcommand
   CLI.Commands.Issues.Relations      — issue relation list/add/remove subcommands
+  CLI.Commands.Issues.Graph          — --graph transitive dependency graph builder
   CLI.Issue.Identifiers              — issue ID expansion shared across subcommands
   CLI.WhatFor                        — Interactive prompts (team, project, label selection)
   CLI.Display                        — Output formatting helpers

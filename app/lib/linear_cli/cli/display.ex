@@ -305,7 +305,7 @@ defmodule LinearCli.CLI.Display do
 
   defp render_columns([], root_label, succs, _succ_ids, _succ_succ_map) do
     first_line = "#{root_label} --+--> #{List.first(succs)}"
-    pad = String.duplicate(" ", String.length(root_label) + 1)
+    pad = String.duplicate(" ", String.length(root_label) - 1)
     rest = Enum.map(Enum.drop(succs, 1), &"#{pad}    +--> #{&1}")
     Enum.join([first_line | rest], "\n")
   end
@@ -313,33 +313,31 @@ defmodule LinearCli.CLI.Display do
   defp render_columns(preds, root_label, succs, _succ_ids, _succ_succ_map) do
     pred_max = Enum.max(Enum.map(preds, &String.length/1))
     mid = div(length(preds), 2)
-    arrow = succ_arrow(root_label, succs)
 
     preds
     |> Enum.with_index()
     |> Enum.map_join("\n", fn {pl, i} ->
       padded = String.pad_trailing(pl, pred_max)
-      if i == mid, do: "#{padded} --+--> #{arrow}", else: "#{padded} --+"
+      if i == mid, do: mid_pred_line(padded, pred_max, root_label, succs), else: "#{padded} --+"
     end)
+  end
+
+  defp mid_pred_line(padded, _, root_label, []), do: "#{padded} --+--> #{root_label}"
+  defp mid_pred_line(padded, _, root_label, [s]), do: "#{padded} --+--> #{root_label} --> #{s}"
+
+  defp mid_pred_line(padded, pred_max, root_label, [h | t]) do
+    first = "#{padded} --+--> #{root_label} --+--> #{h}"
+    cont_pad = String.duplicate(" ", pred_max + String.length(root_label) + 11)
+    Enum.join([first | Enum.map(t, &"#{cont_pad}+--> #{&1}")], "\n")
   end
 
   defp chain_succ(root_label, succ, []), do: "#{root_label} --> #{succ}"
   defp chain_succ(root_label, succ, [one]), do: "#{root_label} --> #{succ} --> #{one}"
 
   defp chain_succ(root_label, succ, [first | rest]) do
-    pad = String.duplicate(" ", String.length(root_label) + String.length(succ) + 9)
+    pad = String.duplicate(" ", String.length(root_label) + String.length(succ) + 8)
     more = Enum.map(rest, &"#{pad}+--> #{&1}")
     Enum.join(["#{root_label} --> #{succ} --+--> #{first}" | more], "\n")
-  end
-
-  defp succ_arrow(root_label, []), do: root_label
-  defp succ_arrow(root_label, [s]), do: "#{root_label} --> #{s}"
-
-  defp succ_arrow(root_label, [h | t]) do
-    pad = String.duplicate(" ", String.length(root_label) + 1)
-    first = "#{root_label} --+--> #{h}"
-    rest = Enum.map(t, &"#{pad}    +--> #{&1}")
-    Enum.join([first | rest], "\n")
   end
 
   defp graph_issues_table(root, nodes) do
