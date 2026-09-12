@@ -8,6 +8,7 @@ defmodule LinearCli.CLI do
   """
 
   alias LinearCli.CLI.Commands
+  alias LinearCli.CLI.Commands.Issues.{Create, Development, Mutations, Read}
   alias LinearCli.CLI.Commands.{Profiles, Projects, Teams}
   alias LinearCli.CLI.Commands.System, as: SystemCmds
 
@@ -232,23 +233,23 @@ defmodule LinearCli.CLI do
   defp dispatch([:profile, :clear], result, halt),
     do: run(&Profiles.profile_clear/1, result, halt)
 
-  defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
-  defp dispatch([:issue, :view], result, halt), do: run(&Commands.issue_view/1, result, halt)
-  defp dispatch([:issue, :assign], result, halt), do: run(&Commands.issue_assign/1, result, halt)
-  defp dispatch([:issue, :create], result, halt), do: run(&Commands.issue_create/1, result, halt)
+  defp dispatch([:issue, :list], result, halt), do: run(&Read.issue_list/1, result, halt)
+  defp dispatch([:issue, :view], result, halt), do: run(&Read.issue_view/1, result, halt)
+  defp dispatch([:issue, :assign], result, halt), do: run(&Mutations.issue_assign/1, result, halt)
+  defp dispatch([:issue, :create], result, halt), do: run(&Create.issue_create/1, result, halt)
 
   defp dispatch([:issue, :develop], result, halt),
-    do: run(&Commands.issue_develop/1, result, halt)
+    do: run(&Development.issue_develop/1, result, halt)
 
-  defp dispatch([:issue, :pr], result, halt), do: run(&Commands.issue_pr/1, result, halt)
+  defp dispatch([:issue, :pr], result, halt), do: run(&Development.issue_pr/1, result, halt)
   defp dispatch([:issue, :move], result, halt), do: run(&Commands.issue_move/1, result, halt)
 
   defp dispatch([:issue, :comment], result, halt),
-    do: run(&Commands.issue_comment/1, result, halt)
+    do: run(&Mutations.issue_comment/1, result, halt)
 
-  defp dispatch([:issue, :take], result, halt), do: run(&Commands.issue_take/1, result, halt)
-  defp dispatch([:issue, :status], result, halt), do: run(&Commands.issue_status/1, result, halt)
-  defp dispatch([:issue, :update], result, halt), do: run(&Commands.issue_update/1, result, halt)
+  defp dispatch([:issue, :take], result, halt), do: run(&Development.issue_take/1, result, halt)
+  defp dispatch([:issue, :status], result, halt), do: run(&Mutations.issue_status/1, result, halt)
+  defp dispatch([:issue, :update], result, halt), do: run(&Mutations.issue_update/1, result, halt)
 
   defp dispatch([:issue, :relation, :list], result, halt),
     do: run(&Commands.issue_relation_list/1, result, halt)

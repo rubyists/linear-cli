@@ -12,12 +12,16 @@ defmodule LinearCli.MixProject do
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       elixirc_options: [warnings_as_errors: Mix.env() == :test],
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
       releases: releases()
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Burrito-wrapped release, both the interactive CLI and (with
   # LINEAR_CLI_DAEMON=true) the daemon - one binary, not two build
