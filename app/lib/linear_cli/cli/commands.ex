@@ -6,7 +6,7 @@ defmodule LinearCli.CLI.Commands do
 
   alias LinearCli.Browser
   alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
-  alias LinearCli.CLI.Issue.{Actions, Identifiers}
+  alias LinearCli.CLI.Issue.{Actions, Assignment, Creation, Identifiers}
   alias LinearCli.{Favorites, Git, Linear, Profiles}
 
   @max_concurrent_issue_updates 20
@@ -346,7 +346,7 @@ defmodule LinearCli.CLI.Commands do
 
   @doc """
   Ported from commands/issue/create.rb: resolves every field
-  (`LinearCli.CLI.IssueHelpers.make_da_issue!/1`), optionally self-assigns it
+  (`LinearCli.CLI.Issue.Creation.make_da_issue!/1`), optionally self-assigns it
   (`prompt.yes?('Do you want to take this issue?')`, unless `--no-take` was
   given), displays it, then, if `--dev` was given, chains straight into the
   same flow as `issue_develop/2`
@@ -355,8 +355,8 @@ defmodule LinearCli.CLI.Commands do
 
   `opts` isn't part of Ruby's `call(**options)` arity - it exists purely to
   inject test doubles into whatever this command chains into: `:me`
-  (`gimme_da_issue!/2`, both for the self-assign prompt and, if `--dev`
-  fires, `run_develop/2`'s own re-fetch), `:cwd`
+  (`Assignment.gimme_da_issue!/2`, both for the self-assign prompt and, if
+  `--dev` fires, `run_develop/2`'s own re-fetch), `:cwd`
   (`LinearCli.Git.checkout_branch/2`/`pull_or_push_new_branch!/2`, only
   reached with `--dev`). Real callers (`LinearCli.CLI.main/2`) omit it.
   """
@@ -375,7 +375,7 @@ defmodule LinearCli.CLI.Commands do
            project: options.project,
            yes: flags.yes
          ],
-         {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
+         {:ok, issue} <- Creation.make_da_issue!(create_opts),
          :ok <- maybe_take(issue, flags, opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
@@ -390,7 +390,7 @@ defmodule LinearCli.CLI.Commands do
   defp maybe_take(_issue, %{no_take: true}, _opts), do: :ok
 
   defp maybe_take(issue, %{yes: true}, opts) do
-    case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+    case Assignment.gimme_da_issue!(issue.id, opts) do
       {:ok, _updated} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -398,7 +398,7 @@ defmodule LinearCli.CLI.Commands do
 
   defp maybe_take(issue, _flags, opts) do
     if Prompt.yes?("Do you want to take this issue?") do
-      case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+      case Assignment.gimme_da_issue!(issue.id, opts) do
         {:ok, _updated} -> :ok
         {:error, reason} -> {:error, reason}
       end
@@ -409,7 +409,7 @@ defmodule LinearCli.CLI.Commands do
 
   @doc """
   Ported from commands/issue/develop.rb: resolves/self-assigns `issue_id`
-  (`LinearCli.CLI.IssueHelpers.gimme_da_issue!/2`), checks out its
+  (`LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2`), checks out its
   `branch_name` (creating it first if it doesn't exist locally yet), then
   pulls it (or, if there's no upstream tracking branch yet, pushes it to
   `origin` and sets one up).
@@ -417,8 +417,8 @@ defmodule LinearCli.CLI.Commands do
   `opts` (this port's addition, not part of Ruby's `call(issue_id:,
   **options)`) forwards to `LinearCli.Git.checkout_branch/2`/
   `pull_or_push_new_branch!/2` (`:cwd`) and
-  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`) - pass overrides in
-  tests so this never shells out to real git or hits a real `viewer` query;
+  `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` (`:me`) - pass overrides
+  in tests so this never shells out to real git or hits a real `viewer` query;
   real callers omit it.
   """
   @spec issue_develop(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
@@ -426,7 +426,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_develop(%{args: %{issue_id: issue_id}}, opts), do: run_develop(issue_id, opts)
 
   defp run_develop(issue_id, opts) do
-    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+    with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
       Prompt.ok("Checked out branch #{issue.branch_name}")
       finish_pull_or_push(issue.branch_name, opts)
@@ -469,7 +469,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_pr(result, opts \\ [])
 
   def issue_pr(%{args: %{issue_id: issue_id}, options: options}, opts) do
-    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+    with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
       Prompt.ok("Checked out branch #{issue.branch_name}")
 
@@ -495,8 +495,8 @@ defmodule LinearCli.CLI.Commands do
   its `filter_map`.
 
   `opts` (this port's addition) forwards to
-  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`); real callers omit
-  it.
+  `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` (`:me`); real callers
+  omit it.
   """
   @spec issue_take(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
   def issue_take(result, opts \\ [])
@@ -516,7 +516,7 @@ defmodule LinearCli.CLI.Commands do
   defp take_issues(issue_ids, opts) do
     issue_ids
     |> Enum.reduce_while({:ok, []}, fn issue_id, {:ok, acc} ->
-      case IssueHelpers.gimme_da_issue!(issue_id, opts) do
+      case Assignment.gimme_da_issue!(issue_id, opts) do
         {:ok, issue} ->
           {:cont, {:ok, [issue | acc]}}
 
