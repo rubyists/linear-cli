@@ -80,13 +80,22 @@ Supporting directories (not Mix projects):
 The app is organized in layers:
 
 ```
-LinearCli.CLI           — Entry point; Optimus argument parsing and dispatch
-  CLI.Commands          — One function per subcommand; formats and prints output
-  CLI.IssueHelpers      — Issue-lookup logic shared across subcommands
-  CLI.WhatFor           — Interactive prompts (team, project, label selection)
-  CLI.Display           — Output formatting helpers
-  CLI.Projects          — Project-specific prompt/resolution helpers
-  CLI.Prompt            — Low-level readline-style prompt wrapper
+LinearCli.CLI                        — Entry point; Optimus argument parsing and dispatch
+  CLI.Commands.System                — whoami, version subcommands
+  CLI.Commands.Profiles              — profile create/list/use/show/clear/delete subcommands
+  CLI.Commands.Teams                 — team list/favorite/unfavorite subcommands
+  CLI.Commands.Projects              — project list/favorite/unfavorite/update subcommands
+  CLI.Commands.Issues.Read           — issue read/list/show subcommands
+  CLI.Commands.Issues.Create         — issue create subcommand
+  CLI.Commands.Issues.Development    — issue branch/PR subcommands
+  CLI.Commands.Issues.Mutations      — issue update/status/assign/comment subcommands
+  CLI.Commands.Issues.Move           — issue move subcommand
+  CLI.Commands.Issues.Relations      — issue relation list/add/remove subcommands
+  CLI.Issue.Identifiers              — issue ID expansion shared across subcommands
+  CLI.WhatFor                        — Interactive prompts (team, project, label selection)
+  CLI.Display                        — Output formatting helpers
+  CLI.Projects                       — Project-specific prompt/resolution helpers
+  CLI.Prompt                         — Low-level readline-style prompt wrapper
 
 LinearCli.Linear        — Ash domain; all Linear API resources and actions
   Linear.Issue/Team/... — Ash resources (actions are manual GraphQL calls)
@@ -105,11 +114,11 @@ LinearCli.ObanRepo      — Runtime adapter selector (SQLite or Postgres)
 LinearCli.Application   — OTP Application; starts interactive or daemon mode
 ```
 
-Data flows top-to-bottom through these layers: `CLI.Commands` calls the
+Data flows top-to-bottom through these layers: `CLI.Commands.*` modules call the
 `LinearCli.Linear` domain code interface; the domain's Ash resources call
 `LinearCli.Api`; `LinearCli.Api` calls the Linear GraphQL API. `Profiles`
-and `Favorites` are side-channels consulted by `CLI.Commands` and
-`CLI.IssueHelpers` for defaults, not part of the main API data flow.
+and `Favorites` are side-channels consulted by `CLI.Commands.*` modules
+for defaults, not part of the main API data flow.
 
 The daemon mode (started when `LINEAR_CLI_DAEMON=true`) runs
 `LinearCli.Rollover.Worker` via Oban on a monthly cron schedule. The
