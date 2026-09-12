@@ -838,4 +838,142 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       assert output == ""
     end
   end
+
+  describe "relation dispatch routes (smoke)" do
+    defp relation_dispatch_stub do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+
+        cond do
+          String.contains?(body, "issueRelationCreate") ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueRelationCreate" => %{
+                  "success" => true,
+                  "issueRelation" => %{
+                    "id" => "r1",
+                    "type" => "blocks",
+                    "issue" => %{
+                      "id" => "i-src",
+                      "identifier" => "EXT-1",
+                      "title" => "EXT-1 title",
+                      "url" => "https://example.com/EXT-1"
+                    },
+                    "relatedIssue" => %{
+                      "id" => "i-rel",
+                      "identifier" => "EXT-2",
+                      "title" => "EXT-2 title",
+                      "url" => "https://example.com/EXT-2"
+                    }
+                  }
+                }
+              }
+            })
+
+          String.contains?(body, "issueRelationDelete") ->
+            %{"variables" => %{"id" => id}} = Jason.decode!(body)
+
+            Req.Test.json(conn, %{
+              "data" => %{"issueRelationDelete" => %{"success" => true, "entityId" => id}}
+            })
+
+          String.contains?(body, "inverseRelations") ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" => %{
+                  "inverseRelations" => %{
+                    "edges" => [],
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            })
+
+          true ->
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issue" => %{
+                  "relations" => %{
+                    "edges" => [
+                      %{
+                        "node" => %{
+                          "id" => "r1",
+                          "type" => "blocks",
+                          "issue" => %{
+                            "id" => "i-src",
+                            "identifier" => "EXT-1",
+                            "title" => "EXT-1 title",
+                            "url" => "u"
+                          },
+                          "relatedIssue" => %{
+                            "id" => "i-rel",
+                            "identifier" => "EXT-2",
+                            "title" => "EXT-2 title",
+                            "url" => "u"
+                          }
+                        },
+                        "cursor" => "c"
+                      }
+                    ],
+                    "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+                  }
+                }
+              }
+            })
+        end
+      end)
+    end
+
+    test "issue relation list route dispatches to Relations.issue_relation_list/1" do
+      relation_dispatch_stub()
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "relation", "list", "EXT-1"])
+        end)
+
+      assert output =~ "Blocks:"
+      assert output =~ "EXT-2"
+    end
+
+    test "issue relation add route dispatches to Relations.issue_relation_add/1" do
+      relation_dispatch_stub()
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "relation",
+                     "add",
+                     "--type",
+                     "blocks",
+                     "EXT-1",
+                     "EXT-2"
+                   ])
+        end)
+
+      assert output =~ "EXT-1 now blocks EXT-2"
+    end
+
+    test "issue relation remove route dispatches to Relations.issue_relation_remove/1" do
+      relation_dispatch_stub()
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "relation",
+                     "remove",
+                     "--type",
+                     "blocks",
+                     "EXT-1",
+                     "EXT-2"
+                   ])
+        end)
+
+      assert output =~ "EXT-1 no longer blocks EXT-2"
+    end
+  end
 end

@@ -1,7 +1,6 @@
 defmodule LinearCli.CLI.Commands.Issues.Move do
   @moduledoc """
   Issue move command: moves issues to a target project by ID or in bulk.
-  Ported from vendor/ruby-linear-cli/lib/linear/commands/issue/move.rb.
   """
 
   alias LinearCli.CLI.{Display, Projects, Prompt, WhatFor}
@@ -127,8 +126,6 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
   defp validate_issue_ids(_issue_ids), do: :ok
 
-  @uuid_regex ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-
   defp move_issues_by_project(options, flags) do
     team_fn = fn -> WhatFor.team_for(options.team || Profiles.default_team()) end
 
@@ -161,20 +158,24 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
     end
   end
 
-  defp resolve_bulk_project(value, team_fn) do
-    if Regex.match?(@uuid_regex, value) do
-      short_name = String.slice(value, 0, 8) <> "…"
-      {:ok, struct(LinearCli.Linear.Project, %{id: value, name: short_name})}
-    else
-      team = team_fn.()
+  # UUID by structure: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12, dashes at fixed positions)
+  defp resolve_bulk_project(
+         <<_::8*8, ?-, _::4*8, ?-, _::4*8, ?-, _::4*8, ?-, _::12*8>> = uuid,
+         _team_fn
+       ) do
+    short_name = String.slice(uuid, 0, 8) <> "…"
+    {:ok, struct(LinearCli.Linear.Project, %{id: uuid, name: short_name})}
+  end
 
-      with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}),
-           project when not is_nil(project) <- Projects.project_for(projects, value) do
-        {:ok, project}
-      else
-        nil -> {:error, {:smells_bad, "No project found matching #{value}"}}
-        {:error, reason} -> {:error, reason}
-      end
+  defp resolve_bulk_project(value, team_fn) do
+    team = team_fn.()
+
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}),
+         project when not is_nil(project) <- Projects.project_for(projects, value) do
+      {:ok, project}
+    else
+      nil -> {:error, {:smells_bad, "No project found matching #{value}"}}
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -207,17 +208,17 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
     end)
   end
 
-  defp show_move_results(pairs, source, target, output) do
-    if output == "json" do
-      Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: "json"})
-    else
-      Enum.each(pairs, fn {orig, _updated} ->
-        Prompt.ok("#{orig.identifier} moved to #{target.name}")
-      end)
+  defp show_move_results(pairs, _source, _target, "json") do
+    Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: "json"})
+    :ok
+  end
 
-      Prompt.ok("Moved #{length(pairs)} issue(s) from #{source.name} to #{target.name}")
-    end
+  defp show_move_results(pairs, source, target, _output) do
+    Enum.each(pairs, fn {orig, _updated} ->
+      Prompt.ok("#{orig.identifier} moved to #{target.name}")
+    end)
 
+    Prompt.ok("Moved #{length(pairs)} issue(s) from #{source.name} to #{target.name}")
     :ok
   end
 

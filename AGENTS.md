@@ -81,11 +81,14 @@ The app is organized in layers:
 
 ```
 LinearCli.CLI                        — Entry point; Optimus argument parsing and dispatch
-  CLI.Commands.System                — system/profile/team/project subcommands
+  CLI.Commands.System                — whoami, version subcommands
+  CLI.Commands.Profiles              — profile create/list/use/show/clear/delete subcommands
+  CLI.Commands.Teams                 — team list/favorite/unfavorite subcommands
+  CLI.Commands.Projects              — project list/favorite/unfavorite/update subcommands
   CLI.Commands.Issues.Read           — issue read/list/show subcommands
   CLI.Commands.Issues.Create         — issue create subcommand
   CLI.Commands.Issues.Development    — issue branch/PR subcommands
-  CLI.Commands.Issues.Mutations      — issue status/assign/label/comment subcommands
+  CLI.Commands.Issues.Mutations      — issue update/status/assign/comment subcommands
   CLI.Commands.Issues.Move           — issue move subcommand
   CLI.Commands.Issues.Relations      — issue relation list/add/remove subcommands
   CLI.Issue.Identifiers              — issue ID expansion shared across subcommands
