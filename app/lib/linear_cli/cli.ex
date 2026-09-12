@@ -8,6 +8,8 @@ defmodule LinearCli.CLI do
   """
 
   alias LinearCli.CLI.Commands
+  alias LinearCli.CLI.Commands.{Profiles, Projects, Teams}
+  alias LinearCli.CLI.Commands.System, as: SystemCmds
 
   @workflow_state_types ~w(triage backlog unstarted started completed canceled duplicate)
 
@@ -196,39 +198,39 @@ defmodule LinearCli.CLI do
     end
   end
 
-  defp dispatch([:whoami], result, halt), do: run(&Commands.whoami/1, result, halt)
-  defp dispatch([:version], result, halt), do: run(&Commands.version/1, result, halt)
-  defp dispatch([:team, :list], result, halt), do: run(&Commands.team_list/1, result, halt)
+  defp dispatch([:whoami], result, halt), do: run(&SystemCmds.whoami/1, result, halt)
+  defp dispatch([:version], result, halt), do: run(&SystemCmds.version/1, result, halt)
+  defp dispatch([:team, :list], result, halt), do: run(&Teams.team_list/1, result, halt)
 
   defp dispatch([:team, :favorite], result, halt),
-    do: run(&Commands.team_favorite/1, result, halt)
+    do: run(&Teams.team_favorite/1, result, halt)
 
   defp dispatch([:team, :unfavorite], result, halt),
-    do: run(&Commands.team_unfavorite/1, result, halt)
+    do: run(&Teams.team_unfavorite/1, result, halt)
 
-  defp dispatch([:project, :list], result, halt), do: run(&Commands.project_list/1, result, halt)
+  defp dispatch([:project, :list], result, halt), do: run(&Projects.project_list/1, result, halt)
 
   defp dispatch([:project, :favorite], result, halt),
-    do: run(&Commands.project_favorite/1, result, halt)
+    do: run(&Projects.project_favorite/1, result, halt)
 
   defp dispatch([:project, :unfavorite], result, halt),
-    do: run(&Commands.project_unfavorite/1, result, halt)
+    do: run(&Projects.project_unfavorite/1, result, halt)
 
   defp dispatch([:project, :update], result, halt),
-    do: run(&Commands.project_update/1, result, halt)
+    do: run(&Projects.project_update/1, result, halt)
 
   defp dispatch([:profile, :create], result, halt),
-    do: run(&Commands.profile_create/1, result, halt)
+    do: run(&Profiles.profile_create/1, result, halt)
 
-  defp dispatch([:profile, :list], result, halt), do: run(&Commands.profile_list/1, result, halt)
-  defp dispatch([:profile, :use], result, halt), do: run(&Commands.profile_use/1, result, halt)
-  defp dispatch([:profile, :show], result, halt), do: run(&Commands.profile_show/1, result, halt)
+  defp dispatch([:profile, :list], result, halt), do: run(&Profiles.profile_list/1, result, halt)
+  defp dispatch([:profile, :use], result, halt), do: run(&Profiles.profile_use/1, result, halt)
+  defp dispatch([:profile, :show], result, halt), do: run(&Profiles.profile_show/1, result, halt)
 
   defp dispatch([:profile, :delete], result, halt),
-    do: run(&Commands.profile_delete/1, result, halt)
+    do: run(&Profiles.profile_delete/1, result, halt)
 
   defp dispatch([:profile, :clear], result, halt),
-    do: run(&Commands.profile_clear/1, result, halt)
+    do: run(&Profiles.profile_clear/1, result, halt)
 
   defp dispatch([:issue, :list], result, halt), do: run(&Commands.issue_list/1, result, halt)
   defp dispatch([:issue, :view], result, halt), do: run(&Commands.issue_view/1, result, halt)
