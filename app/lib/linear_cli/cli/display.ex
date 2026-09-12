@@ -31,18 +31,19 @@ defmodule LinearCli.CLI.Display do
   end
 
   @doc """
-  Prints a dependency graph produced by `LinearCli.CLI.Commands.Issues.Graph.build/1`.
+  Prints a dependency graph produced by `LinearCli.CLI.Commands.Issues.Graph.build/2`.
 
   With `--output json` emits only the structured graph object. Text output renders
   a diagram followed by Issues and Edges tables.
   """
-  def show_graph(graph, opts \\ %{}) do
-    if Map.get(opts, :output, "text") == "json" do
-      graph |> graph_to_plain() |> Jason.encode!(pretty: true) |> IO.puts()
-    else
-      text = graph_text(graph)
-      Pager.maybe_page(text, opts)
-    end
+  def show_graph(graph, opts \\ %{})
+
+  def show_graph(graph, %{output: "json"}) do
+    graph |> graph_to_plain() |> Jason.encode!(pretty: true) |> IO.puts()
+  end
+
+  def show_graph(graph, opts) do
+    Pager.maybe_page(graph_text(graph), opts)
   end
 
   defp format_text([%IssueRelation{} | _] = relations, _opts), do: relations_block(relations)
@@ -299,20 +300,7 @@ defmodule LinearCli.CLI.Display do
   defp render_columns([], root_label, [single_succ], succ_ids, succ_succ_map) do
     succ_id = List.first(succ_ids)
     ss_labels = Map.get(succ_succ_map, succ_id, [])
-
-    case ss_labels do
-      [] ->
-        "#{root_label} --> #{single_succ}"
-
-      [one] ->
-        "#{root_label} --> #{single_succ} --> #{one}"
-
-      many ->
-        first = "#{root_label} --> #{single_succ} --+--> #{List.first(many)}"
-        pad = String.duplicate(" ", String.length(root_label) + String.length(single_succ) + 9)
-        rest = Enum.map(Enum.drop(many, 1), &"#{pad}+--> #{&1}")
-        Enum.join([first | rest], "\n")
-    end
+    chain_succ(root_label, single_succ, ss_labels)
   end
 
   defp render_columns([], root_label, succs, _succ_ids, _succ_succ_map) do
@@ -325,33 +313,33 @@ defmodule LinearCli.CLI.Display do
   defp render_columns(preds, root_label, succs, _succ_ids, _succ_succ_map) do
     pred_max = Enum.max(Enum.map(preds, &String.length/1))
     mid = div(length(preds), 2)
-
-    succ_arrow =
-      case succs do
-        [] ->
-          root_label
-
-        [s] ->
-          "#{root_label} --> #{s}"
-
-        [h | t] ->
-          pad = String.duplicate(" ", String.length(root_label) + 1)
-          first = "#{root_label} --+--> #{h}"
-          rest = Enum.map(t, &"#{pad}    +--> #{&1}")
-          Enum.join([first | rest], "\n")
-      end
+    arrow = succ_arrow(root_label, succs)
 
     preds
     |> Enum.with_index()
     |> Enum.map_join("\n", fn {pl, i} ->
       padded = String.pad_trailing(pl, pred_max)
-
-      if i == mid do
-        "#{padded} --+--> #{succ_arrow}"
-      else
-        "#{padded} --+"
-      end
+      if i == mid, do: "#{padded} --+--> #{arrow}", else: "#{padded} --+"
     end)
+  end
+
+  defp chain_succ(root_label, succ, []), do: "#{root_label} --> #{succ}"
+  defp chain_succ(root_label, succ, [one]), do: "#{root_label} --> #{succ} --> #{one}"
+
+  defp chain_succ(root_label, succ, [first | rest]) do
+    pad = String.duplicate(" ", String.length(root_label) + String.length(succ) + 9)
+    more = Enum.map(rest, &"#{pad}+--> #{&1}")
+    Enum.join(["#{root_label} --> #{succ} --+--> #{first}" | more], "\n")
+  end
+
+  defp succ_arrow(root_label, []), do: root_label
+  defp succ_arrow(root_label, [s]), do: "#{root_label} --> #{s}"
+
+  defp succ_arrow(root_label, [h | t]) do
+    pad = String.duplicate(" ", String.length(root_label) + 1)
+    first = "#{root_label} --+--> #{h}"
+    rest = Enum.map(t, &"#{pad}    +--> #{&1}")
+    Enum.join([first | rest], "\n")
   end
 
   defp graph_issues_table(root, nodes) do

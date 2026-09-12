@@ -84,7 +84,7 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
         expanded_id = Identifiers.expand_issue_id(issue_id)
 
         with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
-             {:ok, graph} <- Graph.build(expanded_id, issue) do
+             {:ok, graph} <- Graph.build(issue.identifier, issue) do
           Display.show_graph(graph, %{output: options.output})
           :ok
         end

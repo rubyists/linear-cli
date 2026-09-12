@@ -46,22 +46,15 @@ defmodule LinearCli.CLI.Commands.Issues.Graph do
       }
     }
 
-    case bfs([root_identifier], MapSet.new(), initial_nodes, []) do
-      {:ok, nodes_map, edges} ->
-        sorted_nodes =
-          nodes_map
-          |> Map.values()
-          |> Enum.sort_by(& &1.identifier)
+    with {:ok, nodes_map, edges} <- bfs([root_identifier], MapSet.new(), initial_nodes, []) do
+      sorted_nodes = nodes_map |> Map.values() |> Enum.sort_by(& &1.identifier)
 
-        sorted_edges =
-          edges
-          |> Enum.uniq_by(fn %{source: s, target: t} -> {s, t} end)
-          |> Enum.sort_by(fn %{source: s, target: t} -> {s, t} end)
+      sorted_edges =
+        edges
+        |> Enum.uniq_by(fn %{source: s, target: t} -> {s, t} end)
+        |> Enum.sort_by(fn %{source: s, target: t} -> {s, t} end)
 
-        {:ok, %{root: root_identifier, nodes: sorted_nodes, edges: sorted_edges}}
-
-      {:error, _} = err ->
-        err
+      {:ok, %{root: root_identifier, nodes: sorted_nodes, edges: sorted_edges}}
     end
   end
 
@@ -71,26 +64,35 @@ defmodule LinearCli.CLI.Commands.Issues.Graph do
   defp bfs([], _visited, nodes_map, edges), do: {:ok, nodes_map, edges}
 
   defp bfs([id | rest], visited, nodes_map, edges) do
-    if MapSet.member?(visited, id) or map_size(nodes_map) >= @max_nodes do
-      bfs(rest, visited, nodes_map, edges)
-    else
-      visited = MapSet.put(visited, id)
+    visit(
+      MapSet.member?(visited, id) or map_size(nodes_map) >= @max_nodes,
+      id,
+      rest,
+      visited,
+      nodes_map,
+      edges
+    )
+  end
 
-      case Linear.issue_relations(id) do
-        {:error, reason} ->
-          {:error, {id, reason}}
+  defp visit(true, _id, rest, visited, nodes_map, edges), do: bfs(rest, visited, nodes_map, edges)
 
-        {:ok, relations} ->
-          blocks_only = Enum.filter(relations, &(&1.type == "blocks"))
+  defp visit(false, id, rest, visited, nodes_map, edges) do
+    visited = MapSet.put(visited, id)
+    traverse(Linear.issue_relations(id), id, rest, visited, nodes_map, edges)
+  end
 
-          {new_nodes_map, new_edges, new_queue} =
-            Enum.reduce(blocks_only, {nodes_map, edges, rest}, fn rel, acc ->
-              process_relation(rel, acc, visited)
-            end)
+  defp traverse({:error, reason}, id, _rest, _visited, _nodes_map, _edges),
+    do: {:error, {id, reason}}
 
-          bfs(new_queue, visited, new_nodes_map, new_edges)
-      end
-    end
+  defp traverse({:ok, relations}, _id, rest, visited, nodes_map, edges) do
+    blocks_only = Enum.filter(relations, &(&1.type == "blocks"))
+
+    {new_nodes_map, new_edges, new_queue} =
+      Enum.reduce(blocks_only, {nodes_map, edges, rest}, fn rel, acc ->
+        process_relation(rel, acc, visited)
+      end)
+
+    bfs(new_queue, visited, new_nodes_map, new_edges)
   end
 
   defp process_relation(rel, {nm, ed, q}, visited) do
@@ -98,11 +100,21 @@ defmodule LinearCli.CLI.Commands.Issues.Graph do
     {nm, ed, q} = add_endpoint(rel.related_issue, nm, ed, q, visited)
     source = rel.issue && rel.issue.identifier
     target = rel.related_issue && rel.related_issue.identifier
-    ed = if source && target, do: [%{source: source, target: target} | ed], else: ed
+
+    both_known =
+      is_binary(source) and is_binary(target) and Map.has_key?(nm, source) and
+        Map.has_key?(nm, target)
+
+    ed = if both_known, do: [%{source: source, target: target} | ed], else: ed
     {nm, ed, q}
   end
 
   defp add_endpoint(nil, nodes_map, edges, queue, _visited), do: {nodes_map, edges, queue}
+
+  defp add_endpoint(_endpoint, nodes_map, edges, queue, _visited)
+       when map_size(nodes_map) >= @max_nodes do
+    {nodes_map, edges, queue}
+  end
 
   defp add_endpoint(endpoint, nodes_map, edges, queue, visited) do
     id = endpoint.identifier
