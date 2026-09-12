@@ -6,7 +6,7 @@ defmodule LinearCli.Profiles do
   time - enforced by a partial unique index (`active_idx`), not
   application-level bookkeeping. `default_team/0`/`default_project/0` are
   what `LinearCli.CLI.Issue.Creation.make_da_issue!/1` and
-  `LinearCli.CLI.Commands.issue_list/1` fall back to when `--team`/
+  `LinearCli.CLI.Commands.Issues.Read.issue_list/1` fall back to when `--team`/
   `--project` are omitted - see `documents/phase-9-plan.adoc`.
 
   New in this port - Ruby has no equivalent. Uses `Exqlite.Sqlite3`

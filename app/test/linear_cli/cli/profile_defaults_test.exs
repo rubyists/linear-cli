@@ -140,7 +140,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     path
   end
 
-  describe "Commands.issue_list/1 falls back to the active profile" do
+  describe "Read.issue_list/1 falls back to the active profile" do
     test "uses the active profile's team/project when both flags are omitted" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
       :ok = Profiles.activate("manhattan")
@@ -360,7 +360,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     end
   end
 
-  describe "Commands.issue_update/1 resolves bare issue numbers via the active profile" do
+  describe "Mutations.issue_update/1 resolves bare issue numbers via the active profile" do
     test "expands a bare positional id before looking it up" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -398,7 +398,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     end
   end
 
-  describe "Commands.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
+  describe "Development.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
     test "issue_develop/2 expands the bare issue_id before self-assigning/checking it out" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
