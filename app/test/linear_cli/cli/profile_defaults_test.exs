@@ -7,7 +7,6 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias LinearCli.CLI.Commands
   alias LinearCli.CLI.Commands.Issues.{Development, Mutations, Read}
   alias LinearCli.CLI.Issue.Creation
   alias LinearCli.Linear.User
