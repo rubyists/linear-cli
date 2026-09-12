@@ -6,6 +6,7 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   """
 
   alias LinearCli.Browser
+  alias LinearCli.CLI.Commands.Issues.Graph
   alias LinearCli.CLI.{Display, Projects}
   alias LinearCli.CLI.Issue.Identifiers
   alias LinearCli.{Linear, Profiles}
@@ -72,15 +73,33 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   def issue_view(result, opts \\ [])
 
   def issue_view(%{args: %{issue_id: issue_id}, flags: flags, options: options}, opts) do
-    expanded_id = Identifiers.expand_issue_id(issue_id)
+    graph? = Map.get(flags, :graph, false)
+    web? = flags.web
 
-    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
-      if flags.web do
-        Browser.open_url(issue.url, opts)
-      else
-        Display.show(issue, %{output: options.output, full: true})
-        :ok
-      end
+    cond do
+      graph? && web? ->
+        {:error, {:smells_bad, "--graph and --web cannot be used together"}}
+
+      graph? ->
+        expanded_id = Identifiers.expand_issue_id(issue_id)
+
+        with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
+             {:ok, graph} <- Graph.build(expanded_id, issue) do
+          Display.show_graph(graph, %{output: options.output})
+          :ok
+        end
+
+      true ->
+        expanded_id = Identifiers.expand_issue_id(issue_id)
+
+        with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
+          if web? do
+            Browser.open_url(issue.url, opts)
+          else
+            Display.show(issue, %{output: options.output, full: true})
+            :ok
+          end
+        end
     end
   end
 

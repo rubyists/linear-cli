@@ -30,6 +30,21 @@ defmodule LinearCli.CLI.Display do
     end
   end
 
+  @doc """
+  Prints a dependency graph produced by `LinearCli.CLI.Commands.Issues.Graph.build/1`.
+
+  With `--output json` emits only the structured graph object. Text output renders
+  a diagram followed by Issues and Edges tables.
+  """
+  def show_graph(graph, opts \\ %{}) do
+    if Map.get(opts, :output, "text") == "json" do
+      graph |> graph_to_plain() |> Jason.encode!(pretty: true) |> IO.puts()
+    else
+      text = graph_text(graph)
+      Pager.maybe_page(text, opts)
+    end
+  end
+
   defp format_text([%IssueRelation{} | _] = relations, _opts), do: relations_block(relations)
 
   defp format_text(subject, opts) do
@@ -187,6 +202,185 @@ defmodule LinearCli.CLI.Display do
 
   @doc "Returns a plain-map representation of an IssueRelation suitable for JSON encoding."
   def relation_to_plain(%IssueRelation{} = relation), do: to_plain(relation)
+
+  # --- Dependency graph rendering ---
+
+  defp graph_text(%{root: root, nodes: nodes, edges: edges}) do
+    diagram = graph_diagram(root, nodes, edges)
+    issues_table = graph_issues_table(root, nodes)
+    edges_table = graph_edges_table(edges)
+
+    [
+      "Dependency graph",
+      "A -> B means A blocks B",
+      "",
+      diagram,
+      "",
+      issues_table,
+      "",
+      edges_table
+    ]
+    |> Enum.join("\n")
+  end
+
+  defp graph_to_plain(%{root: root, nodes: nodes, edges: edges}) do
+    %{
+      "root" => root,
+      "nodes" =>
+        Enum.map(nodes, fn n ->
+          %{"identifier" => n.identifier, "status" => n.status, "title" => n.title}
+        end),
+      "edges" => Enum.map(edges, fn e -> %{"source" => e.source, "target" => e.target} end)
+    }
+  end
+
+  defp graph_diagram(root, nodes, edges) do
+    by_id = Map.new(nodes, &{&1.identifier, &1})
+
+    out_adj =
+      Enum.reduce(edges, %{}, fn e, acc ->
+        Map.update(acc, e.source, [e.target], &Enum.sort([e.target | &1]))
+      end)
+
+    in_adj =
+      Enum.reduce(edges, %{}, fn e, acc ->
+        Map.update(acc, e.target, [e.source], &Enum.sort([e.source | &1]))
+      end)
+
+    render_diagram(root, by_id, out_adj, in_adj)
+  end
+
+  defp node_label(%{identifier: id, status: s}) when is_binary(s) and s != "" do
+    "#{id} [#{s}]"
+  end
+
+  defp node_label(%{identifier: id}), do: id
+
+  # Renders a compact left-to-right diagram.
+  # Predecessors of root appear on the left, root in the middle,
+  # successors (and their successors) on the right.
+  defp render_diagram(root, by_id, out_adj, in_adj) do
+    root_node = Map.get(by_id, root, %{identifier: root, status: "", title: ""})
+    root_label = node_label(root_node)
+
+    pred_ids = Map.get(in_adj, root, [])
+    succ_ids = Map.get(out_adj, root, [])
+
+    pred_labels =
+      Enum.map(pred_ids, fn id ->
+        node_label(Map.get(by_id, id, %{identifier: id, status: ""}))
+      end)
+
+    succ_labels =
+      Enum.map(succ_ids, fn id ->
+        node_label(Map.get(by_id, id, %{identifier: id, status: ""}))
+      end)
+
+    # For each successor, gather their successors for chaining
+    succ_succ_map =
+      Map.new(succ_ids, fn id ->
+        ids = Map.get(out_adj, id, [])
+
+        labels =
+          Enum.map(ids, fn sid ->
+            node_label(Map.get(by_id, sid, %{identifier: sid, status: ""}))
+          end)
+
+        {id, labels}
+      end)
+
+    render_columns(pred_labels, root_label, succ_labels, succ_ids, succ_succ_map)
+  end
+
+  defp render_columns([], root_label, [], _succ_ids, _succ_succ_map) do
+    root_label
+  end
+
+  defp render_columns([], root_label, [single_succ], succ_ids, succ_succ_map) do
+    succ_id = List.first(succ_ids)
+    ss_labels = Map.get(succ_succ_map, succ_id, [])
+
+    case ss_labels do
+      [] ->
+        "#{root_label} --> #{single_succ}"
+
+      [one] ->
+        "#{root_label} --> #{single_succ} --> #{one}"
+
+      many ->
+        first = "#{root_label} --> #{single_succ} --+--> #{List.first(many)}"
+        pad = String.duplicate(" ", String.length(root_label) + String.length(single_succ) + 9)
+        rest = Enum.map(Enum.drop(many, 1), &"#{pad}+--> #{&1}")
+        Enum.join([first | rest], "\n")
+    end
+  end
+
+  defp render_columns([], root_label, succs, _succ_ids, _succ_succ_map) do
+    first_line = "#{root_label} --+--> #{List.first(succs)}"
+    pad = String.duplicate(" ", String.length(root_label) + 1)
+    rest = Enum.map(Enum.drop(succs, 1), &"#{pad}    +--> #{&1}")
+    Enum.join([first_line | rest], "\n")
+  end
+
+  defp render_columns(preds, root_label, succs, _succ_ids, _succ_succ_map) do
+    pred_max = Enum.max(Enum.map(preds, &String.length/1))
+    mid = div(length(preds), 2)
+
+    succ_arrow =
+      case succs do
+        [] ->
+          root_label
+
+        [s] ->
+          "#{root_label} --> #{s}"
+
+        [h | t] ->
+          pad = String.duplicate(" ", String.length(root_label) + 1)
+          first = "#{root_label} --+--> #{h}"
+          rest = Enum.map(t, &"#{pad}    +--> #{&1}")
+          Enum.join([first | rest], "\n")
+      end
+
+    preds
+    |> Enum.with_index()
+    |> Enum.map_join("\n", fn {pl, i} ->
+      padded = String.pad_trailing(pl, pred_max)
+
+      if i == mid do
+        "#{padded} --+--> #{succ_arrow}"
+      else
+        "#{padded} --+"
+      end
+    end)
+  end
+
+  defp graph_issues_table(root, nodes) do
+    id_w = nodes |> Enum.map(&String.length(&1.identifier)) |> Enum.max(fn -> 5 end) |> max(5)
+    st_w = nodes |> Enum.map(&String.length(&1.status)) |> Enum.max(fn -> 6 end) |> max(6)
+
+    header =
+      "#{String.pad_trailing("ISSUE", id_w)}  #{String.pad_trailing("STATUS", st_w)}  TITLE"
+
+    rows =
+      Enum.map(nodes, fn n ->
+        title = if n.identifier == root, do: "#{n.title} (root)", else: n.title
+
+        "#{String.pad_trailing(n.identifier, id_w)}  #{String.pad_trailing(n.status, st_w)}  #{title}"
+      end)
+
+    Enum.join([header | rows], "\n")
+  end
+
+  defp graph_edges_table([]) do
+    "SOURCE  TARGET\n(none)"
+  end
+
+  defp graph_edges_table(edges) do
+    src_w = edges |> Enum.map(&String.length(&1.source)) |> Enum.max() |> max(6)
+    header = "#{String.pad_trailing("SOURCE", src_w)}  TARGET"
+    rows = Enum.map(edges, fn e -> "#{String.pad_trailing(e.source, src_w)}  #{e.target}" end)
+    Enum.join([header | rows], "\n")
+  end
 
   defp to_plain(list) when is_list(list), do: Enum.map(list, &to_plain/1)
 

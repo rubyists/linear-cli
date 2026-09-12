@@ -38,7 +38,7 @@ defmodule LinearCli.Linear.IssueRelation do
     attribute :related_issue, :term, public?: true
   end
 
-  @endpoint_fields "id identifier title url"
+  @endpoint_fields "id identifier title url state { name }"
 
   @doc "GraphQL field selection for each issue endpoint inside a relation node."
   def endpoint_fields, do: @endpoint_fields
@@ -64,7 +64,15 @@ defmodule LinearCli.Linear.IssueRelation do
   defp endpoint_from_map(nil), do: nil
 
   defp endpoint_from_map(map) do
-    %{id: map["id"], identifier: map["identifier"], title: map["title"], url: map["url"]}
+    state = map["state"] && %{name: map["state"]["name"]}
+
+    %{
+      id: map["id"],
+      identifier: map["identifier"],
+      title: map["title"],
+      url: map["url"],
+      state: state
+    }
   end
 end
 

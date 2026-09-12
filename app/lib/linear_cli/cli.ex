@@ -750,7 +750,12 @@ defmodule LinearCli.CLI do
                 issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
               ],
               flags: [
-                web: [short: "-w", long: "--web", help: "Open the issue in your browser"]
+                web: [short: "-w", long: "--web", help: "Open the issue in your browser"],
+                graph: [
+                  long: "--graph",
+                  help:
+                    "Show the transitive dependency graph (blocks relations) rooted at this issue"
+                ]
               ]
             ],
             assign: [
