@@ -133,33 +133,29 @@ defmodule LinearCli.CLI do
   }
 
   @doc false
-  def normalize_subcommand_aliases([first | rest]) do
+  def normalize_subcommand_aliases([first, second | rest]) do
     canonical_first = Map.get(@command_aliases, first, first)
+    subcommand_aliases = Map.get(@subcommand_aliases, canonical_first, %{})
+    canonical_second = Map.get(subcommand_aliases, second, second)
 
-    case {Map.fetch(@subcommand_aliases, canonical_first), rest} do
-      {{:ok, sub_aliases}, [second | more]} ->
-        canonical_second = Map.get(sub_aliases, second, second)
-
-        case {Map.fetch(@nested_subcommand_aliases, canonical_first), more} do
-          {{:ok, nested}, [third | rest2]} ->
-            case Map.fetch(nested, canonical_second) do
-              {:ok, third_aliases} ->
-                [canonical_first, canonical_second, Map.get(third_aliases, third, third) | rest2]
-
-              :error ->
-                [canonical_first, canonical_second | more]
-            end
-
-          _ ->
-            [canonical_first, canonical_second | more]
-        end
-
-      _ ->
-        [canonical_first | rest]
-    end
+    normalize_nested_subcommand_alias(canonical_first, canonical_second, rest)
   end
 
+  def normalize_subcommand_aliases([first | rest]),
+    do: [Map.get(@command_aliases, first, first) | rest]
+
   def normalize_subcommand_aliases(argv), do: argv
+
+  defp normalize_nested_subcommand_alias(first, second, [third | rest]) do
+    third_aliases =
+      @nested_subcommand_aliases
+      |> Map.get(first, %{})
+      |> Map.get(second, %{})
+
+    [first, second, Map.get(third_aliases, third, third) | rest]
+  end
+
+  defp normalize_nested_subcommand_alias(first, second, rest), do: [first, second | rest]
 
   # Ported from exe/scripts/lc.sh's own `[ "$#" -eq 0 ]` branch exactly
   # (including its stderr text) - a bare `lc` invocation defaults to
