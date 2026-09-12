@@ -5,7 +5,7 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias LinearCli.CLI.IssueHelpers
+  alias LinearCli.CLI.Issue.Identifiers
   alias LinearCli.{Favorites, Profiles}
 
   setup do
@@ -33,7 +33,7 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
       :ok = Profiles.activate("manhattan")
 
       assert capture_io(fn ->
-               assert IssueHelpers.expand_issue_id("1234") == "CRY-1234"
+               assert Identifiers.expand_issue_id("1234") == "CRY-1234"
              end) == ""
     end
 
@@ -41,7 +41,7 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
       Favorites.add("team", "ENG")
 
       assert capture_io(fn ->
-               assert IssueHelpers.expand_issue_id("42") == "ENG-42"
+               assert Identifiers.expand_issue_id("42") == "ENG-42"
              end) == ""
     end
 
@@ -51,7 +51,7 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
 
       output =
         capture_io([input: "2\n"], fn ->
-          assert IssueHelpers.expand_issue_id("42") == "SUP-42"
+          assert Identifiers.expand_issue_id("42") == "SUP-42"
         end)
 
       assert output =~ "Choose a team"
@@ -70,7 +70,7 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
 
       output =
         capture_io([input: "2\n"], fn ->
-          assert IssueHelpers.expand_issue_id("42") == "SUP-42"
+          assert Identifiers.expand_issue_id("42") == "SUP-42"
         end)
 
       assert output =~ "Choose a team"
@@ -82,9 +82,9 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
       Favorites.add("team", "ENG")
 
       assert capture_io(fn ->
-               assert IssueHelpers.expand_issue_id("CRY-1234") == "CRY-1234"
+               assert Identifiers.expand_issue_id("CRY-1234") == "CRY-1234"
 
-               assert IssueHelpers.expand_issue_id("550e8400-e29b-41d4-a716-446655440000") ==
+               assert Identifiers.expand_issue_id("550e8400-e29b-41d4-a716-446655440000") ==
                         "550e8400-e29b-41d4-a716-446655440000"
              end) == ""
     end

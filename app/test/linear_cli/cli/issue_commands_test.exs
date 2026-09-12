@@ -7,7 +7,7 @@ defmodule LinearCli.CLI.IssueCommandsTest do
 
   # Dispatches to one of `pairs` ({substring, response_map}) based on which
   # substring appears in the outgoing GraphQL document - see
-  # `LinearCli.CLI.IssueHelpersTest`'s own `stub_responses/1` for why one
+  # `LinearCli.CLI.Issue.ActionsTest`'s own `stub_responses/1` for why one
   # stub per test is enough to drive an entire multi-call flow.
   defp stub_responses(pairs) do
     Req.Test.stub(LinearCli.Api, fn conn ->

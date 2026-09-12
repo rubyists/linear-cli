@@ -10,8 +10,8 @@ defmodule LinearCli.Favorites do
   `LinearCli.Profiles` itself.
 
   `list/1`, once non-empty for a given `kind`, is what
-  `LinearCli.CLI.Commands.team_list/1`/`project_list/1` filter their
-  results down to by default (a new `--all` flag opts back out).
+  `LinearCli.CLI.Commands.Teams.team_list/1`/`LinearCli.CLI.Commands.Projects.project_list/1`
+  filter their results down to by default (a new `--all` flag opts back out).
 
   New in this port - Ruby has no equivalent.
   """

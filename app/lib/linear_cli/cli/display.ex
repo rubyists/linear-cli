@@ -54,7 +54,7 @@ defmodule LinearCli.CLI.Display do
   end
 
   # New in this port - Ruby has no equivalent (no bare `Comment` command
-  # existed to display one). `LinearCli.CLI.IssueHelpers.issue_comment/2`/
+  # existed to display one). `LinearCli.CLI.Issue.Actions.issue_comment/2`/
   # `upsert_comment/4` already print a "Comment added to.../updated on..."
   # confirmation via `Prompt.ok/1` before this runs, so this only needs to
   # add the one thing that isn't in that line: a link to the comment.

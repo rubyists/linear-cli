@@ -1,252 +1,19 @@
 defmodule LinearCli.CLI.Commands do
   @moduledoc """
-  The logic behind each subcommand: fetch via `LinearCli.Linear`, display the
-  result. Ported from vendor/ruby-linear-cli/lib/linear/commands/**.
+  Issue command implementations: fetch via `LinearCli.Linear`, display the
+  result. Ported from vendor/ruby-linear-cli/lib/linear/commands/issue/**.
+
+  Non-issue command families live in their own focused modules:
+  `LinearCli.CLI.Commands.System`, `LinearCli.CLI.Commands.Teams`,
+  `LinearCli.CLI.Commands.Projects`, and `LinearCli.CLI.Commands.Profiles`.
   """
 
   alias LinearCli.Browser
-  alias LinearCli.CLI.{Display, IssueHelpers, Projects, Prompt, WhatFor}
-  alias LinearCli.{Favorites, Git, Linear, Profiles}
+  alias LinearCli.CLI.{Display, Projects, Prompt, WhatFor}
+  alias LinearCli.CLI.Issue.{Actions, Assignment, Creation, Identifiers, PullRequest}
+  alias LinearCli.{Git, Linear, Profiles}
 
   @max_concurrent_issue_updates 20
-
-  @doc "Ported from commands/whoami.rb."
-  def whoami(%{flags: flags, options: options}) do
-    with {:ok, user} <- Linear.me() do
-      Display.show(user, %{output: options.output, teams: flags.teams})
-      :ok
-    end
-  end
-
-  @doc """
-  Ported from commands/version.rb, extended to respect the global
-  `--output json` option like every other command does - previously
-  ignored it and always printed plain text. The hidden Markdown renders make
-  this command a complete release smoke test for the MDEx and Syntect NIFs,
-  Marcli's syntax-highlighting integration, and the application boot path.
-  """
-  def version(%{options: options}) do
-    verify_markdown_runtime!()
-    version = to_string(Application.spec(:linear_cli, :vsn))
-
-    if options.output == "json" do
-      IO.puts(Jason.encode!(%{version: version}))
-    else
-      IO.puts(version)
-    end
-
-    :ok
-  end
-
-  defp verify_markdown_runtime! do
-    theme = Marcli.Theme.default()
-    elixir = Marcli.render("```elixir\ndef smoke, do: :ok\n```")
-    ruby = Marcli.render("```ruby\ndef smoke; :ok; end\n```")
-
-    elixir_keyword = theme.syntax.keyword_declaration <> "def" <> theme.reset
-    ruby_keyword = theme.syntax.keyword_type <> "def" <> theme.reset
-
-    unless String.contains?(elixir, elixir_keyword) and String.contains?(ruby, ruby_keyword) do
-      raise "Markdown syntax-highlighting runtime is unavailable"
-    end
-
-    :ok
-  end
-
-  @doc "Ported from commands/team/list.rb. Ruby's `--mine` defaults true."
-  def team_list(%{flags: flags, options: options}) do
-    result = if flags.no_mine, do: Linear.teams(), else: Linear.my_teams()
-
-    with {:ok, teams} <- result do
-      Display.show(filter_favorites(teams, flags.all, "team", & &1.key), %{
-        output: options.output
-      })
-
-      :ok
-    end
-  end
-
-  @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
-  def project_list(%{flags: flags, options: options}) do
-    with {:ok, projects} <- projects_for(flags, options) do
-      Display.show(filter_favorites(projects, flags.all, "project", & &1.id), %{
-        output: options.output
-      })
-
-      :ok
-    end
-  end
-
-  defp projects_for(_flags, %{team: team_key}) when is_binary(team_key) do
-    with {:ok, team} <- Linear.find_team(team_key) do
-      Linear.projects_by_team(team.id)
-    end
-  end
-
-  defp projects_for(%{mine: true}, _options), do: Linear.my_projects()
-  defp projects_for(_flags, _options), do: Linear.projects()
-
-  @doc """
-  New in this port - Ruby has no equivalent. Favorites a team
-  (`LinearCli.Favorites`) - once any team is favorited, `team list`
-  defaults to showing just favorites (`--all` overrides).
-  """
-  def team_favorite(%{args: %{team: key}}) do
-    with {:ok, team} <- Linear.find_team(key) do
-      Favorites.add("team", team.key)
-      Prompt.ok("Favorited team #{team.key}")
-      :ok
-    end
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Un-favorites a team."
-  def team_unfavorite(%{args: %{team: key}}) do
-    with {:ok, team} <- Linear.find_team(key) do
-      Favorites.remove("team", team.key)
-      Prompt.ok("Un-favorited team #{team.key}")
-      :ok
-    end
-  end
-
-  @doc """
-  New in this port - Ruby has no equivalent. Favorites a project
-  (`LinearCli.Favorites`), resolved against the active team's projects,
-  prompting if ambiguous. Team is resolved via `--team`, the active
-  profile, or an interactive prompt. Once any project is favorited,
-  `project list` defaults to showing just favorites (`--all` overrides).
-  """
-  def project_favorite(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search) do
-      Favorites.add("project", project.id)
-      Prompt.ok("Favorited project #{project.name}")
-      :ok
-    else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Un-favorites a project."
-  def project_unfavorite(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search) do
-      Favorites.remove("project", project.id)
-      Prompt.ok("Un-favorited project #{project.name}")
-      :ok
-    else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  # Once any favorite of `kind` exists, narrows `records` down to just
-  # those (matched via `key_fun`) - invisible to anyone who's never
-  # favorited anything, since an empty favorites list leaves `records`
-  # untouched. `all?` (the new `--all` flag) always shows everything,
-  # bypassing the favorites lookup entirely.
-  defp filter_favorites(records, true, _kind, _key_fun), do: records
-
-  defp filter_favorites(records, _all?, kind, key_fun) do
-    case Favorites.list(kind) do
-      [] -> records
-      favorite_values -> Enum.filter(records, &(key_fun.(&1) in favorite_values))
-    end
-  end
-
-  @doc """
-  New in this port - Ruby has no equivalent. Posts a status update
-  (Linear's own "Project Update" feature - a journal-style status post,
-  not an edit to the project's own fields) via the projectUpdateCreate
-  mutation. `PROJECT` is resolved against the active team's projects,
-  prompting if ambiguous. Team is resolved via `--team`, the active
-  profile, or an interactive prompt.
-  """
-  def project_update(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search),
-         {:ok, update} <-
-           Linear.post_project_update(project.id, options.body, %{health: options.health}) do
-      Display.show(update, %{output: options.output})
-      :ok
-    else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
-      {:error, reason} -> {:error, reason}
-    end
-  end
-
-  @doc """
-  New in this port - Ruby has no equivalent. Saves a new named
-  team/project bundle (`LinearCli.Profiles.create/2`) that `profile use`
-  can later switch to.
-  """
-  def profile_create(%{args: %{name: name}, options: options}) do
-    case Profiles.create(name, team: options.team, project: options.project) do
-      {:ok, profile} ->
-        Display.show(profile, %{output: options.output})
-        :ok
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Lists every saved profile."
-  def profile_list(%{options: options}) do
-    Display.show(Profiles.list(), %{output: options.output})
-    :ok
-  end
-
-  @doc """
-  New in this port - Ruby has no equivalent. Switches the active profile -
-  its team/project become the defaults `issue create`/`issue list` fall
-  back to when `--team`/`--project` are omitted.
-  """
-  def profile_use(%{args: %{name: name}}) do
-    case Profiles.activate(name) do
-      :ok ->
-        Prompt.ok("Switched to profile #{name}")
-        :ok
-
-      {:error, :not_found} ->
-        {:error, {:smells_bad, "No profile named #{name}"}}
-    end
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Shows the active profile, if any."
-  def profile_show(%{options: options}) do
-    case Profiles.active() do
-      nil -> Prompt.warn("No active profile")
-      profile -> Display.show(profile, %{output: options.output})
-    end
-
-    :ok
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Deactivates the active profile without deleting it."
-  def profile_clear(_result) do
-    Profiles.clear()
-    Prompt.ok("Cleared active profile")
-    :ok
-  end
-
-  @doc "New in this port - Ruby has no equivalent. Deletes a saved profile."
-  def profile_delete(%{args: %{name: name}}) do
-    case Profiles.delete(name) do
-      :ok ->
-        Prompt.ok("Deleted profile #{name}")
-        :ok
-
-      {:error, :not_found} ->
-        {:error, {:smells_bad, "No profile named #{name}"}}
-    end
-  end
 
   @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
@@ -273,7 +40,7 @@ defmodule LinearCli.CLI.Commands do
       include_labels = Map.get(flags, :include_labels, false) || label_filter != []
 
       input = %{
-        ids: Enum.map(ids, &IssueHelpers.expand_issue_id/1),
+        ids: Enum.map(ids, &Identifiers.expand_issue_id/1),
         mine: !flags.no_mine,
         unassigned: flags.unassigned,
         team_key: team_key,
@@ -310,7 +77,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_view(result, opts \\ [])
 
   def issue_view(%{args: %{issue_id: issue_id}, flags: flags, options: options}, opts) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
       if flags.web do
@@ -345,7 +112,7 @@ defmodule LinearCli.CLI.Commands do
 
   @doc """
   Ported from commands/issue/create.rb: resolves every field
-  (`LinearCli.CLI.IssueHelpers.make_da_issue!/1`), optionally self-assigns it
+  (`LinearCli.CLI.Issue.Creation.make_da_issue!/1`), optionally self-assigns it
   (`prompt.yes?('Do you want to take this issue?')`, unless `--no-take` was
   given), displays it, then, if `--dev` was given, chains straight into the
   same flow as `issue_develop/2`
@@ -354,8 +121,8 @@ defmodule LinearCli.CLI.Commands do
 
   `opts` isn't part of Ruby's `call(**options)` arity - it exists purely to
   inject test doubles into whatever this command chains into: `:me`
-  (`gimme_da_issue!/2`, both for the self-assign prompt and, if `--dev`
-  fires, `run_develop/2`'s own re-fetch), `:cwd`
+  (`Assignment.gimme_da_issue!/2`, both for the self-assign prompt and, if
+  `--dev` fires, `run_develop/2`'s own re-fetch), `:cwd`
   (`LinearCli.Git.checkout_branch/2`/`pull_or_push_new_branch!/2`, only
   reached with `--dev`). Real callers (`LinearCli.CLI.main/2`) omit it.
   """
@@ -374,7 +141,7 @@ defmodule LinearCli.CLI.Commands do
            project: options.project,
            yes: flags.yes
          ],
-         {:ok, issue} <- IssueHelpers.make_da_issue!(create_opts),
+         {:ok, issue} <- Creation.make_da_issue!(create_opts),
          :ok <- maybe_take(issue, flags, opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
@@ -389,7 +156,7 @@ defmodule LinearCli.CLI.Commands do
   defp maybe_take(_issue, %{no_take: true}, _opts), do: :ok
 
   defp maybe_take(issue, %{yes: true}, opts) do
-    case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+    case Assignment.gimme_da_issue!(issue.id, opts) do
       {:ok, _updated} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -397,7 +164,7 @@ defmodule LinearCli.CLI.Commands do
 
   defp maybe_take(issue, _flags, opts) do
     if Prompt.yes?("Do you want to take this issue?") do
-      case IssueHelpers.gimme_da_issue!(issue.id, opts) do
+      case Assignment.gimme_da_issue!(issue.id, opts) do
         {:ok, _updated} -> :ok
         {:error, reason} -> {:error, reason}
       end
@@ -408,7 +175,7 @@ defmodule LinearCli.CLI.Commands do
 
   @doc """
   Ported from commands/issue/develop.rb: resolves/self-assigns `issue_id`
-  (`LinearCli.CLI.IssueHelpers.gimme_da_issue!/2`), checks out its
+  (`LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2`), checks out its
   `branch_name` (creating it first if it doesn't exist locally yet), then
   pulls it (or, if there's no upstream tracking branch yet, pushes it to
   `origin` and sets one up).
@@ -416,8 +183,8 @@ defmodule LinearCli.CLI.Commands do
   `opts` (this port's addition, not part of Ruby's `call(issue_id:,
   **options)`) forwards to `LinearCli.Git.checkout_branch/2`/
   `pull_or_push_new_branch!/2` (`:cwd`) and
-  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`) - pass overrides in
-  tests so this never shells out to real git or hits a real `viewer` query;
+  `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` (`:me`) - pass overrides
+  in tests so this never shells out to real git or hits a real `viewer` query;
   real callers omit it.
   """
   @spec issue_develop(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
@@ -425,7 +192,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_develop(%{args: %{issue_id: issue_id}}, opts), do: run_develop(issue_id, opts)
 
   defp run_develop(issue_id, opts) do
-    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+    with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
       Prompt.ok("Checked out branch #{issue.branch_name}")
       finish_pull_or_push(issue.branch_name, opts)
@@ -457,7 +224,7 @@ defmodule LinearCli.CLI.Commands do
   Ported from commands/issue/pr.rb: resolves/self-assigns `issue_id`, checks
   out its branch (creating it first if needed - no pull/push here, unlike
   `issue_develop/2`), then opens a PR via
-  `LinearCli.CLI.IssueHelpers.issue_pr/2`.
+  `LinearCli.CLI.Issue.PullRequest.issue_pr/2`.
 
   `opts` (this port's addition): `:cwd` (forwarded to
   `LinearCli.Git.checkout_branch/2`), `:me` (forwarded to
@@ -468,7 +235,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_pr(result, opts \\ [])
 
   def issue_pr(%{args: %{issue_id: issue_id}, options: options}, opts) do
-    with {:ok, issue} <- IssueHelpers.gimme_da_issue!(issue_id, opts),
+    with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
       Prompt.ok("Checked out branch #{issue.branch_name}")
 
@@ -476,7 +243,7 @@ defmodule LinearCli.CLI.Commands do
         [title: options.title, description: options.description]
         |> maybe_put(:runner, opts[:runner])
 
-      IssueHelpers.issue_pr(issue, pr_opts)
+      PullRequest.issue_pr(issue, pr_opts)
     end
   end
 
@@ -494,8 +261,8 @@ defmodule LinearCli.CLI.Commands do
   its `filter_map`.
 
   `opts` (this port's addition) forwards to
-  `LinearCli.CLI.IssueHelpers.gimme_da_issue!/2` (`:me`); real callers omit
-  it.
+  `LinearCli.CLI.Issue.Assignment.gimme_da_issue!/2` (`:me`); real callers
+  omit it.
   """
   @spec issue_take(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
   def issue_take(result, opts \\ [])
@@ -515,7 +282,7 @@ defmodule LinearCli.CLI.Commands do
   defp take_issues(issue_ids, opts) do
     issue_ids
     |> Enum.reduce_while({:ok, []}, fn issue_id, {:ok, acc} ->
-      case IssueHelpers.gimme_da_issue!(issue_id, opts) do
+      case Assignment.gimme_da_issue!(issue_id, opts) do
         {:ok, issue} ->
           {:cont, {:ok, [issue | acc]}}
 
@@ -537,7 +304,7 @@ defmodule LinearCli.CLI.Commands do
   Ported from commands/issue/update.rb: looks up every issue id in `unknown`
   (see `issue_take/2`'s doc for why this is a variadic positional captured
   via `unknown` rather than a declared Optimus arg) and dispatches
-  `LinearCli.CLI.IssueHelpers.update_issue/2` against each, per whichever
+  `LinearCli.CLI.Issue.Actions.update_issue/2` against each, per whichever
   flags/options were given.
 
   Ports `raise SmellsBad, 'No issue IDs provided!' if issue_ids.empty?` as
@@ -554,7 +321,7 @@ defmodule LinearCli.CLI.Commands do
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}) do
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}) do
       update_opts = [
         comment: options.comment,
         description: description,
@@ -567,7 +334,7 @@ defmodule LinearCli.CLI.Commands do
       ]
 
       Enum.reduce_while(issues, :ok, fn issue, :ok ->
-        case IssueHelpers.update_issue(issue, update_opts) do
+        case Actions.update_issue(issue, update_opts) do
           :ok -> {:cont, :ok}
           {:error, reason} -> {:halt, {:error, reason}}
         end
@@ -591,7 +358,7 @@ defmodule LinearCli.CLI.Commands do
   `--body-file` is given) uses the first issue's context.
 
   Calls `Linear.add_comment/2` directly rather than
-  `LinearCli.CLI.IssueHelpers.issue_comment/2` so the confirmation can be
+  `LinearCli.CLI.Issue.Actions.issue_comment/2` so the confirmation can be
   suppressed under `--output json` - matching how `print_move_results/3`
   suppresses its own confirmation for `issue move --output json`.
 
@@ -603,7 +370,7 @@ defmodule LinearCli.CLI.Commands do
          :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
          {:ok, comment_text} <- resolve_body_from_file(options, :comment),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          body = WhatFor.comment_for(hd(issues), comment_text),
          {:ok, pairs} <- add_comments_to_issues(issues, body) do
       unless options.output == "json" do
@@ -697,7 +464,7 @@ defmodule LinearCli.CLI.Commands do
   defp move_issues_by_id(issue_ids, options, flags) do
     with :ok <- validate_issue_ids(issue_ids),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          {:ok, project} <- resolve_move_project(issues, options) do
       print_move_plan(issues, project, options.output)
       execute_moves_if_confirmed(issues, project, flags, options.output)
@@ -890,7 +657,7 @@ defmodule LinearCli.CLI.Commands do
   def issue_status(%{unknown: issue_ids, options: options}) do
     with :ok <- validate_issue_ids(issue_ids),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &IssueHelpers.expand_issue_id/1)}),
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
          {:ok, planned_updates} <- plan_status_updates(issues, options.status),
          {:ok, completed_updates} <- apply_status_updates(planned_updates, options.comment) do
       show_status_updates(completed_updates, options.output)
@@ -996,7 +763,7 @@ defmodule LinearCli.CLI.Commands do
   defp maybe_add_status_comment(_issue, nil), do: :ok
 
   defp maybe_add_status_comment(issue, comment) do
-    case IssueHelpers.issue_comment(issue, comment) do
+    case Actions.issue_comment(issue, comment) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -1012,7 +779,7 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_relation_list(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_relation_list(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, relations} <- Linear.issue_relations(expanded_id) do
       Display.show(relations, %{output: options.output, relations: true})
@@ -1043,12 +810,12 @@ defmodule LinearCli.CLI.Commands do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}) do
-    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
     results =
       Enum.map(related_ids, fn related_id ->
-        expanded_related = IssueHelpers.expand_issue_id(related_id)
+        expanded_related = Identifiers.expand_issue_id(related_id)
         add_single_relation(expanded_subject, expanded_related, user_type)
       end)
 
@@ -1201,13 +968,13 @@ defmodule LinearCli.CLI.Commands do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}) do
-    expanded_subject = IssueHelpers.expand_issue_id(subject_id)
+    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
     with {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
       results =
         Enum.map(related_ids, fn related_id ->
-          expanded_related = IssueHelpers.expand_issue_id(related_id)
+          expanded_related = Identifiers.expand_issue_id(related_id)
           remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
         end)
 
@@ -1387,7 +1154,7 @@ defmodule LinearCli.CLI.Commands do
   """
   @spec issue_assign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_assign(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = IssueHelpers.expand_issue_id(issue_id)
+    expanded_id = Identifiers.expand_issue_id(issue_id)
 
     with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
          {:ok, members} <- Linear.team_members(issue.team.id),

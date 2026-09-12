@@ -7,7 +7,8 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias LinearCli.CLI.{Commands, IssueHelpers}
+  alias LinearCli.CLI.Commands
+  alias LinearCli.CLI.Issue.Creation
   alias LinearCli.Linear.User
   alias LinearCli.Profiles
 
@@ -522,7 +523,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     end
   end
 
-  describe "IssueHelpers.make_da_issue!/1 falls back to the active profile" do
+  describe "Creation.make_da_issue!/1 falls back to the active profile" do
     test "uses the active profile's team/project when both are omitted from opts" do
       {:ok, _} = Profiles.create("manhattan", team: "ENG", project: "Manhattan Rollout")
       :ok = Profiles.activate("manhattan")
@@ -562,7 +563,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       assert capture_io(fn ->
                assert {:ok, %{identifier: "CRY-2"}} =
-                        IssueHelpers.make_da_issue!(
+                        Creation.make_da_issue!(
                           title: "New thing",
                           description: "Some description",
                           labels: ["urgent"]
@@ -610,7 +611,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       end)
 
       capture_io(fn ->
-        IssueHelpers.make_da_issue!(
+        Creation.make_da_issue!(
           title: "New thing",
           description: "Some description",
           labels: ["urgent"],
