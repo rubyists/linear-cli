@@ -3,7 +3,7 @@ defmodule LinearCli.CLI.Issue.Actions do
   Issue lifecycle mutations — comment, close/cancel, description update,
   project attachment/move, and update-dispatch — for an already-loaded issue.
 
-  Extracted from `LinearCli.CLI.IssueHelpers`. Ported originally from
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. Ported originally from
   `Rubyists::Linear::CLI::Issue`
   (vendor/ruby-linear-cli/lib/linear/commands/issue.rb): `issue_comment`,
   `cancel_issue`, `close_issue`, `attach_project`, `update_issue`.
@@ -31,12 +31,11 @@ defmodule LinearCli.CLI.Issue.Actions do
 
   ## PR dispatch
 
-  `update_issue/2` dispatches to `LinearCli.CLI.IssueHelpers.issue_pr/2` for
-  the `:pr` option until that function is extracted in a later phase.
+  `update_issue/2` dispatches to `LinearCli.CLI.Issue.PullRequest.issue_pr/2`
+  for the `:pr` option.
   """
 
-  alias LinearCli.CLI.Issue.WorkflowStates
-  alias LinearCli.CLI.IssueHelpers
+  alias LinearCli.CLI.Issue.{PullRequest, WorkflowStates}
   alias LinearCli.CLI.{Projects, Prompt, WhatFor}
   alias LinearCli.Linear
 
@@ -205,7 +204,7 @@ defmodule LinearCli.CLI.Issue.Actions do
        regardless of anything else
     2. `:close` -> `close_issue/2`
     3. `:cancel` -> `cancel_issue/2`
-    4. `:pr` -> `LinearCli.CLI.IssueHelpers.issue_pr/2`
+    4. `:pr` -> `LinearCli.CLI.Issue.PullRequest.issue_pr/2`
     5. `:project` -> `attach_project/2`
     6. `:description` -> `update_description/2`
     7. otherwise, if only `:comment` was given, stop silently
@@ -236,7 +235,7 @@ defmodule LinearCli.CLI.Issue.Actions do
     cond do
       opts[:close] -> normalize(close_issue(issue, opts))
       opts[:cancel] -> normalize(cancel_issue(issue, opts))
-      opts[:pr] -> IssueHelpers.issue_pr(issue, opts)
+      opts[:pr] -> PullRequest.issue_pr(issue, opts)
       opts[:project] -> normalize(attach_project(issue, opts[:project]))
       opts[:description] -> normalize(update_description(issue, opts[:description]))
       opts[:comment] -> :ok

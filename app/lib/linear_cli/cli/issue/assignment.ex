@@ -2,11 +2,11 @@ defmodule LinearCli.CLI.Issue.Assignment do
   @moduledoc """
   Issue self-assignment with optional workflow-state transition.
 
-  Extracted from `LinearCli.CLI.IssueHelpers`. The single public function,
-  `gimme_da_issue!/2`, looks up an issue by identifier and self-assigns it
-  to the current user, unless already assigned. Accepts an optional
-  `--status` option (or an already-resolved `:state_id`) to simultaneously
-  transition the issue's workflow state.
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. The single public
+  function, `gimme_da_issue!/2`, looks up an issue by identifier and
+  self-assigns it to the current user, unless already assigned. Accepts an
+  optional `--status` option (or an already-resolved `:state_id`) to
+  simultaneously transition the issue's workflow state.
 
   Reuses `LinearCli.CLI.Issue.Identifiers.expand_issue_id/1` for bare-ID
   expansion and `LinearCli.CLI.Issue.WorkflowStates.resolve_workflow_state/2`
@@ -17,8 +17,7 @@ defmodule LinearCli.CLI.Issue.Assignment do
   ## Return convention
 
   Returns `{:ok, issue}` on success or `{:error, reason}` on failure (never
-  raises). User-visible failures use `{:error, {:smells_bad, message}}`,
-  matching the convention established by `LinearCli.CLI.IssueHelpers`.
+  raises). User-visible failures use `{:error, {:smells_bad, message}}`.
   """
 
   alias LinearCli.CLI.Issue.{Identifiers, WorkflowStates}

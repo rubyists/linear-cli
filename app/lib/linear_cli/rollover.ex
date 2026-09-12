@@ -8,7 +8,7 @@ defmodule LinearCli.Rollover do
 
   Pure logic, no `Oban.Worker` behaviour - kept directly callable/testable,
   same "thin OTP boundary, pure logic underneath" split as
-  `LinearCli.Git`/`LinearCli.CLI.IssueHelpers`. `LinearCli.Rollover.Worker`
+  `LinearCli.Git`/`LinearCli.CLI.Issue.Actions`. `LinearCli.Rollover.Worker`
   is the thin Oban wrapper that calls `run/2`.
   """
 

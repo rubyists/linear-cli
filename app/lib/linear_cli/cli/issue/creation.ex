@@ -2,10 +2,11 @@ defmodule LinearCli.CLI.Issue.Creation do
   @moduledoc """
   Interactive and non-interactive issue creation.
 
-  Extracted from `LinearCli.CLI.IssueHelpers`. The single public function,
-  `make_da_issue!/1`, creates a new Linear issue by resolving title,
-  description, team, labels, and project either interactively (when `--yes`
-  is not given) or strictly from provided options (when `--yes` is set).
+  Extracted from the former `LinearCli.CLI.IssueHelpers`. The single public
+  function, `make_da_issue!/1`, creates a new Linear issue by resolving
+  title, description, team, labels, and project either interactively (when
+  `--yes` is not given) or strictly from provided options (when `--yes` is
+  set).
 
   Profile defaults (active team/project) are consulted before interactive
   prompting when options are omitted.
@@ -15,8 +16,7 @@ defmodule LinearCli.CLI.Issue.Creation do
   ## Return convention
 
   Returns `{:ok, issue}` on success or `{:error, reason}` on failure (never
-  raises). User-visible failures use `{:error, {:smells_bad, message}}`,
-  matching the convention established by `LinearCli.CLI.IssueHelpers`.
+  raises). User-visible failures use `{:error, {:smells_bad, message}}`.
   """
 
   alias LinearCli.CLI.{Projects, WhatFor}
