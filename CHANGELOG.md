@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.10.0](https://github.com/rubyists/linear-cli/compare/v2.9.0...v2.10.0) (2026-09-13)
+
+
+### Features
+
+* **issues:** add --graph flag to issue view for transitive dependency graph ([#273](https://github.com/rubyists/linear-cli/issues/273)) ([95035b1](https://github.com/rubyists/linear-cli/commit/95035b14dbb295d53e2e02bf04e2406696d6fafd))
+
 ## [2.9.0](https://github.com/rubyists/linear-cli/compare/v2.8.0...v2.9.0) (2026-09-07)
 
 
