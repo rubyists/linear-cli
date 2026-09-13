@@ -400,7 +400,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:list`
 | read
 | `Linear.IssueRelation.Read.List`
-| `issue(id: $issueId) { relations(first:, after:) { edges { node { ... } cursor } pageInfo { ... } } }` and same for `inverseRelations`, fetched concurrently; paginated up to 100 per direction
+| `issue(id: $issueId) { relations(first:, after:) { edges { node { ... } cursor } pageInfo { ... } } }` and same for `inverseRelations`, fetched concurrently; paginated up to 100 per direction. Each relation node's `issue` and `relatedIssue` endpoints are fetched with `IssueRelation.endpoint_fields/0` (`id identifier title url state { name }`) — the nested `state { name }` field was added to support the `--graph` dependency graph display.
 
 | `IssueRelation`
 | `create_issue_relation`
@@ -471,6 +471,36 @@ The mutation GraphQL document is built at call time (not a module
 attribute) because `Issue.full_fields/0` references `User`, `Team`, and
 `Comment` — cross-file module-attribute evaluation order is not guaranteed
 at compile time.
+
+=== `LinearCli.Linear.IssueRelation.endpoint_fields/0` and `relation_fields/0`
+
+`app/lib/linear_cli/linear/issue_relation.ex` — module-level helpers that
+return GraphQL field-selection strings, used everywhere a relation node is
+fetched.
+
+`endpoint_fields/0` returns `"id identifier title url state { name }"` —
+the fragment for each issue endpoint (`issue` and `relatedIssue`) inside a
+relation node.  The `state { name }` subfield was added to support the
+`--graph` dependency graph display, which needs workflow status for each node.
+
+`relation_fields/0` composes `endpoint_fields/0` into the full relation
+node fragment: `"id type issue { ... } relatedIssue { ... }"`.
+
+Both functions are evaluated at call time (not module attributes) to avoid
+compile-time cross-file evaluation ordering issues.
+
+=== `LinearCli.CLI.Commands.Issues.Graph`
+
+`app/lib/linear_cli/cli/commands/issues/graph.ex` — pure BFS traversal
+that builds a transitive dependency graph from a root issue identifier.
+
+`build/2` accepts `(root_identifier, root_issue)` where `root_issue` is the
+already-fetched `Issue` struct (reusing the `issue view` fetch to avoid a
+redundant API call). It traverses `blocks` relations in both directions via
+`Linear.issue_relations/1`, visiting each identifier at most once (cycle-safe),
+and returns `{:ok, %{root:, nodes:, edges:}}` or `{:error, {identifier, reason}}`.
+Capped at 100 nodes; deterministic output (nodes sorted by identifier, edges
+by source then target).
 
 === `LinearCli.Linear.Paginate`
 

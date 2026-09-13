@@ -454,6 +454,14 @@ defmodule LinearCli.CLI do
     halt.(88)
   end
 
+  # Graph.build/2 returns {:error, {issue_id, reason}} to identify which
+  # issue's relations could not be fetched. Prefix context and re-dispatch
+  # so the underlying reason uses its own handler.
+  defp handle_error({issue_id, reason}, debug, halt) when is_binary(issue_id) do
+    IO.puts(:stderr, "could not fetch relations for #{issue_id}:")
+    handle_error(reason, debug, halt)
+  end
+
   # Ported from CLI::Caller#call's catch-all `rescue StandardError` clause.
   defp handle_error(error, debug, halt) do
     IO.puts(:stderr, "What the heck is this? #{Exception.format_banner(:error, error)}")
@@ -750,7 +758,12 @@ defmodule LinearCli.CLI do
                 issue_id: [value_name: "ISSUE_ID", help: "The Issue (i.e. CRY-1)", required: true]
               ],
               flags: [
-                web: [short: "-w", long: "--web", help: "Open the issue in your browser"]
+                web: [short: "-w", long: "--web", help: "Open the issue in your browser"],
+                graph: [
+                  long: "--graph",
+                  help:
+                    "Show the transitive dependency graph (blocks relations) rooted at this issue"
+                ]
               ]
             ],
             assign: [
