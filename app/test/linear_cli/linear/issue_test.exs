@@ -1027,4 +1027,81 @@ defmodule LinearCli.Linear.IssueTest do
       assert {:ok, []} = Linear.issues(%{include_labels: false, labels: ["Bug"], mine: false})
     end
   end
+
+  describe "Issue.Create priority input" do
+    test "includes priority in the GraphQL input when provided" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+        send(test_pid, {:input, input})
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueCreate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "T",
+                "branchName" => "cry-1-t",
+                "description" => nil,
+                "priority" => 2.0,
+                "priorityLabel" => "High",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => nil,
+                "updatedAt" => nil,
+                "assignee" => nil,
+                "state" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, _issue} =
+               Linear.create_issue("T", nil, "team-id", %{label_ids: [], priority: 2})
+
+      assert_received {:input, input}
+      assert input["priority"] == 2
+    end
+
+    test "omits priority from the GraphQL input when not provided" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+        send(test_pid, {:input, input})
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueCreate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "T",
+                "branchName" => "cry-1-t",
+                "description" => nil,
+                "priority" => 0.0,
+                "priorityLabel" => "No priority",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => nil,
+                "updatedAt" => nil,
+                "assignee" => nil,
+                "state" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, _issue} = Linear.create_issue("T", nil, "team-id", %{label_ids: []})
+
+      assert_received {:input, input}
+      refute Map.has_key?(input, "priority")
+    end
+  end
 end

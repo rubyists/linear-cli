@@ -805,7 +805,12 @@ defmodule LinearCli.CLI do
                 ],
                 project: [short: "-p", long: "--project", help: "Project Identifier"],
                 team: [short: "-T", long: "--team", help: "Team Identifier"],
-                title: [short: "-t", long: "--title", help: "Issue Title"]
+                title: [short: "-t", long: "--title", help: "Issue Title"],
+                priority: [
+                  long: "--priority",
+                  help: "Issue priority: none, urgent, high, medium, low",
+                  parser: &LinearCli.CLI.Priority.parse/1
+                ]
               ],
               flags: [
                 develop: [long: "--dev", help: "Start development after creating the issue"],

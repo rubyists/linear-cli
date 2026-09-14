@@ -36,6 +36,7 @@ defmodule LinearCli.CLI.Commands.Issues.Create do
            description: description,
            team: options.team,
            labels: options.labels,
+           priority: Map.get(options, :priority),
            project: options.project,
            yes: flags.yes
          ],
