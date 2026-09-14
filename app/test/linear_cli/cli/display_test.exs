@@ -258,4 +258,90 @@ defmodule LinearCli.CLI.DisplayTest do
     assert output =~ "EXT-6"
     refute output =~ "["
   end
+
+  test "JSON output preserves priority=0 as a real numeric value" do
+    issue = %Issue{
+      id: "issue-7",
+      identifier: "EXT-7",
+      title: "No priority issue",
+      description: nil,
+      priority: 0.0,
+      priority_label: "No priority",
+      priority_sort_order: 0.0,
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert decoded["priority"] === 0.0
+    refute is_nil(decoded["priority"])
+    assert decoded["priority_label"] == "No priority"
+    assert decoded["priority_sort_order"] === 0.0
+  end
+
+  test "JSON output uses snake_case field names for priority and timestamps" do
+    issue = %Issue{
+      id: "issue-8",
+      identifier: "EXT-8",
+      title: "Field name stability",
+      description: nil,
+      priority: 1.0,
+      priority_label: "Urgent",
+      priority_sort_order: 42.0,
+      created_at: "2024-01-15T10:30:00.000Z",
+      updated_at: "2024-01-16T12:00:00.000Z",
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert Map.has_key?(decoded, "priority")
+    assert Map.has_key?(decoded, "priority_label")
+    assert Map.has_key?(decoded, "priority_sort_order")
+    assert Map.has_key?(decoded, "created_at")
+    assert Map.has_key?(decoded, "updated_at")
+    refute Map.has_key?(decoded, "priorityLabel")
+    refute Map.has_key?(decoded, "prioritySortOrder")
+    refute Map.has_key?(decoded, "createdAt")
+    refute Map.has_key?(decoded, "updatedAt")
+    assert decoded["priority"] == 1.0
+    assert decoded["priority_label"] == "Urgent"
+    assert decoded["created_at"] == "2024-01-15T10:30:00.000Z"
+    assert decoded["updated_at"] == "2024-01-16T12:00:00.000Z"
+  end
+
+  test "JSON output includes timestamps on nested comment structs" do
+    alias LinearCli.Linear.Comment
+
+    issue = %Issue{
+      id: "issue-9",
+      identifier: "EXT-9",
+      title: "With comments",
+      description: nil,
+      priority: nil,
+      comments: [
+        %Comment{
+          id: "c1",
+          body: "A comment",
+          url: "https://linear.app/x#comment-c1",
+          user: nil,
+          created_at: "2024-01-20T08:00:00.000Z",
+          updated_at: "2024-01-20T08:30:00.000Z"
+        }
+      ],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert [comment] = decoded["comments"]
+    assert comment["id"] == "c1"
+    assert comment["created_at"] == "2024-01-20T08:00:00.000Z"
+    assert comment["updated_at"] == "2024-01-20T08:30:00.000Z"
+  end
 end

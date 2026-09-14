@@ -820,6 +820,38 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
       assert [label] = decoded["labels"]
       assert label["name"] == "Bug"
     end
+
+    test "--output json includes priority and timestamps in issue list" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(
+          conn,
+          issues_response([
+            issue_map(%{
+              "priority" => 0.0,
+              "priorityLabel" => "No priority",
+              "prioritySortOrder" => 0.0,
+              "createdAt" => "2024-01-15T10:30:00.000Z",
+              "updatedAt" => "2024-01-16T12:00:00.000Z"
+            })
+          ])
+        )
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--output", "json"])
+        end)
+
+      assert {:ok, [decoded]} = Jason.decode(output)
+      assert decoded["priority"] === 0.0
+      refute is_nil(decoded["priority"])
+      assert decoded["priority_label"] == "No priority"
+      assert decoded["created_at"] == "2024-01-15T10:30:00.000Z"
+      assert decoded["updated_at"] == "2024-01-16T12:00:00.000Z"
+    end
   end
 
   describe "issue view" do
@@ -863,6 +895,104 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
       decoded = Jason.decode!(output)
       assert decoded["identifier"] == "CRY-1"
       assert decoded["title"] == "Fix the thing"
+    end
+
+    test "--output json includes priority=0 as a real value and timestamps" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" =>
+              issue_map(%{
+                "priority" => 0.0,
+                "priorityLabel" => "No priority",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => "2024-01-15T10:30:00.000Z",
+                "updatedAt" => "2024-01-16T12:00:00.000Z"
+              })
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "view", "CRY-1", "--output", "json"])
+        end)
+
+      decoded = Jason.decode!(output)
+      assert decoded["priority"] === 0.0
+      refute is_nil(decoded["priority"])
+      assert decoded["priority_label"] == "No priority"
+      assert decoded["priority_sort_order"] === 0.0
+      assert decoded["created_at"] == "2024-01-15T10:30:00.000Z"
+      assert decoded["updated_at"] == "2024-01-16T12:00:00.000Z"
+    end
+
+    test "--output json includes non-zero priority and timestamps" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" =>
+              issue_map(%{
+                "priority" => 2.0,
+                "priorityLabel" => "High",
+                "prioritySortOrder" => 100.5,
+                "createdAt" => "2024-03-01T09:00:00.000Z",
+                "updatedAt" => "2024-03-02T11:00:00.000Z"
+              })
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "view", "CRY-1", "--output", "json"])
+        end)
+
+      decoded = Jason.decode!(output)
+      assert decoded["priority"] == 2.0
+      assert decoded["priority_label"] == "High"
+      assert decoded["priority_sort_order"] == 100.5
+      assert decoded["created_at"] == "2024-03-01T09:00:00.000Z"
+      assert decoded["updated_at"] == "2024-03-02T11:00:00.000Z"
+    end
+
+    test "--output json includes timestamps on nested comments" do
+      comment_map = %{
+        "id" => "c1",
+        "body" => "First comment",
+        "url" => "https://linear.app/team/issue/CRY-1#comment-c1",
+        "user" => nil,
+        "createdAt" => "2024-01-20T08:00:00.000Z",
+        "updatedAt" => "2024-01-20T08:30:00.000Z"
+      }
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => _} = Jason.decode!(body)
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issue" => issue_map(%{"comments" => %{"nodes" => [comment_map]}})
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "view", "CRY-1", "--output", "json"])
+        end)
+
+      decoded = Jason.decode!(output)
+      assert [comment] = decoded["comments"]
+      assert comment["id"] == "c1"
+      assert comment["created_at"] == "2024-01-20T08:00:00.000Z"
+      assert comment["updated_at"] == "2024-01-20T08:30:00.000Z"
     end
 
     test "lc i v ISSUE_ID alias routes to issue view" do
