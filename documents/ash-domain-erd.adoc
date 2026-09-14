@@ -372,7 +372,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:create`
 | create
 | `Linear.Issue.Create`
-| `issueCreate(input: { title, description, teamId, labelIds?, projectId? })` mutation
+| `issueCreate(input: { title, description, teamId, labelIds?, projectId?, priority? })` mutation
 
 | `Issue`
 | `assign_issue`

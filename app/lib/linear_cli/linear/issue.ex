@@ -28,6 +28,7 @@ defmodule LinearCli.Linear.Issue do
       argument :team_id, :string, allow_nil?: false
       argument :project_id, :string, allow_nil?: true
       argument :label_ids, {:array, :string}, default: []
+      argument :priority, :integer, allow_nil?: true
       manual LinearCli.Linear.Issue.Create
     end
 
@@ -368,6 +369,7 @@ defmodule LinearCli.Linear.Issue.Create do
       %{"title" => args.title, "description" => args.description, "teamId" => args.team_id}
       |> maybe_put_label_ids(args.label_ids)
       |> maybe_put_project_id(Map.get(args, :project_id))
+      |> maybe_put_priority(Map.get(args, :priority))
 
     case Api.call(document(), %{"input" => input}) do
       {:ok, %{"issueCreate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
@@ -386,6 +388,9 @@ defmodule LinearCli.Linear.Issue.Create do
 
   defp maybe_put_project_id(input, nil), do: input
   defp maybe_put_project_id(input, project_id), do: Map.put(input, "projectId", project_id)
+
+  defp maybe_put_priority(input, nil), do: input
+  defp maybe_put_priority(input, priority), do: Map.put(input, "priority", priority)
 
   # A function, not a module attribute: Issue.base_fields/0 reaches into
   # User (another file), so it must be evaluated at call time - see house
