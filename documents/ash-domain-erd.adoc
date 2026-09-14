@@ -403,6 +403,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `Linear.Issue.Update.SetStatus`
 | `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`
 
+| `Issue`
+| `set_issue_priority`
+| `:set_priority`
+| update
+| `Linear.Issue.Update.SetPriority`
+| `issueUpdate(id:, input: { priority })` via `Issue.Update.run/2`. Argument: `priority` (integer 0–4: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low). Name-to-integer mapping lives in `CLI.Commands.Issues.Mutations.parse_priority/1`; the GraphQL response returns `priority` as `Float!`.
+
 | `IssueRelation`
 | `issue_relations`
 | `:list`

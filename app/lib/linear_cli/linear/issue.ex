@@ -62,6 +62,11 @@ defmodule LinearCli.Linear.Issue do
       argument :description, :string, allow_nil?: false
       manual LinearCli.Linear.Issue.Update.UpdateDescription
     end
+
+    update :set_priority do
+      argument :priority, :integer, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.SetPriority
+    end
   end
 
   attributes do
@@ -508,6 +513,19 @@ defmodule LinearCli.Linear.Issue.Update.UpdateDescription do
   def update(changeset, _opts, _context) do
     Issue.Update.run(changeset.data.identifier, %{
       "description" => changeset.arguments.description
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.SetPriority do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "priority" => changeset.arguments.priority
     })
   end
 end

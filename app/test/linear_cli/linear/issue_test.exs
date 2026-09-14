@@ -556,6 +556,93 @@ defmodule LinearCli.Linear.IssueTest do
     end
   end
 
+  describe "set_issue_priority/2" do
+    test "sends priority as integer and returns the issue refetched via full_fields" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
+
+        assert id == "CRY-1"
+        assert input == %{"priority" => 2}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "priority" => 2.0,
+                "priorityLabel" => "High",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => "2024-01-15T10:30:00.000Z",
+                "updatedAt" => "2024-01-16T12:00:00.000Z",
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.set_issue_priority(issue, 2)
+      assert updated.priority == 2.0
+      assert updated.priority_label == "High"
+    end
+
+    test "priority 0 (none) sends integer 0 in the mutation input" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+
+        assert input == %{"priority" => 0}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "priority" => 0.0,
+                "priorityLabel" => "No priority",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => "2024-01-15T10:30:00.000Z",
+                "updatedAt" => "2024-01-16T12:00:00.000Z",
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.set_issue_priority(issue, 0)
+      assert updated.priority == 0.0
+      assert updated.priority_label == "No priority"
+    end
+
+    test "surfaces a GraphQL error" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "unauthorized"}]})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{}} = Linear.set_issue_priority(issue, 1)
+    end
+  end
+
   describe "issues/1 label filtering" do
     test "issues/1 with labels requests labels fields in the GraphQL query" do
       Req.Test.stub(LinearCli.Api, fn conn ->
