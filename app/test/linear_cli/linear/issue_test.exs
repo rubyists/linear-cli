@@ -678,6 +678,195 @@ defmodule LinearCli.Linear.IssueTest do
     end
   end
 
+  describe "from_map/1 priority and timestamp extraction" do
+    test "extracts priority=0 as a real float value (not nil)" do
+      map = %{
+        "id" => "i1",
+        "identifier" => "CRY-1",
+        "title" => "No priority issue",
+        "branchName" => "cry-1-no-priority",
+        "description" => nil,
+        "priority" => 0.0,
+        "priorityLabel" => "No priority",
+        "prioritySortOrder" => 0.0,
+        "createdAt" => "2024-01-15T10:30:00.000Z",
+        "updatedAt" => "2024-01-16T12:00:00.000Z",
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert issue.priority === 0.0
+      refute is_nil(issue.priority)
+      assert issue.priority_label == "No priority"
+      assert issue.priority_sort_order == 0.0
+      assert issue.created_at == "2024-01-15T10:30:00.000Z"
+      assert issue.updated_at == "2024-01-16T12:00:00.000Z"
+    end
+
+    test "extracts non-zero priority values" do
+      map = %{
+        "id" => "i2",
+        "identifier" => "CRY-2",
+        "title" => "Urgent issue",
+        "branchName" => "cry-2-urgent",
+        "description" => nil,
+        "priority" => 1.0,
+        "priorityLabel" => "Urgent",
+        "prioritySortOrder" => 42.5,
+        "createdAt" => "2024-02-01T08:00:00.000Z",
+        "updatedAt" => "2024-02-02T09:00:00.000Z",
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert issue.priority == 1.0
+      assert issue.priority_label == "Urgent"
+      assert issue.priority_sort_order == 42.5
+      assert issue.created_at == "2024-02-01T08:00:00.000Z"
+      assert issue.updated_at == "2024-02-02T09:00:00.000Z"
+    end
+
+    test "tolerates missing priority fields (nil stays nil)" do
+      map = %{
+        "id" => "i3",
+        "identifier" => "CRY-3",
+        "title" => "Legacy issue",
+        "branchName" => "cry-3-legacy",
+        "description" => nil,
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert is_nil(issue.priority)
+      assert is_nil(issue.priority_label)
+      assert is_nil(issue.priority_sort_order)
+      assert is_nil(issue.created_at)
+      assert is_nil(issue.updated_at)
+    end
+
+    test "GraphQL query selection includes priority fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert query =~ "priority"
+        assert query =~ "priorityLabel"
+        assert query =~ "prioritySortOrder"
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
+    end
+  end
+
+  describe "Issue.from_map/1 priority and timestamp fields" do
+    test "extracts priority, priority_label, priority_sort_order, created_at, updated_at" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix it",
+                    "branchName" => "cry-1-fix-it",
+                    "description" => nil,
+                    "priority" => 2.0,
+                    "priorityLabel" => "High",
+                    "prioritySortOrder" => 14.5,
+                    "createdAt" => "2024-01-15T10:30:00.000Z",
+                    "updatedAt" => "2024-01-16T12:00:00.000Z",
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{mine: false})
+      assert issue.priority == 2.0
+      assert issue.priority_label == "High"
+      assert issue.priority_sort_order == 14.5
+      assert issue.created_at == "2024-01-15T10:30:00.000Z"
+      assert issue.updated_at == "2024-01-16T12:00:00.000Z"
+    end
+
+    test "priority 0 is preserved as a real value, not treated as missing" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix it",
+                    "branchName" => "cry-1",
+                    "description" => nil,
+                    "priority" => 0.0,
+                    "priorityLabel" => "No priority",
+                    "prioritySortOrder" => 0.0,
+                    "createdAt" => "2024-01-15T10:30:00.000Z",
+                    "updatedAt" => "2024-01-15T10:30:00.000Z",
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{mine: false})
+      assert issue.priority == 0.0
+      refute is_nil(issue.priority)
+    end
+
+    test "GraphQL query includes priority and timestamp fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert query =~ "priority"
+        assert query =~ "priorityLabel"
+        assert query =~ "prioritySortOrder"
+        assert query =~ "createdAt"
+        assert query =~ "updatedAt"
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{mine: false})
+    end
+  end
+
   describe "issues/1 include_labels field selection" do
     test "include_labels: true, labels: [] requests label fields without adding a label filter" do
       Req.Test.stub(LinearCli.Api, fn conn ->
