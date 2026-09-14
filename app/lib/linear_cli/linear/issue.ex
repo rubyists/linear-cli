@@ -71,6 +71,11 @@ defmodule LinearCli.Linear.Issue do
     attribute :branch_name, :string, public?: true
     attribute :description, :string, public?: true
     attribute :url, :string, public?: true
+    attribute :priority, :float, public?: true
+    attribute :priority_label, :string, public?: true
+    attribute :priority_sort_order, :float, public?: true
+    attribute :created_at, :string, public?: true
+    attribute :updated_at, :string, public?: true
     attribute :assignee, :term, public?: true
     attribute :state, :term, public?: true
     attribute :team, :term, public?: true
@@ -80,7 +85,7 @@ defmodule LinearCli.Linear.Issue do
     attribute :inverse_relations, {:array, :term}, public?: true, default: []
   end
 
-  @issue_fields "id identifier title branchName description url createdAt updatedAt"
+  @issue_fields "id identifier title branchName description url priority priorityLabel prioritySortOrder createdAt updatedAt"
   @state_fields "id name type"
 
   @doc "GraphQL field selection for an issue plus its assignee/team (Ruby: Issue.base_fragment)."
@@ -120,6 +125,11 @@ defmodule LinearCli.Linear.Issue do
       branch_name: map["branchName"],
       description: map["description"],
       url: map["url"],
+      priority: map["priority"],
+      priority_label: map["priorityLabel"],
+      priority_sort_order: map["prioritySortOrder"],
+      created_at: map["createdAt"],
+      updated_at: map["updatedAt"],
       assignee: map["assignee"] && LinearCli.Linear.User.from_map(map["assignee"]),
       state: map["state"] && LinearCli.Linear.WorkflowState.from_map(map["state"]),
       team: map["team"] && LinearCli.Linear.Team.from_map(map["team"]),
