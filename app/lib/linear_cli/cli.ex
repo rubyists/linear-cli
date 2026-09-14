@@ -961,7 +961,11 @@ defmodule LinearCli.CLI do
                   long: "--status",
                   help: "Workflow state name to use with --close or --cancel"
                 ],
-                reason: [long: "--reason", help: "Reason for closing the issue. - open an editor"]
+                reason: [long: "--reason", help: "Reason for closing the issue. - open an editor"],
+                priority: [
+                  long: "--priority",
+                  help: "Set the issue priority: none, urgent, high, medium, low"
+                ]
               ]
             ],
             relation: [

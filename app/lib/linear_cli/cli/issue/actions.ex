@@ -197,6 +197,25 @@ defmodule LinearCli.CLI.Issue.Actions do
   end
 
   @doc """
+  Sets `issue`'s priority to `priority_value` (0–4, already validated and
+  converted by the CLI parser).
+
+  0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low.
+  """
+  @spec set_priority(%Linear.Issue{}, non_neg_integer()) ::
+          {:ok, %Linear.Issue{}} | {:error, term()}
+  def set_priority(issue, priority_value) do
+    case Linear.set_issue_priority(issue, priority_value) do
+      {:ok, updated} ->
+        Prompt.ok("#{issue.identifier} priority updated")
+        {:ok, updated}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  @doc """
   Dispatches an issue update per whichever of `opts`' keys is set, in Ruby's
   exact precedence order:
 
@@ -207,8 +226,9 @@ defmodule LinearCli.CLI.Issue.Actions do
     4. `:pr` -> `LinearCli.CLI.Issue.PullRequest.issue_pr/2`
     5. `:project` -> `attach_project/2`
     6. `:description` -> `update_description/2`
-    7. otherwise, if only `:comment` was given, stop silently
-    8. otherwise, warn "No action taken" and report "not updated"
+    7. `:priority` -> `set_priority/2`
+    8. otherwise, if only `:comment` was given, stop silently
+    9. otherwise, warn "No action taken" and report "not updated"
 
   Ported from `CLI::Issue#update_issue`. Unlike every other function in this
   module, normalizes its result down to `:ok | {:error, reason}` (dropping
@@ -238,6 +258,7 @@ defmodule LinearCli.CLI.Issue.Actions do
       opts[:pr] -> PullRequest.issue_pr(issue, opts)
       opts[:project] -> normalize(attach_project(issue, opts[:project]))
       opts[:description] -> normalize(update_description(issue, opts[:description]))
+      not is_nil(opts[:priority]) -> normalize(set_priority(issue, opts[:priority]))
       opts[:comment] -> :ok
       true -> no_action_taken()
     end

@@ -31,6 +31,7 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     with :ok <- validate_issue_ids(issue_ids),
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
+         {:ok, priority} <- parse_priority(Map.get(options, :priority)),
          {:ok, issues} <-
            Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}) do
       update_opts = [
@@ -41,7 +42,8 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
         close: flags.close,
         reason: options.reason,
         status: Map.get(options, :status),
-        trash: flags.trash
+        trash: flags.trash,
+        priority: priority
       ]
 
       Enum.reduce_while(issues, :ok, fn issue, :ok ->
@@ -352,5 +354,31 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   defp resolve_member_matches(matches, _members, name) do
     ambiguous = Enum.map_join(matches, ", ", & &1.name)
     {:error, {:smells_bad, "Ambiguous assignee #{inspect(name)}: matches #{ambiguous}"}}
+  end
+
+  defp parse_priority(nil), do: {:ok, nil}
+
+  defp parse_priority(value) do
+    case String.downcase(value) do
+      "none" ->
+        {:ok, 0}
+
+      "urgent" ->
+        {:ok, 1}
+
+      "high" ->
+        {:ok, 2}
+
+      "medium" ->
+        {:ok, 3}
+
+      "low" ->
+        {:ok, 4}
+
+      _ ->
+        {:error,
+         {:smells_bad,
+          "invalid --priority #{inspect(value)}: must be one of: none, urgent, high, medium, low"}}
+    end
   end
 end
