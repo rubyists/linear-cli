@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.11.0](https://github.com/rubyists/linear-cli/compare/v2.10.0...v2.11.0) (2026-09-14)
+
+
+### Features
+
+* **issue:** add --priority flag to lc issue create ([#277](https://github.com/rubyists/linear-cli/issues/277)) ([60d8734](https://github.com/rubyists/linear-cli/commit/60d873433286cf2733197e5974da929116807f84))
+* **issue:** add --priority flag to lc issue update ([#278](https://github.com/rubyists/linear-cli/issues/278)) ([d967a0f](https://github.com/rubyists/linear-cli/commit/d967a0fb4c37c1ce2ceac536b6e35b33b4577e7c))
+* **linear:** expose issue priority and timestamps in JSON output ([#275](https://github.com/rubyists/linear-cli/issues/275)) ([7539e03](https://github.com/rubyists/linear-cli/commit/7539e03fd7b15fc696276dd62be2f4d890c72a4f))
+
 ## [2.10.0](https://github.com/rubyists/linear-cli/compare/v2.9.0...v2.10.0) (2026-09-13)
 
 
