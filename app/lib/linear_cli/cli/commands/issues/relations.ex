@@ -40,14 +40,16 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
   successful mutations.  All results are printed before returning; a non-zero
   exit identifies the overall failure count if any target failed.
   """
-  @spec issue_relation_add(Optimus.ParseResult.t()) :: :ok | {:error, term()}
-  def issue_relation_add(%{unknown: []}),
+  @spec issue_relation_add(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_relation_add(result, opts \\ [])
+
+  def issue_relation_add(%{unknown: []}, _opts),
     do: {:error, {:smells_bad, "ISSUE and at least one RELATED_ISSUE are required"}}
 
-  def issue_relation_add(%{unknown: [_subject]}),
+  def issue_relation_add(%{unknown: [_subject]}, _opts),
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
-  def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}) do
+  def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}, opts) do
     expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
@@ -57,7 +59,7 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
         add_single_relation(expanded_subject, expanded_related, user_type)
       end)
 
-    print_relation_add_results(results, options.output)
+    print_relation_add_results(results, options.output, Keyword.get(opts, :stderr, :stderr))
 
     failed_count =
       Enum.count(results, fn r -> match?({:failed, _, _}, r) or match?({:self_link, _}, r) end)
@@ -93,14 +95,14 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     end
   end
 
-  defp print_relation_add_results(results, output) do
+  defp print_relation_add_results(results, output, stderr) do
     if output == "json" do
       results
       |> Enum.map(&relation_add_result_to_plain/1)
       |> Jason.encode!(pretty: true)
       |> IO.puts()
     else
-      Enum.each(results, &print_relation_add_result_text/1)
+      Enum.each(results, &print_relation_add_result_text(&1, stderr))
     end
   end
 
@@ -129,21 +131,21 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     %{"target" => related_id, "status" => "error", "message" => msg}
   end
 
-  defp print_relation_add_result_text({:created, _related_id, relation}) do
+  defp print_relation_add_result_text({:created, _related_id, relation}, _stderr) do
     IO.puts(relation_add_created_text(relation))
   end
 
-  defp print_relation_add_result_text({:exists, related_id}) do
+  defp print_relation_add_result_text({:exists, related_id}, _stderr) do
     Prompt.ok("#{related_id}: relation already exists (no change)")
   end
 
-  defp print_relation_add_result_text({:self_link, id}) do
-    IO.puts(:stderr, "#{id}: self-link — an issue cannot be related to itself")
+  defp print_relation_add_result_text({:self_link, id}, stderr) do
+    IO.puts(stderr, "#{id}: self-link — an issue cannot be related to itself")
   end
 
-  defp print_relation_add_result_text({:failed, related_id, reason}) do
+  defp print_relation_add_result_text({:failed, related_id, reason}, stderr) do
     msg = relation_add_error_message(reason)
-    IO.puts(:stderr, "#{related_id}: #{msg}")
+    IO.puts(stderr, "#{related_id}: #{msg}")
   end
 
   defp relation_add_created_text(%{type: "blocks", issue: issue, related_issue: related}) do
@@ -193,14 +195,16 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
   successful deletions.  All results are printed before returning; a non-zero
   exit identifies the overall failure count if any target failed.
   """
-  @spec issue_relation_remove(Optimus.ParseResult.t()) :: :ok | {:error, term()}
-  def issue_relation_remove(%{unknown: []}),
+  @spec issue_relation_remove(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
+  def issue_relation_remove(result, opts \\ [])
+
+  def issue_relation_remove(%{unknown: []}, _opts),
     do: {:error, {:smells_bad, "ISSUE and at least one RELATED_ISSUE are required"}}
 
-  def issue_relation_remove(%{unknown: [_subject]}),
+  def issue_relation_remove(%{unknown: [_subject]}, _opts),
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
-  def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}) do
+  def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}, opts) do
     expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
@@ -211,7 +215,7 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
           remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
         end)
 
-      print_relation_remove_results(results, options.output)
+      print_relation_remove_results(results, options.output, Keyword.get(opts, :stderr, :stderr))
 
       failed_count =
         Enum.count(results, fn r ->
@@ -273,14 +277,14 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     end)
   end
 
-  defp print_relation_remove_results(results, output) do
+  defp print_relation_remove_results(results, output, stderr) do
     if output == "json" do
       results
       |> Enum.map(&relation_remove_result_to_plain/1)
       |> Jason.encode!(pretty: true)
       |> IO.puts()
     else
-      Enum.each(results, &print_relation_remove_result_text/1)
+      Enum.each(results, &print_relation_remove_result_text(&1, stderr))
     end
   end
 
@@ -317,28 +321,28 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     %{"target" => related_id, "status" => "error", "message" => msg}
   end
 
-  defp print_relation_remove_result_text({:removed, _related_id, relation}) do
+  defp print_relation_remove_result_text({:removed, _related_id, relation}, _stderr) do
     IO.puts(relation_remove_removed_text(relation))
   end
 
-  defp print_relation_remove_result_text({:absent, related_id}) do
+  defp print_relation_remove_result_text({:absent, related_id}, _stderr) do
     Prompt.ok("#{related_id}: relation not found (no change)")
   end
 
-  defp print_relation_remove_result_text({:self_link, id}) do
-    IO.puts(:stderr, "#{id}: self-link — an issue cannot be related to itself")
+  defp print_relation_remove_result_text({:self_link, id}, stderr) do
+    IO.puts(stderr, "#{id}: self-link — an issue cannot be related to itself")
   end
 
-  defp print_relation_remove_result_text({:ambiguous, related_id, ids}) do
+  defp print_relation_remove_result_text({:ambiguous, related_id, ids}, stderr) do
     IO.puts(
-      :stderr,
+      stderr,
       "#{related_id}: ambiguous — #{length(ids)} matching relations: #{Enum.join(ids, ", ")}"
     )
   end
 
-  defp print_relation_remove_result_text({:failed, related_id, reason}) do
+  defp print_relation_remove_result_text({:failed, related_id, reason}, stderr) do
     msg = relation_remove_error_message(reason)
-    IO.puts(:stderr, "#{related_id}: #{msg}")
+    IO.puts(stderr, "#{related_id}: #{msg}")
   end
 
   defp relation_remove_removed_text(%{type: "blocks", issue: issue, related_issue: related}) do

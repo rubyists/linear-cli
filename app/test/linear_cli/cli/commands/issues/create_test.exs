@@ -233,7 +233,7 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             [
               "issue",
@@ -247,7 +247,8 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
               "--body-file",
               "somefile"
             ],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -261,7 +262,7 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
 
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
-      capture_io(:stderr, fn ->
+      capture_stderr(fn stderr ->
         LinearCli.CLI.main(
           [
             "issue",
@@ -273,7 +274,8 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
             "--team",
             "ENG"
           ],
-          halt
+          halt,
+          stderr: stderr
         )
       end)
 
@@ -326,7 +328,7 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             [
               "issue",
@@ -341,7 +343,8 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
               "--no-take",
               "--dev"
             ],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -397,10 +400,11 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             ["issue", "create", "--description", "Some desc", "--team", "ENG", "--yes"],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -415,10 +419,11 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             ["issue", "create", "--title", "New thing", "--team", "ENG", "--yes"],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -450,7 +455,7 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       ])
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             [
               "issue",
@@ -461,7 +466,8 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
               "Some desc",
               "--yes"
             ],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
