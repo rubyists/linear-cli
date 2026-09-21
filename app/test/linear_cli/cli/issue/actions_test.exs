@@ -349,6 +349,44 @@ defmodule LinearCli.CLI.Issue.ActionsTest do
       assert output =~ "CRY-1 description updated"
     end
 
+    test "with :priority, updates the issue priority" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:input, decoded["variables"]["input"]})
+        Req.Test.json(conn, issue_updated())
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = Actions.update_issue(issue(), priority: 2)
+        end)
+
+      assert_received {:input, %{"priority" => 2}}
+      assert output =~ "CRY-1 priority updated"
+    end
+
+    test "with :priority 0 (none), sends integer 0 and updates" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        send(test_pid, {:input, decoded["variables"]["input"]})
+        Req.Test.json(conn, issue_updated())
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = Actions.update_issue(issue(), priority: 0)
+        end)
+
+      assert_received {:input, %{"priority" => 0}}
+      assert output =~ "CRY-1 priority updated"
+    end
+
     test "with only :comment, comments and stops without the 'no action taken' warning" do
       stub_responses([{"commentCreate", comment_created()}])
 
@@ -381,6 +419,52 @@ defmodule LinearCli.CLI.Issue.ActionsTest do
                assert {:error, %Ash.Error.Unknown{}} =
                         Actions.update_issue(issue(), close: true, reason: "x")
              end) =~ "Comment added to CRY-1"
+    end
+
+    test "with :priority, updates priority and reports :ok" do
+      stub_responses([
+        {"issueUpdate", issue_updated(%{"priority" => 2.0, "priorityLabel" => "High"})}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok = Actions.update_issue(issue(), priority: 2)
+        end)
+
+      assert output =~ "priority updated"
+    end
+
+    test "with priority: 0 (none), still dispatches (not treated as falsy)" do
+      stub_responses([
+        {"issueUpdate", issue_updated(%{"priority" => 0.0, "priorityLabel" => "No priority"})}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok = Actions.update_issue(issue(), priority: 0)
+        end)
+
+      assert output =~ "priority updated"
+    end
+  end
+
+  describe "set_priority/2" do
+    test "calls set_issue_priority and prints a confirmation" do
+      stub_responses([
+        {"issueUpdate", issue_updated(%{"priority" => 3.0, "priorityLabel" => "Medium"})}
+      ])
+
+      assert capture_io(fn ->
+               assert {:ok, %Issue{priority: 3.0}} = Actions.set_priority(issue(), 3)
+             end) =~ "CRY-1 priority updated"
+    end
+
+    test "propagates an API error without printing confirmation" do
+      stub_responses([{"issueUpdate", %{"errors" => [%{"message" => "boom"}]}}])
+
+      assert capture_io(fn ->
+               assert {:error, %Ash.Error.Invalid{}} = Actions.set_priority(issue(), 1)
+             end) == ""
     end
   end
 end

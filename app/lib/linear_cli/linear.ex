@@ -38,6 +38,7 @@ defmodule LinearCli.Linear do
       define :close_issue, action: :close, args: [:state_id]
       define :set_issue_status, action: :set_status, args: [:state_id]
       define :update_issue_description, action: :update_description, args: [:description]
+      define :set_issue_priority, action: :set_priority, args: [:priority]
     end
 
     resource LinearCli.Linear.Label do

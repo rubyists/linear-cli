@@ -475,6 +475,289 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
       assert output =~ "--team is required"
     end
 
+    test "--priority high sends priority=2 in the GraphQL input" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:sent_priority, decoded["variables"]["input"]["priority"]})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" =>
+                    issue_map(%{
+                      "identifier" => "CRY-2",
+                      "title" => "T",
+                      "priority" => 2.0,
+                      "priorityLabel" => "High"
+                    })
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "n\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "create",
+                   "--title",
+                   "T",
+                   "--description",
+                   "D",
+                   "--team",
+                   "ENG",
+                   "--yes",
+                   "--no-take",
+                   "--priority",
+                   "high"
+                 ])
+      end)
+
+      assert_received {:sent_priority, 2}
+    end
+
+    test "--priority none sends priority=0 in the GraphQL input" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:sent_priority, decoded["variables"]["input"]["priority"]})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" => issue_map(%{"identifier" => "CRY-2", "title" => "T"})
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "n\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "create",
+                   "--title",
+                   "T",
+                   "--description",
+                   "D",
+                   "--team",
+                   "ENG",
+                   "--yes",
+                   "--no-take",
+                   "--priority",
+                   "none"
+                 ])
+      end)
+
+      assert_received {:sent_priority, 0}
+    end
+
+    test "omitting --priority does not send priority in the GraphQL input" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:input_keys, Map.keys(decoded["variables"]["input"])})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" => issue_map(%{"identifier" => "CRY-2", "title" => "T"})
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "n\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "create",
+                   "--title",
+                   "T",
+                   "--description",
+                   "D",
+                   "--team",
+                   "ENG",
+                   "--yes",
+                   "--no-take"
+                 ])
+      end)
+
+      assert_received {:input_keys, keys}
+      refute "priority" in keys
+    end
+
+    test "an invalid --priority value exits nonzero with a diagnostic before creating an issue" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      # Optimus prints the "invalid value" diagnostic to stdout before halting.
+      output =
+        capture_io(fn ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "create",
+              "--title",
+              "T",
+              "--team",
+              "ENG",
+              "--priority",
+              "critical"
+            ],
+            halt
+          )
+        end)
+
+      assert_received {:halted, _code}
+      assert output =~ "critical"
+    end
+
+    test "--priority is case-insensitive (HIGH maps to 2)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "issueCreate") ->
+            send(test_pid, {:sent_priority, decoded["variables"]["input"]["priority"]})
+
+            Req.Test.json(conn, %{
+              "data" => %{
+                "issueCreate" => %{
+                  "issue" => issue_map(%{"identifier" => "CRY-2", "title" => "T"})
+                }
+              }
+            })
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "n\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "create",
+                   "--title",
+                   "T",
+                   "--description",
+                   "D",
+                   "--team",
+                   "ENG",
+                   "--yes",
+                   "--no-take",
+                   "--priority",
+                   "HIGH"
+                 ])
+      end)
+
+      assert_received {:sent_priority, 2}
+    end
+
+    test "--output json with --priority returns the created issue with priority metadata" do
+      created_issue =
+        issue_map(%{
+          "id" => "i2",
+          "identifier" => "CRY-2",
+          "title" => "T",
+          "priority" => 2.0,
+          "priorityLabel" => "High",
+          "prioritySortOrder" => 0.0
+        })
+
+      stub_responses([
+        {"team(id: $id)", %{"data" => %{"team" => team_map()}}},
+        {"projects(first: 100", team_projects([])},
+        {"issueCreate", %{"data" => %{"issueCreate" => %{"issue" => created_issue}}}}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Create.issue_create(
+                     %{
+                       options: %{
+                         title: "T",
+                         description: "D",
+                         team: "ENG",
+                         labels: [],
+                         priority: 2,
+                         project: nil,
+                         output: "json"
+                       },
+                       flags: %{develop: false, yes: true, no_take: true}
+                     },
+                     []
+                   )
+        end)
+
+      decoded = Jason.decode!(output)
+      assert decoded["priority"] === 2.0
+      assert decoded["priority_label"] == "High"
+    end
+
     test "-y with --project resolves it by exact match and uses it" do
       test_pid = self()
       me = %User{id: "u1", name: "Ada", email: "ada@x.com"}

@@ -80,6 +80,11 @@ defmodule LinearCli.CLI.IssueCommandsHelpers do
         "title" => "Fix the thing",
         "branchName" => "cry-1-fix-the-thing",
         "description" => "It is broken",
+        "priority" => 0.0,
+        "priorityLabel" => "No priority",
+        "prioritySortOrder" => 0.0,
+        "createdAt" => "2024-01-15T10:30:00.000Z",
+        "updatedAt" => "2024-01-16T12:00:00.000Z",
         "assignee" => nil,
         "state" => %{"id" => "s1", "name" => "In Progress", "type" => "started"},
         "team" => team_map(),
@@ -95,7 +100,17 @@ defmodule LinearCli.CLI.IssueCommandsHelpers do
 
   def comment_created do
     %{
-      "data" => %{"commentCreate" => %{"comment" => %{"id" => "c1", "body" => "x", "url" => "u"}}}
+      "data" => %{
+        "commentCreate" => %{
+          "comment" => %{
+            "id" => "c1",
+            "body" => "x",
+            "url" => "u",
+            "createdAt" => "2024-01-15T10:30:00.000Z",
+            "updatedAt" => "2024-01-15T10:30:00.000Z"
+          }
+        }
+      }
     }
   end
 

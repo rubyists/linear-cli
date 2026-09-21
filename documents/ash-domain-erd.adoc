@@ -68,6 +68,12 @@ erDiagram
         string title
         string branch_name
         string description
+        string url
+        float priority
+        string priority_label
+        float priority_sort_order
+        string created_at
+        string updated_at
         User assignee
         WorkflowState state
         Team team
@@ -101,6 +107,8 @@ erDiagram
         string body
         string url
         User user
+        string created_at
+        string updated_at
     }
     ProjectUpdate {
         string id PK
@@ -153,7 +161,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Issue`
 | `id` (`:string`)
-| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`), `relations` (`{:array, :term}`), `inverse_relations` (`{:array, :term}`)
+| `identifier`, `title`, `branch_name`, `description`, `url`, `priority` (`:float`), `priority_label` (`:string`), `priority_sort_order` (`:float`), `created_at` (`:string`, ISO-8601), `updated_at` (`:string`, ISO-8601), `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`), `relations` (`{:array, :term}`), `inverse_relations` (`{:array, :term}`)
 
 | `LinearCli.Linear.Label`
 | `id` (`:string`)
@@ -165,7 +173,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Comment`
 | `id` (`:string`)
-| `body`, `url`, `user` (`:term`)
+| `body`, `url`, `user` (`:term`), `created_at` (`:string`, ISO-8601), `updated_at` (`:string`, ISO-8601)
 
 | `LinearCli.Linear.ProjectUpdate`
 | `id` (`:string`)
@@ -364,7 +372,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:create`
 | create
 | `Linear.Issue.Create`
-| `issueCreate(input: { title, description, teamId, labelIds?, projectId? })` mutation
+| `issueCreate(input: { title, description, teamId, labelIds?, projectId?, priority? })` mutation
 
 | `Issue`
 | `assign_issue`
@@ -394,6 +402,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | update
 | `Linear.Issue.Update.SetStatus`
 | `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`
+
+| `Issue`
+| `set_issue_priority`
+| `:set_priority`
+| update
+| `Linear.Issue.Update.SetPriority`
+| `issueUpdate(id:, input: { priority })` via `Issue.Update.run/2`. Argument: `priority` (integer 0–4: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low). Name-to-integer mapping lives in `CLI.Commands.Issues.Mutations.parse_priority/1`; the GraphQL response returns `priority` as `Float!`.
 
 | `IssueRelation`
 | `issue_relations`

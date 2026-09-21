@@ -814,6 +814,274 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     end
   end
 
+  describe "issue update --priority" do
+    test "--priority high sends priority: 2 in the mutation input" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:priority, decoded["variables"]["input"]["priority"]})
+            Req.Test.json(conn, issue_updated(%{"priority" => 2.0, "priorityLabel" => "High"}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "update", "--priority", "high", "CRY-1"])
+        end)
+
+      assert_received {:priority, 2}
+      assert output =~ "CRY-1 priority updated"
+    end
+
+    test "--priority none sends priority: 0 to clear it" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:priority, decoded["variables"]["input"]["priority"]})
+
+            Req.Test.json(
+              conn,
+              issue_updated(%{"priority" => 0.0, "priorityLabel" => "No priority"})
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "update", "--priority", "none", "CRY-1"])
+        end)
+
+      assert_received {:priority, 0}
+      assert output =~ "CRY-1 priority updated"
+    end
+
+    test "--priority is case-insensitive (URGENT maps to 1)" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:priority, decoded["variables"]["input"]["priority"]})
+            Req.Test.json(conn, issue_updated())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok = LinearCli.CLI.main(["issue", "update", "--priority", "URGENT", "CRY-1"])
+      end)
+
+      assert_received {:priority, 1}
+    end
+
+    test "--priority with unknown value exits 22 without calling issueUpdate" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
+
+      stderr =
+        capture_io(:stderr, fn ->
+          LinearCli.CLI.main(["issue", "update", "--priority", "critical", "CRY-1"], halt)
+        end)
+
+      assert_received {:halted, 22}
+      assert stderr =~ "critical"
+      assert stderr =~ "none, urgent, high, medium, low"
+    end
+
+    test "--priority with multiple issue IDs updates each" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            id = decoded["variables"]["id"]
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map(%{"identifier" => id})}})
+
+          String.contains?(query, "issueUpdate") ->
+            id = decoded["variables"]["id"]
+            send(test_pid, {:updated, id})
+            Req.Test.json(conn, issue_updated())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "update",
+                   "--priority",
+                   "low",
+                   "CRY-1",
+                   "CRY-2"
+                 ])
+      end)
+
+      assert_received {:updated, "CRY-1"}
+      assert_received {:updated, "CRY-2"}
+    end
+
+    test "--output json still updates priority and confirms via stdout" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(conn, issue_updated(%{"priority" => 3.0, "priorityLabel" => "Medium"}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "--priority",
+                     "medium",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert output =~ "CRY-1 priority updated"
+    end
+
+    test "--priority combined with --comment posts comment first then updates priority" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "commentCreate") ->
+            send(test_pid, :comment_created)
+            Req.Test.json(conn, comment_created())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:priority, decoded["variables"]["input"]["priority"]})
+            Req.Test.json(conn, issue_updated())
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "update",
+                     "--priority",
+                     "high",
+                     "--comment",
+                     "bumping priority",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert_received :comment_created
+      assert_received {:priority, 2}
+      assert output =~ "Comment added to CRY-1"
+      assert output =~ "CRY-1 priority updated"
+    end
+
+    test "all documented priority names map to their correct integer values" do
+      priorities = [
+        {"none", 0},
+        {"urgent", 1},
+        {"high", 2},
+        {"medium", 3},
+        {"low", 4}
+      ]
+
+      for {name, expected_int} <- priorities do
+        test_pid = self()
+
+        Req.Test.stub(LinearCli.Api, fn conn ->
+          {:ok, body, conn} = Plug.Conn.read_body(conn)
+          decoded = Jason.decode!(body)
+          query = decoded["query"]
+
+          cond do
+            String.contains?(query, "issue(id: $id)") ->
+              Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+            String.contains?(query, "issueUpdate") ->
+              send(test_pid, {:priority, decoded["variables"]["input"]["priority"]})
+              Req.Test.json(conn, issue_updated())
+
+            true ->
+              raise "no stub matched query: #{query}"
+          end
+        end)
+
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "update", "--priority", name, "CRY-1"]),
+                 "expected #{name} to succeed"
+        end)
+
+        assert_received {:priority, ^expected_int}, "expected #{name} => #{expected_int}"
+      end
+    end
+  end
+
   describe "issue assign" do
     defp member_map(id, name, email \\ nil) do
       %{"id" => id, "name" => name, "email" => email || "#{id}@example.com"}

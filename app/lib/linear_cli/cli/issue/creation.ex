@@ -53,7 +53,11 @@ defmodule LinearCli.CLI.Issue.Creation do
     with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: project_search}) do
       project = Projects.project_for(projects, project_search)
       label_ids = Enum.map(labels, & &1.id)
-      params = maybe_put_project_id(%{label_ids: label_ids}, project)
+
+      params =
+        %{label_ids: label_ids}
+        |> maybe_put_project_id(project)
+        |> maybe_put_priority(opts[:priority])
 
       Linear.create_issue(title, description, team.id, params)
     end
@@ -79,7 +83,12 @@ defmodule LinearCli.CLI.Issue.Creation do
             else: nil
 
         label_ids = Enum.map(labels, & &1.id)
-        params = maybe_put_project_id(%{label_ids: label_ids}, project)
+
+        params =
+          %{label_ids: label_ids}
+          |> maybe_put_project_id(project)
+          |> maybe_put_priority(opts[:priority])
+
         Linear.create_issue(title, description, team.id, params)
       end
     end
@@ -115,4 +124,7 @@ defmodule LinearCli.CLI.Issue.Creation do
 
   defp maybe_put_project_id(params, nil), do: params
   defp maybe_put_project_id(params, project), do: Map.put(params, :project_id, project.id)
+
+  defp maybe_put_priority(params, nil), do: params
+  defp maybe_put_priority(params, priority), do: Map.put(params, :priority, priority)
 end

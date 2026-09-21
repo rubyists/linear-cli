@@ -840,7 +840,12 @@ defmodule LinearCli.CLI do
                 ],
                 project: [short: "-p", long: "--project", help: "Project Identifier"],
                 team: [short: "-T", long: "--team", help: "Team Identifier"],
-                title: [short: "-t", long: "--title", help: "Issue Title"]
+                title: [short: "-t", long: "--title", help: "Issue Title"],
+                priority: [
+                  long: "--priority",
+                  help: "Issue priority: none, urgent, high, medium, low",
+                  parser: &LinearCli.CLI.Priority.parse/1
+                ]
               ],
               flags: [
                 develop: [long: "--dev", help: "Start development after creating the issue"],
@@ -991,7 +996,11 @@ defmodule LinearCli.CLI do
                   long: "--status",
                   help: "Workflow state name to use with --close or --cancel"
                 ],
-                reason: [long: "--reason", help: "Reason for closing the issue. - open an editor"]
+                reason: [long: "--reason", help: "Reason for closing the issue. - open an editor"],
+                priority: [
+                  long: "--priority",
+                  help: "Set the issue priority: none, urgent, high, medium, low"
+                ]
               ]
             ],
             relation: [

@@ -28,6 +28,7 @@ defmodule LinearCli.Linear.Issue do
       argument :team_id, :string, allow_nil?: false
       argument :project_id, :string, allow_nil?: true
       argument :label_ids, {:array, :string}, default: []
+      argument :priority, :integer, allow_nil?: true
       manual LinearCli.Linear.Issue.Create
     end
 
@@ -62,6 +63,11 @@ defmodule LinearCli.Linear.Issue do
       argument :description, :string, allow_nil?: false
       manual LinearCli.Linear.Issue.Update.UpdateDescription
     end
+
+    update :set_priority do
+      argument :priority, :integer, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.SetPriority
+    end
   end
 
   attributes do
@@ -71,6 +77,11 @@ defmodule LinearCli.Linear.Issue do
     attribute :branch_name, :string, public?: true
     attribute :description, :string, public?: true
     attribute :url, :string, public?: true
+    attribute :priority, :float, public?: true
+    attribute :priority_label, :string, public?: true
+    attribute :priority_sort_order, :float, public?: true
+    attribute :created_at, :string, public?: true
+    attribute :updated_at, :string, public?: true
     attribute :assignee, :term, public?: true
     attribute :state, :term, public?: true
     attribute :team, :term, public?: true
@@ -80,7 +91,7 @@ defmodule LinearCli.Linear.Issue do
     attribute :inverse_relations, {:array, :term}, public?: true, default: []
   end
 
-  @issue_fields "id identifier title branchName description url createdAt updatedAt"
+  @issue_fields "id identifier title branchName description url priority priorityLabel prioritySortOrder createdAt updatedAt"
   @state_fields "id name type"
 
   @doc "GraphQL field selection for an issue plus its assignee/team (Ruby: Issue.base_fragment)."
@@ -120,6 +131,11 @@ defmodule LinearCli.Linear.Issue do
       branch_name: map["branchName"],
       description: map["description"],
       url: map["url"],
+      priority: map["priority"],
+      priority_label: map["priorityLabel"],
+      priority_sort_order: map["prioritySortOrder"],
+      created_at: map["createdAt"],
+      updated_at: map["updatedAt"],
       assignee: map["assignee"] && LinearCli.Linear.User.from_map(map["assignee"]),
       state: map["state"] && LinearCli.Linear.WorkflowState.from_map(map["state"]),
       team: map["team"] && LinearCli.Linear.Team.from_map(map["team"]),
@@ -358,6 +374,7 @@ defmodule LinearCli.Linear.Issue.Create do
       %{"title" => args.title, "description" => args.description, "teamId" => args.team_id}
       |> maybe_put_label_ids(args.label_ids)
       |> maybe_put_project_id(Map.get(args, :project_id))
+      |> maybe_put_priority(Map.get(args, :priority))
 
     case Api.call(document(), %{"input" => input}) do
       {:ok, %{"issueCreate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
@@ -376,6 +393,9 @@ defmodule LinearCli.Linear.Issue.Create do
 
   defp maybe_put_project_id(input, nil), do: input
   defp maybe_put_project_id(input, project_id), do: Map.put(input, "projectId", project_id)
+
+  defp maybe_put_priority(input, nil), do: input
+  defp maybe_put_priority(input, priority), do: Map.put(input, "priority", priority)
 
   # A function, not a module attribute: Issue.base_fields/0 reaches into
   # User (another file), so it must be evaluated at call time - see house
@@ -498,6 +518,19 @@ defmodule LinearCli.Linear.Issue.Update.UpdateDescription do
   def update(changeset, _opts, _context) do
     Issue.Update.run(changeset.data.identifier, %{
       "description" => changeset.arguments.description
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.SetPriority do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "priority" => changeset.arguments.priority
     })
   end
 end
