@@ -106,8 +106,8 @@ jobs:
       -
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.1"
-          elixir-version: "1.20.4"
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
           # Without this, setup-beam's problem matchers promote every
           # compiler warning from deps (e.g. postgrex/rewrite's deprecated
           # `xref: [exclude: ...]`, yamerl's deprecated `catch ...` syntax -
@@ -230,8 +230,8 @@ jobs:
         # setup-zig/p7zip here.
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.1"
-          elixir-version: "1.20.4"
+          otp-version: "29.0.3"
+          elixir-version: "1.20.3"
           disable_problem_matchers: true
       -
         run: mix deps.get
