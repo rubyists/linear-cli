@@ -13,13 +13,15 @@ defmodule LinearCli.CLI do
 
   @workflow_state_types ~w(triage backlog unstarted started completed canceled duplicate)
 
-  def main(argv, halt \\ &System.halt/1) do
+  def main(argv, halt \\ &System.halt/1, opts \\ []) do
+    context = %{halt: halt, stderr: Keyword.get(opts, :stderr, :stderr)}
+
     argv =
       argv
       |> normalize_aliases()
       |> normalize_subcommand_aliases()
       |> normalize_help()
-      |> default_to_issue_list()
+      |> default_to_issue_list(context.stderr)
 
     # Optimus.parse!/3 returns *either* {subcommand_path, parse_result}
     # (a subcommand matched) *or* a bare %Optimus.ParseResult{} (nothing
@@ -36,7 +38,7 @@ defmodule LinearCli.CLI do
       end
 
     try do
-      dispatch(subcommand_path, parse_result, halt)
+      dispatch(subcommand_path, parse_result, context)
     rescue
       # Ported from CLI::Caller#call's catch-all `rescue StandardError`
       # clause - Ruby's rescue catches any unexpected raised exception, not
@@ -52,7 +54,7 @@ defmodule LinearCli.CLI do
       # visible in that same try's `rescue`, but outer-scope bindings are).
       exception ->
         debug = is_struct(parse_result, Optimus.ParseResult) && parse_result.options[:debug]
-        handle_error(exception, debug, halt)
+        handle_error(exception, debug, context)
     end
   end
 
@@ -160,13 +162,15 @@ defmodule LinearCli.CLI do
   # (including its stderr text) - a bare `lc` invocation defaults to
   # `issue list` rather than dumping top-level help.
   @doc false
-  def default_to_issue_list([]) do
-    IO.puts(:stderr, "No subcommand provided, defaulting to 'lc issue list'")
-    IO.puts(:stderr, "lc --help to see subcommands")
+  def default_to_issue_list(argv, stderr \\ :stderr)
+
+  def default_to_issue_list([], stderr) do
+    IO.puts(stderr, "No subcommand provided, defaulting to 'lc issue list'")
+    IO.puts(stderr, "lc --help to see subcommands")
     ["issue", "list"]
   end
 
-  def default_to_issue_list(argv), do: argv
+  def default_to_issue_list(argv, _stderr), do: argv
 
   # Optimus only special-cases bare top-level `--help` and the `help <path...>`
   # form - `issue list --help` isn't recognized, and since `issue list` allows
@@ -194,66 +198,93 @@ defmodule LinearCli.CLI do
     end
   end
 
-  defp dispatch([:whoami], result, halt), do: run(&SystemCmds.whoami/1, result, halt)
-  defp dispatch([:version], result, halt), do: run(&SystemCmds.version/1, result, halt)
-  defp dispatch([:team, :list], result, halt), do: run(&Teams.team_list/1, result, halt)
+  defp dispatch([:whoami], result, context), do: run(&SystemCmds.whoami/1, result, context)
+  defp dispatch([:version], result, context), do: run(&SystemCmds.version/1, result, context)
+  defp dispatch([:team, :list], result, context), do: run(&Teams.team_list/1, result, context)
 
-  defp dispatch([:team, :favorite], result, halt),
-    do: run(&Teams.team_favorite/1, result, halt)
+  defp dispatch([:team, :favorite], result, context),
+    do: run(&Teams.team_favorite/1, result, context)
 
-  defp dispatch([:team, :unfavorite], result, halt),
-    do: run(&Teams.team_unfavorite/1, result, halt)
+  defp dispatch([:team, :unfavorite], result, context),
+    do: run(&Teams.team_unfavorite/1, result, context)
 
-  defp dispatch([:project, :list], result, halt), do: run(&Projects.project_list/1, result, halt)
+  defp dispatch([:project, :list], result, context),
+    do: run(&Projects.project_list/1, result, context)
 
-  defp dispatch([:project, :favorite], result, halt),
-    do: run(&Projects.project_favorite/1, result, halt)
+  defp dispatch([:project, :favorite], result, context),
+    do: run(&Projects.project_favorite/1, result, context)
 
-  defp dispatch([:project, :unfavorite], result, halt),
-    do: run(&Projects.project_unfavorite/1, result, halt)
+  defp dispatch([:project, :unfavorite], result, context),
+    do: run(&Projects.project_unfavorite/1, result, context)
 
-  defp dispatch([:project, :update], result, halt),
-    do: run(&Projects.project_update/1, result, halt)
+  defp dispatch([:project, :update], result, context),
+    do: run(&Projects.project_update/1, result, context)
 
-  defp dispatch([:profile, :create], result, halt),
-    do: run(&Profiles.profile_create/1, result, halt)
+  defp dispatch([:profile, :create], result, context),
+    do: run(&Profiles.profile_create/1, result, context)
 
-  defp dispatch([:profile, :list], result, halt), do: run(&Profiles.profile_list/1, result, halt)
-  defp dispatch([:profile, :use], result, halt), do: run(&Profiles.profile_use/1, result, halt)
-  defp dispatch([:profile, :show], result, halt), do: run(&Profiles.profile_show/1, result, halt)
+  defp dispatch([:profile, :list], result, context),
+    do: run(&Profiles.profile_list/1, result, context)
 
-  defp dispatch([:profile, :delete], result, halt),
-    do: run(&Profiles.profile_delete/1, result, halt)
+  defp dispatch([:profile, :use], result, context),
+    do: run(&Profiles.profile_use/1, result, context)
 
-  defp dispatch([:profile, :clear], result, halt),
-    do: run(&Profiles.profile_clear/1, result, halt)
+  defp dispatch([:profile, :show], result, context),
+    do: run(&Profiles.profile_show/1, result, context)
 
-  defp dispatch([:issue, :list], result, halt), do: run(&Read.issue_list/1, result, halt)
-  defp dispatch([:issue, :view], result, halt), do: run(&Read.issue_view/1, result, halt)
-  defp dispatch([:issue, :assign], result, halt), do: run(&Mutations.issue_assign/1, result, halt)
-  defp dispatch([:issue, :create], result, halt), do: run(&Create.issue_create/1, result, halt)
+  defp dispatch([:profile, :delete], result, context),
+    do: run(&Profiles.profile_delete/1, result, context)
 
-  defp dispatch([:issue, :develop], result, halt),
-    do: run(&Development.issue_develop/1, result, halt)
+  defp dispatch([:profile, :clear], result, context),
+    do: run(&Profiles.profile_clear/1, result, context)
 
-  defp dispatch([:issue, :pr], result, halt), do: run(&Development.issue_pr/1, result, halt)
-  defp dispatch([:issue, :move], result, halt), do: run(&Move.issue_move/1, result, halt)
+  defp dispatch([:issue, :list], result, context), do: run(&Read.issue_list/1, result, context)
+  defp dispatch([:issue, :view], result, context), do: run(&Read.issue_view/1, result, context)
 
-  defp dispatch([:issue, :comment], result, halt),
-    do: run(&Mutations.issue_comment/1, result, halt)
+  defp dispatch([:issue, :assign], result, context),
+    do: run(&Mutations.issue_assign/1, result, context)
 
-  defp dispatch([:issue, :take], result, halt), do: run(&Development.issue_take/1, result, halt)
-  defp dispatch([:issue, :status], result, halt), do: run(&Mutations.issue_status/1, result, halt)
-  defp dispatch([:issue, :update], result, halt), do: run(&Mutations.issue_update/1, result, halt)
+  defp dispatch([:issue, :create], result, context),
+    do: run(&Create.issue_create/1, result, context)
 
-  defp dispatch([:issue, :relation, :list], result, halt),
-    do: run(&Relations.issue_relation_list/1, result, halt)
+  defp dispatch([:issue, :develop], result, context),
+    do: run(&Development.issue_develop/1, result, context)
 
-  defp dispatch([:issue, :relation, :add], result, halt),
-    do: run(&Relations.issue_relation_add/1, result, halt)
+  defp dispatch([:issue, :pr], result, context),
+    do: run(&Development.issue_pr/1, result, context)
 
-  defp dispatch([:issue, :relation, :remove], result, halt),
-    do: run(&Relations.issue_relation_remove/1, result, halt)
+  defp dispatch([:issue, :move], result, context), do: run(&Move.issue_move/1, result, context)
+
+  defp dispatch([:issue, :comment], result, context),
+    do: run(&Mutations.issue_comment/1, result, context)
+
+  defp dispatch([:issue, :take], result, context),
+    do: run(&Development.issue_take/1, result, context)
+
+  defp dispatch([:issue, :status], result, context),
+    do: run(&Mutations.issue_status/1, result, context)
+
+  defp dispatch([:issue, :update], result, context),
+    do: run(&Mutations.issue_update/1, result, context)
+
+  defp dispatch([:issue, :relation, :list], result, context),
+    do: run(&Relations.issue_relation_list/1, result, context)
+
+  defp dispatch([:issue, :relation, :add], result, context) do
+    run(
+      &Relations.issue_relation_add(&1, stderr: context.stderr),
+      result,
+      context
+    )
+  end
+
+  defp dispatch([:issue, :relation, :remove], result, context) do
+    run(
+      &Relations.issue_relation_remove(&1, stderr: context.stderr),
+      result,
+      context
+    )
+  end
 
   # A valid subcommand path that stops short of a leaf (e.g. `lc project`
   # with nothing after it) - Optimus itself doesn't require reaching a leaf,
@@ -261,9 +292,9 @@ defmodule LinearCli.CLI do
   # raise a bare FunctionClauseError. Show that path's own help instead,
   # exactly as `lc help project` would, and exit 1 (a usage error, not a
   # program bug - distinct from the crash-safety-net catch-all in main/1).
-  defp dispatch(subcommand_path, _result, halt) do
+  defp dispatch(subcommand_path, _result, context) do
     spec() |> Optimus.Help.help(subcommand_path, columns()) |> Enum.each(&IO.puts/1)
-    halt.(1)
+    context.halt.(1)
   end
 
   # Mirrors Optimus's own private columns/0 (vendor/optimus/lib/optimus.ex) -
@@ -275,16 +306,16 @@ defmodule LinearCli.CLI do
     end
   end
 
-  defp run(fun, result, halt) do
+  defp run(fun, result, context) do
     case reject_unknown_flags(result.unknown) do
       :ok ->
         case fun.(result) do
           :ok -> :ok
-          {:error, error} -> handle_error(error, result.options[:debug], halt)
+          {:error, error} -> handle_error(error, result.options[:debug], context)
         end
 
       {:error, error} ->
-        handle_error(error, result.options[:debug], halt)
+        handle_error(error, result.options[:debug], context)
     end
   end
 
@@ -311,11 +342,15 @@ defmodule LinearCli.CLI do
   end
 
   # Ported from CLI::Caller#call's `rescue NotFoundError` clause.
-  defp handle_error(%Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}, debug, halt) do
-    IO.puts(:stderr, "No issue found with id #{id}")
-    IO.puts(:stderr, "** Record not found, Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(66)
+  defp handle_error(
+         %Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]},
+         debug,
+         context
+       ) do
+    IO.puts(context.stderr, "No issue found with id #{id}")
+    IO.puts(context.stderr, "** Record not found, Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(66)
   end
 
   # Same NotFoundError intent as the clause above, but for Ash's own built-in
@@ -328,13 +363,13 @@ defmodule LinearCli.CLI do
   defp handle_error(
          %Ash.Error.Invalid{errors: [%Ash.Error.Query.NotFound{resource: resource} | _]},
          debug,
-         halt
+         context
        ) do
     name = resource |> Module.split() |> List.last() |> String.downcase()
-    IO.puts(:stderr, "No such #{name} found")
-    IO.puts(:stderr, "** Record not found, Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(66)
+    IO.puts(context.stderr, "No such #{name} found")
+    IO.puts(context.stderr, "** Record not found, Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(66)
   end
 
   # LinearCli.Api.call/2's {:error, :missing_api_key} (LINEAR_API_KEY not
@@ -354,28 +389,28 @@ defmodule LinearCli.CLI do
            errors: [%Ash.Error.Unknown.UnknownError{error: "unknown error: :missing_api_key"} | _]
          },
          debug,
-         halt
+         context
        ) do
-    IO.puts(:stderr, "LINEAR_API_KEY is not set.")
+    IO.puts(context.stderr, "LINEAR_API_KEY is not set.")
 
     IO.puts(
-      :stderr,
+      context.stderr,
       "Set it to your Linear API key - see https://linear.app/settings/account/security"
     )
 
-    IO.puts(:stderr, "** Missing configuration, cannot continue **")
-    maybe_print_backtrace(debug)
-    halt.(78)
+    IO.puts(context.stderr, "** Missing configuration, cannot continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(78)
   end
 
   # Ported from CLI::Caller#call's `rescue SmellsBad` clause. See
   # `LinearCli.CLI.Issue.Actions`'s moduledoc for where this tagged tuple
   # comes from.
-  defp handle_error({:smells_bad, message}, debug, halt) do
-    IO.puts(:stderr, message)
-    IO.puts(:stderr, "** This smells bad! Bailing. **")
-    maybe_print_backtrace(debug)
-    halt.(22)
+  defp handle_error({:smells_bad, message}, debug, context) do
+    IO.puts(context.stderr, message)
+    IO.puts(context.stderr, "** This smells bad! Bailing. **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(22)
   end
 
   # Safety net for any LinearCli.Api.call/2 site whose {:error, {:graphql_errors,
@@ -389,12 +424,12 @@ defmodule LinearCli.CLI do
            errors: [%{value: [{:graphql_errors, [%{"message" => message} | _]}]} | _]
          },
          debug,
-         halt
+         context
        ) do
-    IO.puts(:stderr, "Linear API error: #{message}")
-    IO.puts(:stderr, "** API Error, Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(88)
+    IO.puts(context.stderr, "Linear API error: #{message}")
+    IO.puts(context.stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(88)
   end
 
   # LinearCli.Api.call/2's {:error, {:http_error, status, body}} for 401/403 -
@@ -404,14 +439,14 @@ defmodule LinearCli.CLI do
   defp handle_error(
          %Ash.Error.Unknown{errors: [%{value: [{:http_error, status}]} | _]},
          debug,
-         halt
+         context
        )
        when status in [401, 403] do
-    IO.puts(:stderr, "Linear API authentication failed (HTTP #{status}).")
-    IO.puts(:stderr, "Check that LINEAR_API_KEY is valid.")
-    IO.puts(:stderr, "** Authentication error, cannot continue **")
-    maybe_print_backtrace(debug)
-    halt.(77)
+    IO.puts(context.stderr, "Linear API authentication failed (HTTP #{status}).")
+    IO.puts(context.stderr, "Check that LINEAR_API_KEY is valid.")
+    IO.puts(context.stderr, "** Authentication error, cannot continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(77)
   end
 
   # LinearCli.Api.call/2's {:error, {:http_error, status, body}} for any other
@@ -419,12 +454,12 @@ defmodule LinearCli.CLI do
   defp handle_error(
          %Ash.Error.Unknown{errors: [%{value: [{:http_error, status}]} | _]},
          debug,
-         halt
+         context
        ) do
-    IO.puts(:stderr, "Linear API returned HTTP #{status}.")
-    IO.puts(:stderr, "** API Error, Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(88)
+    IO.puts(context.stderr, "Linear API returned HTTP #{status}.")
+    IO.puts(context.stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(88)
   end
 
   # LinearCli.Api.call/2's {:error, {:transport_error, exception}} - DNS failure,
@@ -432,12 +467,12 @@ defmodule LinearCli.CLI do
   defp handle_error(
          %Ash.Error.Unknown{errors: [%{value: [{:transport_error, _exception}]} | _]},
          debug,
-         halt
+         context
        ) do
-    IO.puts(:stderr, "Could not reach the Linear API.")
-    IO.puts(:stderr, "** Network error, cannot continue **")
-    maybe_print_backtrace(debug)
-    halt.(69)
+    IO.puts(context.stderr, "Could not reach the Linear API.")
+    IO.puts(context.stderr, "** Network error, cannot continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(69)
   end
 
   # LinearCli.Api.call/2's {:error, {:unexpected_response, body}} - a 200 with
@@ -446,35 +481,35 @@ defmodule LinearCli.CLI do
   defp handle_error(
          %Ash.Error.Unknown{errors: [%{value: [{:unexpected_response, _body}]} | _]},
          debug,
-         halt
+         context
        ) do
-    IO.puts(:stderr, "Linear API returned an unexpected response.")
-    IO.puts(:stderr, "** API Error, Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(88)
+    IO.puts(context.stderr, "Linear API returned an unexpected response.")
+    IO.puts(context.stderr, "** API Error, Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(88)
   end
 
   # Graph.build/2 returns {:error, {issue_id, reason}} to identify which
   # issue's relations could not be fetched. Prefix context and re-dispatch
   # so the underlying reason uses its own handler.
-  defp handle_error({issue_id, reason}, debug, halt) when is_binary(issue_id) do
-    IO.puts(:stderr, "could not fetch relations for #{issue_id}:")
-    handle_error(reason, debug, halt)
+  defp handle_error({issue_id, reason}, debug, context) when is_binary(issue_id) do
+    IO.puts(context.stderr, "could not fetch relations for #{issue_id}:")
+    handle_error(reason, debug, context)
   end
 
   # Ported from CLI::Caller#call's catch-all `rescue StandardError` clause.
-  defp handle_error(error, debug, halt) do
-    IO.puts(:stderr, "What the heck is this? #{Exception.format_banner(:error, error)}")
-    IO.puts(:stderr, "** WTH? Cannot Continue **")
-    maybe_print_backtrace(debug)
-    halt.(88)
+  defp handle_error(error, debug, context) do
+    IO.puts(context.stderr, "What the heck is this? #{Exception.format_banner(:error, error)}")
+    IO.puts(context.stderr, "** WTH? Cannot Continue **")
+    maybe_print_backtrace(debug, context.stderr)
+    context.halt.(88)
   end
 
-  defp maybe_print_backtrace(debug) when is_integer(debug) and debug > 0 do
-    IO.puts(:stderr, Exception.format_stacktrace(Process.info(self(), :current_stacktrace)))
+  defp maybe_print_backtrace(debug, stderr) when is_integer(debug) and debug > 0 do
+    IO.puts(stderr, Exception.format_stacktrace(Process.info(self(), :current_stacktrace)))
   end
 
-  defp maybe_print_backtrace(_debug), do: :ok
+  defp maybe_print_backtrace(_debug, _stderr), do: :ok
 
   defp parse_states(value) do
     states =

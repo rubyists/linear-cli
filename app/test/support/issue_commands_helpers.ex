@@ -1,6 +1,20 @@
 defmodule LinearCli.CLI.IssueCommandsHelpers do
   @moduledoc false
 
+  # Named ExUnit stderr capture replaces a global device, so concurrent tests
+  # can receive each other's output. Give each test its own device instead.
+  def capture_stderr(fun) when is_function(fun, 1) do
+    {:ok, stderr} = StringIO.open("")
+
+    try do
+      fun.(stderr)
+      {_input, output} = StringIO.contents(stderr)
+      output
+    after
+      StringIO.close(stderr)
+    end
+  end
+
   # Dispatches to one of `pairs` ({substring, response_map}) based on which
   # substring appears in the outgoing GraphQL document.
   def stub_responses(pairs) do

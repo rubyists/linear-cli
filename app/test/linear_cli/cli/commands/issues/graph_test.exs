@@ -454,11 +454,12 @@ defmodule LinearCli.CLI.Commands.Issues.GraphTest do
 
     test "--graph and --web together return a usage error" do
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           assert catch_throw(
                    LinearCli.CLI.main(
                      ["issue", "view", "EXT-56", "--graph", "--web"],
-                     fn code -> throw({:halted, code}) end
+                     fn code -> throw({:halted, code}) end,
+                     stderr: stderr
                    )
                  ) == {:halted, 22}
         end)

@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Appdeps.UpdateTest do
 
   alias Mix.Tasks.Appdeps.Update
 
-  test "updates the named dependencies from app" do
+  test "updates the named dependencies from app, then runs the CI gate" do
     caller = self()
 
     shell = fn cmd, args, opts ->
@@ -13,6 +13,7 @@ defmodule Mix.Tasks.Appdeps.UpdateTest do
 
     assert :ok = Update.run(["ash", "oban"], shell)
     assert_received {:run, "mix", ["deps.update", "ash", "oban"], [cd: "app"]}
+    assert_received {:run, "mix", ["deps.audit"], [cd: "app"]}
   end
 
   test "requires at least one dependency" do
