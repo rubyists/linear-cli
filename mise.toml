@@ -4,9 +4,9 @@
 # floating on "latest" (as this used to) drifts local builds away from what
 # Burrito can actually fetch, breaking `mix release` locally while CI still
 # works. See documents/phase-8-plan.adoc.
-erlang = "29.0.3"
-elixir = "1.20.3"
-python = "3.14.1"
+erlang = "29.1"
+elixir = "1.20.4"
+python = "3.14.7"
 [env]
 #ANTHROPIC_BASE_URL = "http://127.0.0.1:13305"
 #ANTHROPIC_AUTH_TOKEN = "lemonade"
@@ -18,10 +18,19 @@ python = "3.14.1"
 #CLAUDE_CODE_ATTRIBUTION_HEADER = 0
 #CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1
 
+[tasks.setup]
+description = "Setup the project"
+run = "mix setup"
+
+[tasks.deps]
+description = "Fetch dependencies"
+run = "pushd app && mix deps.get && popd"
+depends = ["setup"]
+
+[tasks.linear_profile]
+description = "Create and use a Linear CLI profile for the EXT team"
+depends = ["deps"]
+run = "test -n \"$LINEAR_API_KEY\" && (mix lc profile use linear-cli 2>/dev/null || (mix lc profile create --team EXT --project 'Linear CLI' linear-cli && mix lc profile use linear-cli)) || echo 'LINEAR_API_KEY not set, skipping Linear CLI profile setup'"
+
 [hooks]
-# Keep a freshly cloned checkout protected without rerunning setup after it is installed.
-enter = '''
-if [ "$(git config --get core.hooksPath 2>/dev/null)" != "git-hooks" ]; then
-  mix setup
-fi
-'''
+enter = [ { task = "linear_profile" } ]
