@@ -287,12 +287,10 @@ defmodule GitHooksTest do
     assert File.read!(marker) == "precommit\n"
   end
 
-  test "the pre-push adapter validates refs before running the quality and Hex audits" do
+  test "the pre-push adapter validates refs before running the Hex audit" do
     {worktree, ci_dir} = setup_ci_worktree!()
     audit_marker = Path.join(worktree, "hex-audit-ran")
-    precommit_marker = Path.join(worktree, "precommit-ran")
     hook = install_pre_push_hook!(worktree, ci_dir)
-    fake_bin = install_fake_mix!(worktree)
 
     {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
     base_sha = String.trim(base_sha)
@@ -301,16 +299,10 @@ defmodule GitHooksTest do
     assert {"", 0} =
              run_with_stdin(hook, valid_stdin,
                cd: worktree,
-               env: [
-                 {"HEX_AUDIT_MARKER", audit_marker},
-                 {"MIX_MARKER", precommit_marker},
-                 {"PATH", fake_bin <> ":" <> System.get_env("PATH")}
-               ]
+               env: [{"HEX_AUDIT_MARKER", audit_marker}]
              )
 
-    assert File.read!(precommit_marker) == "precommit\n"
     assert File.read!(audit_marker) == "audited\n"
-    File.rm!(precommit_marker)
     File.rm!(audit_marker)
 
     File.write!(Path.join(worktree, "invalid"), "commit\n")
@@ -323,41 +315,10 @@ defmodule GitHooksTest do
     assert {output, 1} =
              run_with_stdin(hook, invalid_stdin,
                cd: worktree,
-               env: [
-                 {"HEX_AUDIT_MARKER", audit_marker},
-                 {"MIX_MARKER", precommit_marker},
-                 {"PATH", fake_bin <> ":" <> System.get_env("PATH")}
-               ]
+               env: [{"HEX_AUDIT_MARKER", audit_marker}]
              )
 
     assert output =~ "not conventional"
-    refute File.exists?(precommit_marker)
-    refute File.exists?(audit_marker)
-  end
-
-  test "the pre-push adapter stops before the Hex audit when the quality gate fails" do
-    {worktree, ci_dir} = setup_ci_worktree!()
-    audit_marker = Path.join(worktree, "hex-audit-ran")
-    precommit_marker = Path.join(worktree, "precommit-ran")
-    hook = install_pre_push_hook!(worktree, ci_dir)
-    fake_bin = install_fake_mix!(worktree)
-
-    {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
-    base_sha = String.trim(base_sha)
-    stdin = "refs/heads/main #{base_sha} refs/heads/main #{base_sha}\n"
-
-    assert {"", 1} =
-             run_with_stdin(hook, stdin,
-               cd: worktree,
-               env: [
-                 {"HEX_AUDIT_MARKER", audit_marker},
-                 {"MIX_MARKER", precommit_marker},
-                 {"MIX_EXIT_STATUS", "1"},
-                 {"PATH", fake_bin <> ":" <> System.get_env("PATH")}
-               ]
-             )
-
-    assert File.read!(precommit_marker) == "precommit\n"
     refute File.exists?(audit_marker)
   end
 

@@ -1,6 +1,7 @@
 defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
   use ExUnit.Case, async: true
   import ExUnit.CaptureIO
+  import LinearCli.CLI.IssueCommandsHelpers
 
   alias LinearCli.CLI.Commands.Issues.Relations
 
@@ -250,8 +251,13 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       end)
 
       output_stderr =
-        capture_io(:stderr, fn ->
-          result = Relations.issue_relation_add(add_parse_result("EXT-1", ["EXT-1"], "blocks"))
+        capture_stderr(fn stderr ->
+          result =
+            Relations.issue_relation_add(
+              add_parse_result("EXT-1", ["EXT-1"], "blocks"),
+              stderr: stderr
+            )
+
           assert {:error, {:smells_bad, _}} = result
         end)
 
@@ -280,8 +286,13 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          result = Relations.issue_relation_add(add_parse_result("EXT-1", ["EXT-2"], "blocks"))
+        capture_stderr(fn stderr ->
+          result =
+            Relations.issue_relation_add(
+              add_parse_result("EXT-1", ["EXT-2"], "blocks"),
+              stderr: stderr
+            )
+
           assert {:error, {:smells_bad, msg}} = result
           assert msg =~ "failed"
         end)
@@ -305,12 +316,13 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           output =
             capture_io(fn ->
               result =
                 Relations.issue_relation_add(
-                  add_parse_result("EXT-1", ["EXT-2", "EXT-bad"], "blocks")
+                  add_parse_result("EXT-1", ["EXT-2", "EXT-bad"], "blocks"),
+                  stderr: stderr
                 )
 
               assert {:error, {:smells_bad, _}} = result
@@ -366,13 +378,16 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "should not be called" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           output_stdout =
             capture_io(fn ->
-              Relations.issue_relation_add(%{
-                unknown: ["EXT-1", "EXT-1"],
-                options: %{output: "json", type: "blocks"}
-              })
+              Relations.issue_relation_add(
+                %{
+                  unknown: ["EXT-1", "EXT-1"],
+                  options: %{output: "json", type: "blocks"}
+                },
+                stderr: stderr
+              )
             end)
 
           [entry] = Jason.decode!(output_stdout)
@@ -620,9 +635,12 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       remove_relations_stub([], [])
 
       output_stderr =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           result =
-            Relations.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-1"], "blocks"))
+            Relations.issue_relation_remove(
+              remove_parse_result("EXT-1", ["EXT-1"], "blocks"),
+              stderr: stderr
+            )
 
           assert {:error, {:smells_bad, _}} = result
         end)
@@ -656,10 +674,13 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       )
 
       output_stderr =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           result =
             capture_io(fn ->
-              Relations.issue_relation_remove(remove_parse_result("EXT-1", ["EXT-2"], "blocks"))
+              Relations.issue_relation_remove(
+                remove_parse_result("EXT-1", ["EXT-2"], "blocks"),
+                stderr: stderr
+              )
             end)
 
           _ = result
@@ -821,13 +842,16 @@ defmodule LinearCli.CLI.Commands.Issues.RelationsTest do
       remove_relations_stub([], [])
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           output_stdout =
             capture_io(fn ->
-              Relations.issue_relation_remove(%{
-                unknown: ["EXT-1", "EXT-1"],
-                options: %{output: "json", type: "blocks"}
-              })
+              Relations.issue_relation_remove(
+                %{
+                  unknown: ["EXT-1", "EXT-1"],
+                  options: %{output: "json", type: "blocks"}
+                },
+                stderr: stderr
+              )
             end)
 
           [entry] = Jason.decode!(output_stdout)

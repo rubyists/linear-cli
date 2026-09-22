@@ -164,10 +164,11 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       halt = fn code -> send(test_pid, {:halted, code}) end
 
       stderr =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             ["issue", "status", "--statuz", "Done", "CRY-1", "CRY-2"],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -268,8 +269,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "status", "--status", "Nonexistent", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "status", "--status", "Nonexistent", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -305,8 +310,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "status", "--status", "Do", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "status", "--status", "Do", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -657,8 +666,8 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       halt = fn code -> send(test_pid, {:halted, code}) end
 
       output =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "update"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "update"], halt, stderr: stderr)
         end)
 
       assert_received {:halted, 22}
@@ -761,7 +770,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             [
               "issue",
@@ -772,7 +781,8 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
               "somefile",
               "CRY-1"
             ],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -786,7 +796,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
-      capture_io(:stderr, fn ->
+      capture_stderr(fn stderr ->
         LinearCli.CLI.main(
           [
             "issue",
@@ -795,7 +805,8 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
             "/nonexistent/path/does-not-exist",
             "CRY-1"
           ],
-          halt
+          halt,
+          stderr: stderr
         )
       end)
 
@@ -1180,8 +1191,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "assign", "--assignee", "Nobody", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "assign", "--assignee", "Nobody", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -1213,8 +1228,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "assign", "--assignee", "Bo", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "assign", "--assignee", "Bo", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -1344,8 +1363,8 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "assign", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "assign", "CRY-1"], halt, stderr: stderr)
         end)
 
       assert_received {:halted, 22}
@@ -1514,10 +1533,11 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             ["issue", "assign", "-a", "Bob", "--status", "NoSuchState", "CRY-1"],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -1820,8 +1840,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       end)
 
       stderr =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "take", "--status", "Bogus", "CRY-1"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "take", "--status", "Bogus", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -2058,10 +2082,11 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
+        capture_stderr(fn stderr ->
           LinearCli.CLI.main(
             ["issue", "comment", "CRY-1", "-m", "text", "--body-file", "somefile"],
-            halt
+            halt,
+            stderr: stderr
           )
         end)
 
@@ -2075,10 +2100,11 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
-      capture_io(:stderr, fn ->
+      capture_stderr(fn stderr ->
         LinearCli.CLI.main(
           ["issue", "comment", "CRY-1", "--body-file", "/nonexistent/path/does-not-exist"],
-          halt
+          halt,
+          stderr: stderr
         )
       end)
 
@@ -2126,8 +2152,8 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       Req.Test.stub(LinearCli.Api, fn _conn -> raise "no GraphQL call should happen" end)
 
       output =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "comment", "-m", "lgtm"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "comment", "-m", "lgtm"], halt, stderr: stderr)
         end)
 
       assert_received {:halted, 22}

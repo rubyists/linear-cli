@@ -287,8 +287,12 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       halt = fn code -> send(test_pid, {:halted, code}) end
 
       output =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "move", "--project", "Manhattan"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "move", "--project", "Manhattan"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -583,7 +587,7 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
         end
       end)
 
-      capture_io(:stderr, fn ->
+      capture_stderr(fn stderr ->
         LinearCli.CLI.main(
           [
             "issue",
@@ -596,7 +600,8 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
             "ENG",
             "--yes"
           ],
-          halt
+          halt,
+          stderr: stderr
         )
       end)
 
@@ -681,10 +686,11 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
         raise "no API call should be made for same-ID move; got: #{query}"
       end)
 
-      capture_io(:stderr, fn ->
+      capture_stderr(fn stderr ->
         LinearCli.CLI.main(
           ["issue", "move", "--from", same_uuid, "--to", same_uuid],
-          halt
+          halt,
+          stderr: stderr
         )
       end)
 
@@ -725,8 +731,12 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       halt = fn code -> send(test_pid, {:halted, code}) end
 
       output =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "move", "--from", "Source Project"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "move", "--from", "Source Project"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
@@ -738,8 +748,12 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       halt = fn code -> send(test_pid, {:halted, code}) end
 
       output =
-        capture_io(:stderr, fn ->
-          LinearCli.CLI.main(["issue", "move", "--to", "Target Project"], halt)
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "move", "--to", "Target Project"],
+            halt,
+            stderr: stderr
+          )
         end)
 
       assert_received {:halted, 22}
