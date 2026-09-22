@@ -6,7 +6,8 @@ defmodule Mix.Tasks.Appdeps.Update do
 
       mix appdeps.update DEP [DEP ...]
 
-  Runs `mix deps.update` for the named dependencies from the `app/` project.
+  Checks that CI uses mise's pinned toolchain, runs `mix deps.update` for the
+  named dependencies from the `app/` project, then runs the full `mix ci` gate.
   """
 
   use Mix.Task
@@ -24,7 +25,9 @@ defmodule Mix.Tasks.Appdeps.Update do
   end
 
   def run(dependencies, shell) do
+    Mix.Tasks.Toolchain.Check.run([])
     shell.("mix", ["deps.update" | dependencies], cd: "app")
+    Mix.Tasks.Ci.run([], shell)
     :ok
   end
 end

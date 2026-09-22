@@ -116,6 +116,7 @@ hooks:
   after_create: |
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
     mix setup
+    cd app && mix deps.get
   before_run: |
     set -eu
     git fetch origin main

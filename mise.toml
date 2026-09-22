@@ -18,6 +18,14 @@ python = "3.14.1"
 #CLAUDE_CODE_ATTRIBUTION_HEADER = 0
 #CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1
 
+[tasks.setup]
+description = "Set up the repository"
+run = "mix setup"
+
+[tasks.deps]
+description = "Fetch CLI dependencies"
+run = "cd app && mix deps.get"
+
 [hooks]
 # Keep a freshly cloned checkout protected without rerunning setup after it is installed.
 enter = '''
