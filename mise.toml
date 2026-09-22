@@ -4,8 +4,8 @@
 # floating on "latest" (as this used to) drifts local builds away from what
 # Burrito can actually fetch, breaking `mix release` locally while CI still
 # works. See documents/phase-8-plan.adoc.
-erlang = "29.0.3"
-elixir = "1.20.3"
+erlang = "29.1"
+elixir = "1.20.4"
 python = "3.14.1"
 [env]
 #ANTHROPIC_BASE_URL = "http://127.0.0.1:13305"
@@ -17,6 +17,14 @@ python = "3.14.1"
 #CLAUDE_CODE_SUBAGENT_MODEL = "user.Qwen3.6-35B-A3B-ThinkingCoder"
 #CLAUDE_CODE_ATTRIBUTION_HEADER = 0
 #CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = 1
+
+[tasks.setup]
+description = "Set up the repository"
+run = "mix setup"
+
+[tasks.deps]
+description = "Fetch CLI dependencies"
+run = "cd app && mix deps.get"
 
 [hooks]
 # Keep a freshly cloned checkout protected without rerunning setup after it is installed.
