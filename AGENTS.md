@@ -3,6 +3,16 @@
 This document provides an index and source reference of guidelines, processes,
 and best practices for agents to follow.
 
+## Documents
+
+Use the [`simple-english`](vendor/claude-plain-english-skill/skills/simple-english) skill when
+authoring technical documentation or instructions.
+
+Use the [`plain-english`](vendor/claude-plain-english-skill/skills/plain-english) skill when
+authoring non-technical documentation, marketing copy, or other content intended for a general audience.
+
+Do not apply both to the same text.
+
 ## The Plan
 
 - Initial Plan: documents/initial-plan.adoc (historical snapshot - not

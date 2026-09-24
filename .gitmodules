@@ -28,3 +28,6 @@
 [submodule "vendor/stokowski"]
 	path = vendor/stokowski
 	url = git@github.com:bougyman/stokowski
+[submodule "vendor/claude-plain-english-skill"]
+	path = vendor/claude-plain-english-skill
+	url = git@github.com:b1rdmania/claude-plain-english-skill
