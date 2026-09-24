@@ -1,6 +1,6 @@
 defmodule LinearCli.CLI.Commands.Issues.Mutations do
   @moduledoc """
-  Issue mutation commands: update, comment, status, and assign.
+  Issue mutation commands: update, comment, status, assign, and unassign.
   Ported from vendor/ruby-linear-cli/lib/linear/commands/issue/update.rb,
   comment.rb, status.rb, and assign.rb.
   """
@@ -120,6 +120,26 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   end
 
   @doc """
+  Clears the assignee from one or more issues.
+
+  Optimus captures the explicit issue IDs in `unknown`, since it has no
+  variadic positional-argument type. Each issue is resolved before its
+  assignee is cleared. Updates run concurrently with the same limit and input
+  order as the other batch issue mutations.
+  """
+  @spec issue_unassign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
+  def issue_unassign(%{unknown: issue_ids, options: options}) do
+    with :ok <- validate_issue_ids(issue_ids),
+         {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+         {:ok, updated_issues} <- unassign_issues(issues) do
+      Display.show(one_or_many(updated_issues), %{output: options.output})
+      print_unassign_results(updated_issues, options.output)
+      :ok
+    end
+  end
+
+  @doc """
   Assigns an issue to a team member.
 
   With `--assignee`/`-a`, matches the given name against the issue's team's
@@ -200,6 +220,35 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     |> then(fn
       {:ok, results} -> {:ok, Enum.reverse(results)}
       error -> error
+    end)
+  end
+
+  defp unassign_issues([]), do: {:ok, []}
+
+  defp unassign_issues(issues) do
+    issues
+    |> Task.async_stream(
+      &Linear.unassign_issue/1,
+      max_concurrency: min(length(issues), @max_concurrent_issue_updates),
+      ordered: true,
+      timeout: 30_000
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, updated}}, {:ok, acc} -> {:cont, {:ok, [updated | acc]}}
+      {:ok, {:error, reason}}, _acc -> {:halt, {:error, reason}}
+      {:exit, reason}, _acc -> {:halt, {:error, {:task_exit, reason}}}
+    end)
+    |> then(fn
+      {:ok, updated_issues} -> {:ok, Enum.reverse(updated_issues)}
+      error -> error
+    end)
+  end
+
+  defp print_unassign_results(_updated_issues, "json"), do: :ok
+
+  defp print_unassign_results(updated_issues, _output) do
+    Enum.each(updated_issues, fn updated ->
+      Prompt.ok("#{updated.identifier} unassigned")
     end)
   end
 

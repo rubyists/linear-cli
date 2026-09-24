@@ -398,6 +398,54 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     end
   end
 
+  describe "Mutations.issue_unassign/1 resolves bare issue numbers via the active profile" do
+    test "expands a bare positional id before looking it up" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+
+            Req.Test.json(
+              conn,
+              %{"data" => %{"issue" => issue_map(%{"identifier" => "CRY-42"})}}
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            assert decoded["variables"]["input"] == %{"assigneeId" => nil}
+
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issueUpdate" => %{
+                    "issue" => issue_map(%{"identifier" => "CRY-42", "assignee" => nil})
+                  }
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{unknown: ["42"], options: %{output: "text"}}
+      output = capture_io(fn -> assert :ok = Mutations.issue_unassign(result) end)
+
+      assert_received {:id, "CRY-42"}
+      assert output =~ "CRY-42 unassigned"
+    end
+  end
+
   describe "Development.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
     test "issue_develop/2 expands the bare issue_id before self-assigning/checking it out" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")

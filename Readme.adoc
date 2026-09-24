@@ -25,7 +25,7 @@ endif::[]
 // x-release-please-end
 
 A command line interface to https://linear.app - list, take, create, develop,
-and update issues without leaving your terminal.
+unassign, and update issues without leaving your terminal.
 
 [cols="1,1",frame=none,grid=none]
 |===
@@ -175,6 +175,7 @@ so you don't have to type the full name every time:
 |`issue list` |`l`, `ls`
 |`issue status` |`s`, `st`, `stat`
 |`issue assign` |`a`
+|`issue unassign` |
 |`issue move` |`m`, `mv`
 |`issue update` |`u`
 |`issue view` |`v`
@@ -284,6 +285,21 @@ $ lc issue assign CRY-1234 <4>
 <2> Assign and move to the named workflow state in one update
 <3> Short form of `--status`
 <4> Prompts for the assignee interactively
+
+==== Unassign one or more issues
+
+This command clears the assignee from each listed issue. It accepts explicit
+issue identifiers only.
+
+[source,sh]
+----
+$ lc issue unassign CRY-1234
+$ lc issue unassign CRY-1 CRY-2
+$ lc issue unassign --output json CRY-1 CRY-2
+----
+
+Text output shows each updated issue and a confirmation. JSON output returns
+one object for one issue and an array for multiple issues.
 
 ==== Create an issue
 

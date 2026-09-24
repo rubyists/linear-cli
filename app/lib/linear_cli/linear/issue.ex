@@ -39,6 +39,10 @@ defmodule LinearCli.Linear.Issue do
       manual LinearCli.Linear.Issue.Update.Assign
     end
 
+    update :unassign do
+      manual LinearCli.Linear.Issue.Update.Unassign
+    end
+
     # Ruby: Issue#attach_to_project(project)
     update :attach_to_project do
       argument :project_id, :string, allow_nil?: false
@@ -412,8 +416,8 @@ defmodule LinearCli.Linear.Issue.Update do
   alias LinearCli.Linear.Issue
 
   # Ruby: Issue#update!(input) - the shared issueUpdate mutation that
-  # assign!/attach_to_project!/close! all delegate to, refetching the
-  # updated issue via Issue.full_fragment.
+  # the issue update actions delegate to, refetching the updated issue via
+  # Issue.full_fragment.
   def run(identifier, input) do
     case Api.call(document(), %{"id" => identifier, "input" => input}) do
       {:ok, %{"issueUpdate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
@@ -448,6 +452,17 @@ defmodule LinearCli.Linear.Issue.Update.Assign do
     input = if state_id, do: Map.put(input, "stateId", state_id), else: input
 
     Issue.Update.run(changeset.data.identifier, input)
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.Unassign do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{"assigneeId" => nil})
   end
 end
 

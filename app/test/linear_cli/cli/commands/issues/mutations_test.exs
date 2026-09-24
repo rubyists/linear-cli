@@ -10,6 +10,200 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     %{"id" => id, "name" => name, "position" => position, "type" => type, "description" => nil}
   end
 
+  describe "issue unassign edge cases" do
+    test "sends a null assignee and confirms each issue in text output" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:unassign_input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "unassign", "CRY-1"])
+        end)
+
+      assert_received {:unassign_input, %{"assigneeId" => nil}}
+      assert output =~ "CRY-1 unassigned"
+    end
+
+    test "returns a single issue object for JSON output" do
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}},
+        {"issueUpdate", issue_updated(%{"assignee" => nil})}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "unassign", "--output", "json", "CRY-1"])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+      assert is_nil(decoded["assignee"])
+    end
+
+    test "updates multiple issue IDs concurrently and preserves JSON order" do
+      test_pid = self()
+
+      issue_details = fn
+        "CRY-1" -> {"i1", "CRY-1"}
+        "CRY-2" -> {"i2", "CRY-2"}
+      end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+        variables = decoded["variables"] || %{}
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            {_id, identifier} = issue_details.(variables["id"])
+
+            Req.Test.json(conn, %{
+              "data" => %{"issue" => issue_map(%{"identifier" => identifier})}
+            })
+
+          String.contains?(query, "issueUpdate") ->
+            {_id, identifier} = issue_details.(variables["id"])
+            assert variables["input"] == %{"assigneeId" => nil}
+            update_pid = self()
+            send(test_pid, {:unassign_started, identifier, update_pid})
+
+            receive do
+              :finish_unassign -> :ok
+            after
+              2_000 -> raise "unassign update was not released by the concurrency assertion"
+            end
+
+            Req.Test.json(
+              conn,
+              issue_updated(%{"identifier" => identifier, "assignee" => nil})
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      command =
+        Task.async(fn ->
+          capture_io(fn ->
+            assert :ok =
+                     LinearCli.CLI.main([
+                       "issue",
+                       "unassign",
+                       "--output",
+                       "json",
+                       "CRY-1",
+                       "CRY-2"
+                     ])
+          end)
+        end)
+
+      assert_receive {:unassign_started, "CRY-1", first_update}, 1_000
+      assert_receive {:unassign_started, "CRY-2", second_update}, 1_000
+      send(first_update, :finish_unassign)
+      send(second_update, :finish_unassign)
+
+      output = Task.await(command)
+      assert {:ok, decoded} = Jason.decode(output)
+      assert Enum.map(decoded, & &1["identifier"]) == ["CRY-1", "CRY-2"]
+    end
+
+    test "with no issue IDs, exits 22" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "unassign"], halt, stderr: stderr)
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No issue IDs provided!"
+    end
+
+    test "rejects unrecognized options before making a GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn ->
+        raise "unassign must reject the option before making a GraphQL call"
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--statuz", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "unrecognized option(s): --statuz"
+    end
+
+    test "an unknown issue ID exits 66" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"data" => %{"issue" => nil}})
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "unassign", "CRY-999"], halt, stderr: stderr)
+        end)
+
+      assert_received {:halted, 66}
+      assert output =~ "No issue found with id CRY-999"
+    end
+
+    test "preserves the generic mutation-error catch-all and exit 88" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "issue(id: $id)") do
+          Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+        else
+          Req.Test.json(conn, %{"errors" => [%{"message" => "mutation denied"}]})
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(["issue", "unassign", "CRY-1"], halt, stderr: stderr)
+        end)
+
+      assert_received {:halted, 88}
+      assert output =~ "What the heck is this? ** (Ash.Error.Invalid)"
+      assert output =~ "** WTH? Cannot Continue **"
+      refute output =~ "mutation denied"
+    end
+  end
+
   describe "issue status" do
     defp issue_with_state(state_id, state_name) do
       issue_map(%{"state" => %{"id" => state_id, "name" => state_name, "type" => "started"}})
