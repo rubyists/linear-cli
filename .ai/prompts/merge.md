@@ -27,7 +27,9 @@ the approved PR for **{{ issue.identifier }}**: {{ issue.title }}
    gh pr merge -sd <number>
    ```
 5. Update the Linear workpad with the merge confirmation.
-6. Move the Linear issue to `Done`.
+
+The workflow runner owns the transition to `Done`. Do not move the Linear
+issue to a terminal state yourself.
 
 ## Rework run
 
@@ -50,3 +52,4 @@ If this is a rework run (merge was attempted before but failed):
 - Make code changes beyond conflict resolution.
 - Open new PRs.
 - Skip CI checks.
+- Move the source issue to a terminal state.
