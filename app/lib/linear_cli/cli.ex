@@ -264,6 +264,9 @@ defmodule LinearCli.CLI do
   defp dispatch([:issue, :status], result, context),
     do: run(&Mutations.issue_status/1, result, context)
 
+  defp dispatch([:issue, :unassign], result, context),
+    do: run(&Mutations.issue_unassign/1, result, context)
+
   defp dispatch([:issue, :update], result, context),
     do: run(&Mutations.issue_update/1, result, context)
 
@@ -319,7 +322,7 @@ defmodule LinearCli.CLI do
     end
   end
 
-  # `issue list`/`take`/`status`/`update` all set `allow_unknown_args: true` so bare
+  # `issue list`/`take`/`status`/`unassign`/`update` all set `allow_unknown_args: true` so bare
   # tokens (e.g. `CRY-1`) can be captured as issue ids via `result.unknown`
   # rather than a declared positional arg (Optimus has no `type: :array`
   # equivalent - see their subcommand specs below). That same bucket also
@@ -329,7 +332,7 @@ defmodule LinearCli.CLI do
   # clearly. Every other subcommand has `allow_unknown_args: false` (the
   # default), where Optimus itself already rejects unknown args before we
   # ever see a parse_result - so `result.unknown` is only ever non-empty here
-  # for those four subcommands, and only ever contains genuine bare ids
+  # for these subcommands, and only ever contains genuine bare ids
   # once this filters out anything flag-shaped.
   defp reject_unknown_flags(unknown_tokens) do
     case Enum.filter(unknown_tokens, &String.starts_with?(&1, "-")) do
@@ -903,6 +906,11 @@ defmodule LinearCli.CLI do
                   help: "Comment to add alongside the status change"
                 ]
               ]
+            ],
+            unassign: [
+              name: "unassign",
+              about: "Clear the assignee from one or more issues (ISSUE_ID...)",
+              allow_unknown_args: true
             ],
             take: [
               name: "take",

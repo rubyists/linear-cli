@@ -34,6 +34,7 @@ defmodule LinearCli.Linear do
       define :issues, action: :list
       define :create_issue, action: :create, args: [:title, :description, :team_id]
       define :assign_issue, action: :assign, args: [:assignee_id]
+      define :unassign_issue, action: :unassign
       define :attach_issue_to_project, action: :attach_to_project, args: [:project_id]
       define :close_issue, action: :close, args: [:state_id]
       define :set_issue_status, action: :set_status, args: [:state_id]
