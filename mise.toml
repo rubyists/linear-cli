@@ -7,6 +7,9 @@
 erlang = "29.0.3"
 elixir = "1.20.3"
 python = "3.14.7"
+uv = "0.12.18"
+codex = "0.157.0"
+claude = "2.1.282"
 [env]
 #ANTHROPIC_BASE_URL = "http://127.0.0.1:13305"
 #ANTHROPIC_AUTH_TOKEN = "lemonade"
@@ -20,11 +23,11 @@ python = "3.14.7"
 
 [tasks.setup]
 description = "Setup the project"
-run = "mix setup"
+run = "mix deps.get && mix setup"
 
 [tasks.deps]
 description = "Fetch CLI dependencies"
-run = "cd app && mix deps.get"
+run = "mix toolchain.update && cd app && mix deps.get"
 depends = ["setup"]
 
 [tasks.linear_profile]

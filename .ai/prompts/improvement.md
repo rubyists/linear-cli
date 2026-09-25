@@ -8,7 +8,7 @@ not approval to create every candidate: require a comment such as
 With no explicit manifest, fail closed: create zero issues, report that result,
 and complete. For each approved item, re-check for an equivalent Linear issue,
 then use only `mise exec -- mix lc issue create` with non-interactive options
-and a body file to create it in EXT / Fantasia. Include the source issue,
+and a body file to create it in EXT / Linear CLI. Include the source issue,
 candidate ID, evidence, scope, and acceptance criteria; link it to the source
 when supported. Do not modify the source issue, merge a PR, or change the repo.
 

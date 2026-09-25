@@ -139,7 +139,7 @@ Before starting any implementation work:
 
 ## Linear Interaction
 
-Fantasia issues belong to the `EXT` team and the `Fantasia` project.
+Linear CLI issues belong to the `EXT` team and the `Linear CLI` project.
 
 There is normally no need to interact with Linear directly. Stokowski
 should pass the necessary context from the linear issue.
@@ -152,7 +152,7 @@ For instance, to Post a new Linear comment (for milestone of your work,
 guidance for the next stage, and so on. Do not try to maintain or
  find a single running comment to update:
 
-    mise exec -- mix lc issue comment <ISSUE_ID> --body-file <path>
+    mise exec -- mix lc issue --team EXT --project 'Linear CLI' comment <ISSUE_ID> --body-file <path>
 
 - Write the comment's full content to a file first, then pass its
   path — never build a multi-line comment as an inline shell argument.
