@@ -379,6 +379,50 @@ defmodule LinearCli.Linear.IssueTest do
     end
   end
 
+  describe "unassign_issue/1" do
+    test "sends a JSON null assigneeId and returns the updated issue" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
+
+        assert id == "CRY-1"
+        assert input == %{"assigneeId" => nil}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.unassign_issue(issue)
+      assert updated.assignee == nil
+    end
+
+    test "surfaces a GraphQL error" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "mutation denied"}]})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{}} = Linear.unassign_issue(issue)
+    end
+  end
+
   describe "attach_issue_to_project/2+" do
     test "sends projectId and returns the issue refetched via full_fields" do
       issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")

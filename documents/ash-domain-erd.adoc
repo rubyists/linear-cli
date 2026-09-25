@@ -1,6 +1,6 @@
 = {my-title}
 Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
-:revdate: Aug 18, 2026
+:revdate: Sep 24, 2026
 :my-title: Ash domain ERD: LinearCli.Linear
 :icons: font
 :env-github:
@@ -33,7 +33,7 @@ not from Ash relationship declarations or database join logic.
 
 == ERD diagram
 
-All eight resources and their GraphQL/nested-data associations.
+All nine resources and their GraphQL/nested-data associations.
 Every edge is labeled *[nested]* to make explicit that these are not
 declared Ash relationships.  Resource attributes that hold nested structs
 are shown with the target resource name as their type.
@@ -382,6 +382,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `issueUpdate(id:, input: { assigneeId, stateId? })` via `Issue.Update.run/2`
 
 | `Issue`
+| `unassign_issue`
+| `:unassign`
+| update
+| `Linear.Issue.Update.Unassign`
+| `issueUpdate(id:, input: { assigneeId: null })` via `Issue.Update.run/2`
+
+| `Issue`
 | `attach_issue_to_project`
 | `:attach_to_project`
 | update
@@ -409,6 +416,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | update
 | `Linear.Issue.Update.SetPriority`
 | `issueUpdate(id:, input: { priority })` via `Issue.Update.run/2`. Argument: `priority` (integer 0–4: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low). Name-to-integer mapping lives in `CLI.Commands.Issues.Mutations.parse_priority/1`; the GraphQL response returns `priority` as `Float!`.
+
+| `Issue`
+| `update_issue_description`
+| `:update_description`
+| update
+| `Linear.Issue.Update.UpdateDescription`
+| `issueUpdate(id:, input: { description })` via `Issue.Update.run/2`
 
 | `IssueRelation`
 | `issue_relations`
@@ -475,9 +489,10 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 `app/lib/linear_cli/linear/issue.ex` — not an Ash module; a plain
 module with a single `run/2` function.
 
-All four issue-update actions (`:assign`, `:attach_to_project`, `:close`,
-`:set_status`) delegate to this shared runner rather than each building
-their own `issueUpdate` mutation.  `run/2` calls the mutation, receives
+All seven issue-update actions delegate to this shared runner rather than each
+building its own `issueUpdate` mutation. The actions are `:assign`,
+`:unassign`, `:attach_to_project`, `:close`, `:set_status`,
+`:update_description`, and `:set_priority`. `run/2` calls the mutation, receives
 the updated issue map, and decodes it via `Issue.from_map/1` using
 `Issue.full_fields/0` (the full fragment including assignee, team,
 comments, and labels).
