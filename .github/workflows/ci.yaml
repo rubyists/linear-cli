@@ -106,7 +106,7 @@ jobs:
           PULL_REQUEST_TITLE: >-
             ${{ inputs.pull_request_title != '' && inputs.pull_request_title
                 || github.event.pull_request.title }}
-        run: mix ci
+        run: mix deps.get && mix ci
         working-directory: .
 
   burrito_changes:
