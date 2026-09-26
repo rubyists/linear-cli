@@ -116,20 +116,30 @@ hooks:
   after_create: |
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
     mix setup
-<<<<<<< HEAD
-    mix deps.get
-=======
     cd app && mix deps.get
->>>>>>> main
   before_run: |
-    set -eu
-    git fetch origin main
-    changes="$(git status --porcelain)"
+    # Best-effort refresh onto origin/main. A failed hook fails the whole agent
+    # run, so only a rebase that cannot be cleaned up is fatal.
+    if ! git fetch origin main; then
+      echo "before_run: git fetch origin main failed; skipping rebase" >&2
+      exit 0
+    fi
+    if ! changes="$(git status --porcelain)"; then
+      echo "before_run: git status failed; skipping rebase" >&2
+      exit 0
+    fi
     if [ -n "$changes" ]; then
       echo "before_run: preserving uncommitted workspace changes; skipping rebase"
-    else
-      git rebase origin/main
+      exit 0
     fi
+    if ! git rebase origin/main; then
+      echo "before_run: rebase onto origin/main failed; aborting it" >&2
+      if ! git rebase --abort; then
+        echo "before_run: git rebase --abort failed; the workspace needs manual repair" >&2
+        exit 1
+      fi
+    fi
+    exit 0
   timeout_ms: 120000
 
 # ---------------------------------------------------------------------------
