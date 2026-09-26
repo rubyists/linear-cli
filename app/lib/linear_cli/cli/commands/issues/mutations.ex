@@ -188,16 +188,58 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
            Filter.build_input(flags, options, [],
              project_resolution: :strict,
              include_labels: false,
-             fetch_all_pages: true
+             fetch_all_pages: true,
+             resolve_assignee: true
            ),
-         {:ok, issues} <- Linear.issues(input),
-         {:ok, updated_issues} <- unassign_filtered_issues(issues) do
+         {:ok, issues} <- Linear.issues(input) do
+      unassign_filtered_issues(issues, flags, options)
+    end
+  end
+
+  defp unassign_filtered_issues([], _flags, options), do: show_unassign_results([], options)
+
+  defp unassign_filtered_issues(issues, %{dry_run: true}, options) do
+    show_unassign_dry_run(issues, options)
+  end
+
+  defp unassign_filtered_issues(issues, %{yes: true}, options) do
+    unassign_and_show(issues, options)
+  end
+
+  defp unassign_filtered_issues(issues, _flags, options) do
+    if Prompt.yes?("Unassign #{length(issues)} issue(s)?") do
+      unassign_and_show(issues, options)
+    else
+      cancel_unassign(options)
+    end
+  end
+
+  defp unassign_and_show(issues, options) do
+    with {:ok, updated_issues} <- unassign_issues(issues) do
       show_unassign_results(updated_issues, options)
     end
   end
 
-  defp unassign_filtered_issues([]), do: {:ok, []}
-  defp unassign_filtered_issues(issues), do: unassign_issues(issues)
+  defp show_unassign_dry_run(issues, options) do
+    output = Map.get(options, :output, "text")
+    Display.show(one_or_many(issues), %{output: output})
+
+    if output != "json" do
+      Prompt.ok("Would unassign #{length(issues)} issue(s)")
+    end
+
+    :ok
+  end
+
+  defp cancel_unassign(options) do
+    if Map.get(options, :output, "text") == "json" do
+      Display.show([], %{output: "json"})
+    else
+      Prompt.warn("Unassign cancelled")
+    end
+
+    :ok
+  end
 
   defp show_unassign_results([], options) do
     if Map.get(options, :output) == "json" do
@@ -220,6 +262,9 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     filters? = explicit_filter_selector?(options) or filter_qualifier?(flags)
 
     cond do
+      issue_ids != [] and Map.get(flags, :dry_run, false) ->
+        {:error, {:smells_bad, "--dry-run is only available in filter mode!"}}
+
       issue_ids != [] and filters? ->
         {:error, {:smells_bad, "Issue IDs cannot be combined with filter options!"}}
 

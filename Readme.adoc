@@ -300,14 +300,20 @@ combined with filter options.
 $ lc issue unassign CRY-1234
 $ lc issue unassign CRY-1 CRY-2
 $ lc issue unassign --output json CRY-1 CRY-2
-$ lc issue unassign --no-profile --assignee alice
-$ lc issue unassign --team CRY --project "Roadmap" --status "Human Review"
-$ lc issue unassign --all --labels Bug,Feature
+$ lc issue unassign --no-profile --assignee "Alice Smith" --yes
+$ lc issue unassign --team CRY --project "Roadmap" --status "Human Review" --dry-run
+$ lc issue unassign --no-mine --all --labels Bug,Feature --yes
 ----
 
 Text output shows each updated issue and a confirmation. JSON output returns
 one object for one issue and an array for multiple issues. A filter with no
 matches prints `No issues matched.` in text mode and returns `[]` in JSON mode.
+Filter mode selects only your own issues by default; use `--no-mine` to include
+issues assigned to other users, or `--assignee` to select a named user. Exact
+project and assignee matches are used without a prompt. Partial matches prompt
+you to choose a project or assignee. Before any filtered mutation, the command
+asks for confirmation; `--yes` skips that prompt and `--dry-run` prints the
+matching issues without changing them.
 The command resolves all matching issues before it starts updates, including
 matches beyond the normal 100-record issue-list page limit. Updates remain
 independent API calls, so a failed request can leave earlier matches already

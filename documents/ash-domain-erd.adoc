@@ -44,6 +44,7 @@ erDiagram
     User {
         string id PK
         string name
+        string display_name
         string email
         Team[] teams
     }
@@ -149,7 +150,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.User`
 | `id` (`:string`)
-| `name`, `email`, `teams` (`{:array, :term}`)
+| `name`, `display_name`, `email`, `teams` (`{:array, :term}`)
 
 | `LinearCli.Linear.Team`
 | `id` (`:string`)
@@ -365,7 +366,8 @@ manual-implementation module, and the Linear GraphQL operation it calls.
   (case-insensitive OR match via `IssueLabelCollectionFilter.some`); `include_labels`
   (boolean, default `false`) selects label fields in the response without adding a
   label filter — `labels` non-empty also forces label-field selection as a defensive
-  invariant; `assignee` filters by exact case-insensitive assignee name; and
+  invariant; `assignee` filters by exact case-insensitive assignee name when no
+  resolved ID is supplied, while `assignee_id` filters by exact user ID; and
   `fetch_all_pages` opts into an unbounded cursor walk for filter-only batch
   operations; or `issue(id:)` per id (full, fanned concurrently)
 

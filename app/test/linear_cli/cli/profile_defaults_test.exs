@@ -457,6 +457,20 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         query = decoded["query"]
 
         cond do
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "team" => %{
+                    "members" => %{
+                      "nodes" => [%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}]
+                    }
+                  }
+                }
+              }
+            )
+
           String.contains?(query, "team(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"team" => team_map("CRY")}})
 
@@ -484,7 +498,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       result = %{
         unknown: [],
-        flags: %{no_mine: false, no_profile: false, all: false},
+        flags: %{no_mine: false, no_profile: false, all: false, yes: true, dry_run: false},
         options: %{
           assignee: "Ada",
           team: nil,
@@ -500,7 +514,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       assert output =~ "CRY-1 unassigned"
       assert_received {:filter, filter}
-      assert filter["assignee"] == %{"name" => %{"eqIgnoreCase" => "Ada"}}
+      assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
       assert filter["team"] == %{"key" => %{"eq" => "CRY"}}
       assert filter["project"] == %{"id" => %{"eq" => "p1"}}
     end

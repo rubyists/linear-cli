@@ -12,6 +12,7 @@ defmodule LinearCli.Linear.Issue do
       argument :mine, :boolean, default: true
       argument :unassigned, :boolean, default: false
       argument :assignee, :string, allow_nil?: true
+      argument :assignee_id, :string, allow_nil?: true
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
       argument :all, :boolean, default: false
@@ -304,6 +305,11 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if Enum.any?(states, &(&1 in @cancelled_types)),
       do: filter,
       else: Map.put(filter, "canceledAt", %{"null" => true})
+  end
+
+  defp maybe_put_assignee_filter(filter, %{assignee_id: assignee_id})
+       when is_binary(assignee_id) and assignee_id != "" do
+    Map.put(filter, "assignee", %{"id" => %{"eq" => assignee_id}})
   end
 
   defp maybe_put_assignee_filter(filter, %{assignee: assignee})

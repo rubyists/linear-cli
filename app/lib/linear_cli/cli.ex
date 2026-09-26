@@ -924,13 +924,22 @@ defmodule LinearCli.CLI do
                 all: [
                   long: "--all",
                   help: "Include completed and cancelled issues"
+                ],
+                dry_run: [
+                  long: "--dry-run",
+                  help: "Preview matching issues without unassigning them"
+                ],
+                yes: [
+                  short: "-y",
+                  long: "--yes",
+                  help: "Skip the confirmation prompt"
                 ]
               ],
               options: [
                 assignee: [
                   short: "-a",
                   long: "--assignee",
-                  help: "Filter by exact assignee name, case-insensitive"
+                  help: "Filter by assignee name (exact or partial match)"
                 ],
                 team: [short: "-t", long: "--team", help: "Filter by team key"],
                 project: [

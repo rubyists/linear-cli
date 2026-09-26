@@ -96,6 +96,7 @@ LinearCli.CLI                        — Entry point; Optimus argument parsing a
   CLI.Commands.Teams                 — team list/favorite/unfavorite subcommands
   CLI.Commands.Projects              — project list/favorite/unfavorite/update subcommands
   CLI.Commands.Issues.Read           — issue read/list/show subcommands
+  CLI.Commands.Issues.Filter         — shared issue filter resolution
   CLI.Commands.Issues.Create         — issue create subcommand
   CLI.Commands.Issues.Development    — issue branch/PR subcommands
   CLI.Commands.Issues.Mutations      — issue update/status/assign/comment subcommands
