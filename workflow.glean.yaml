@@ -24,6 +24,7 @@ hooks:
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
     mise trust
     mise install
+    mise exec -- mix deps.get
     mise exec -- mix setup
   before_run: |
     # Best-effort refresh onto origin/main. A failed hook fails the whole agent

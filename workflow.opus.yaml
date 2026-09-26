@@ -115,6 +115,7 @@ workspace:
 hooks:
   after_create: |
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
+    mix deps.get
     mix setup
     cd app && mix deps.get
   before_run: |

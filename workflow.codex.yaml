@@ -116,6 +116,7 @@ workspace:
 hooks:
   after_create: |
     git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
+    mix deps.get
     mix setup
   before_run: |
     # Best-effort refresh onto origin/main. A failed hook fails the whole agent
