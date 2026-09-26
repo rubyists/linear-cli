@@ -197,7 +197,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
                    ])
         end)
 
-      assert_received {:issue_filter, %{"filter" => filter, "first" => 50, "after" => nil}}
+      assert_received {:issue_filter, %{"filter" => filter, "first" => 100, "after" => nil}}
       assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
       refute get_in(filter, ["assignee", "isMe"])
       assert_received {:unassign_input, %{"assigneeId" => nil}}
@@ -205,7 +205,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert output =~ "CRY-1 unassigned"
     end
 
-    test "fetches all filtered pages before unassigning more than 100 matches" do
+    test "limits a filtered batch to 100 matches and warns when more exist" do
       test_pid = self()
 
       page_issues = fn first, last ->
@@ -226,9 +226,12 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
             page =
               case cursor do
-                nil -> issues_response_page(page_issues.(1, 50), true, "c1")
-                "c1" -> issues_response_page(page_issues.(51, 100), true, "c2")
-                "c2" -> issues_response_page(page_issues.(101, 120), false, "c3")
+                nil ->
+                  assert decoded["variables"]["first"] == 100
+                  issues_response_page(page_issues.(1, 100), true, "c100")
+
+                _ ->
+                  issues_response_page([], false, cursor)
               end
 
             Req.Test.json(conn, page)
@@ -249,8 +252,6 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
                    LinearCli.CLI.main([
                      "issue",
                      "unassign",
-                     "--output",
-                     "json",
                      "--no-profile",
                      "--team",
                      "ENG",
@@ -259,24 +260,20 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         end)
 
       assert_received {:page_requested, nil}
-      assert_received {:page_requested, "c1"}
-      assert_received {:page_requested, "c2"}
-
-      assert {:ok, updated} = Jason.decode(output)
-      assert length(updated) == 120
-      assert List.first(updated)["identifier"] == "CRY-1"
-      assert List.last(updated)["identifier"] == "CRY-120"
+      refute_received {:page_requested, _}
+      assert output =~ "More than 100 issues match this filter"
+      assert output =~ "Only the first 100 will be processed"
 
       updated_ids =
-        Enum.reduce(1..120, [], fn _number, acc ->
+        Enum.reduce(1..100, [], fn _number, acc ->
           receive do
             {:updated, identifier} -> [identifier | acc]
           after
-            1_000 -> flunk("expected all 120 issue updates")
+            1_000 -> flunk("expected all 100 issue updates")
           end
         end)
 
-      assert length(updated_ids) == 120
+      assert length(updated_ids) == 100
     end
 
     test "confirms the filtered batch and cancels without mutating" do
@@ -643,7 +640,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
     end
 
-    test "fetches every page before starting updates" do
+    test "reports a first-page read error without mutating" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
 
@@ -654,13 +651,10 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
         cond do
           String.contains?(query, "issues(filter:") ->
-            case decoded["variables"]["after"] do
-              nil -> Req.Test.json(conn, issues_response_page([issue_map()], true, "c1"))
-              "c1" -> Plug.Conn.resp(conn, 502, "upstream unavailable")
-            end
+            Plug.Conn.resp(conn, 502, "upstream unavailable")
 
           String.contains?(query, "issueUpdate") ->
-            raise "no update is allowed after a later-page read error"
+            raise "no update is allowed after a first-page read error"
 
           true ->
             raise "no stub matched query: #{query}"

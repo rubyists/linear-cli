@@ -314,11 +314,12 @@ project and assignee matches are used without a prompt. Partial matches prompt
 you to choose a project or assignee. Before any filtered mutation, the command
 asks for confirmation; `--yes` skips that prompt and `--dry-run` prints the
 matching issues without changing them.
-The command resolves all matching issues before it starts updates, including
-matches beyond the normal 100-record issue-list page limit. Updates remain
+The command processes at most 100 matches at a time. If more than 100 issues
+match, it prints a warning and processes only the first 100. Updates remain
 independent API calls, so a failed request can leave earlier matches already
-unassigned. The existing `--unassigned` issue-list filter is not a selector for
-this command because unassigning already-unassigned issues has no effect.
+unassigned. In JSON mode, the warning goes to stderr so stdout stays valid
+JSON. The existing `--unassigned` issue-list filter is not a selector for this
+command because unassigning already-unassigned issues has no effect.
 
 ==== Create an issue
 

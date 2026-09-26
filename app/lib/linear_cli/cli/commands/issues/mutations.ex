@@ -188,12 +188,16 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
            Filter.build_input(flags, options, [],
              project_resolution: :strict,
              include_labels: false,
-             fetch_all_pages: true,
              resolve_assignee: true
            ),
-         {:ok, issues} <- Linear.issues(input) do
-      unassign_filtered_issues(issues, flags, options)
+         {:ok, issues, has_next_page} <- Linear.issues_first_page(input) do
+      unassign_filtered_issues(issues, has_next_page, flags, options)
     end
+  end
+
+  defp unassign_filtered_issues(issues, has_next_page, flags, options) do
+    warn_if_truncated(has_next_page, options)
+    unassign_filtered_issues(issues, flags, options)
   end
 
   defp unassign_filtered_issues([], _flags, options), do: show_unassign_results([], options)
@@ -239,6 +243,18 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     end
 
     :ok
+  end
+
+  defp warn_if_truncated(false, _options), do: :ok
+
+  defp warn_if_truncated(true, options) do
+    message = "More than 100 issues match this filter. Only the first 100 will be processed."
+
+    if Map.get(options, :output, "text") == "json" do
+      Prompt.warn(message, :stderr)
+    else
+      Prompt.warn(message)
+    end
   end
 
   defp show_unassign_results([], options) do

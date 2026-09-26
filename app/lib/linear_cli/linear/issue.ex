@@ -191,6 +191,19 @@ defmodule LinearCli.Linear.Issue.Read.List do
     end
   end
 
+  @doc """
+  Fetches one issue page for filter-only batch commands.
+
+  Returns `{:ok, issues, has_next_page}` and never follows the continuation
+  cursor. The caller can warn before it processes the first 100 matches.
+  """
+  def first_page(args) do
+    list_first_page(
+      build_filter(args),
+      Map.get(args, :include_labels, false) || Map.get(args, :labels, []) != []
+    )
+  end
+
   # Ruby: BaseModel::ClassMethods#find - singular `issue(id:)` lookup, full_fragment.
   # A function, not a module attribute: its body reaches into User/Team/Comment
   # (other files), so it must be evaluated at call time, not at compile time of
@@ -259,6 +272,17 @@ defmodule LinearCli.Linear.Issue.Read.List do
       fn after_cursor -> %{"filter" => filter, "first" => 50, "after" => after_cursor} end,
       &Issue.from_map/1,
       if(fetch_all_pages, do: :infinity, else: 100)
+    )
+  end
+
+  defp list_first_page(filter, include_labels) do
+    document = if include_labels, do: list_document_with_labels(), else: list_document()
+
+    Paginate.first_page(
+      document,
+      "issues",
+      fn _after_cursor -> %{"filter" => filter, "first" => 100, "after" => nil} end,
+      &Issue.from_map/1
     )
   end
 

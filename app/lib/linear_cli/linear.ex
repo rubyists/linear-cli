@@ -65,4 +65,9 @@ defmodule LinearCli.Linear do
       define :delete_issue_relation, action: :destroy
     end
   end
+
+  @doc "Fetches one issue page and returns whether more matches exist."
+  def issues_first_page(input) do
+    LinearCli.Linear.Issue.Read.List.first_page(input)
+  end
 end

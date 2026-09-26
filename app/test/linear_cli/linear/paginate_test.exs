@@ -42,6 +42,23 @@ defmodule LinearCli.Linear.PaginateTest do
     refute_receive {:cursor, "c2"}
   end
 
+  test "returns the first page and reports more records without following the cursor" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+      send(test_pid, {:cursor, cursor})
+      Req.Test.json(conn, response([1, 2], true, "c1"))
+    end)
+
+    assert {:ok, [1, 2], true} =
+             Paginate.first_page("query", "issues", &variables_fun/1, & &1["id"])
+
+    assert_receive {:cursor, nil}
+    refute_receive {:cursor, "c1"}
+  end
+
   test "fetches every page when max is infinity" do
     test_pid = self()
 
