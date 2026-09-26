@@ -22,22 +22,51 @@ defmodule LinearCli.Linear.Paginate do
     do_all(document, field_name, variables_fun, decode_fun, nil, max, [])
   end
 
+  @doc """
+  Fetches one GraphQL connection page and returns its decoded records and
+  `hasNextPage` value.
+
+  The caller controls the page size in `variables_fun`. This function never
+  follows the continuation cursor.
+  """
+  def first_page(document, field_name, variables_fun, decode_fun) do
+    with {:ok, data} <- Api.call(document, variables_fun.(nil)),
+         {:ok, %{"edges" => edges, "pageInfo" => page_info}} <-
+           fetch_connection(data, field_name) do
+      values = Enum.map(edges, &decode_fun.(&1["node"]))
+      {:ok, values, page_info["hasNextPage"] == true}
+    else
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp do_all(document, field_name, variables_fun, decode_fun, after_cursor, max, acc) do
     with {:ok, data} <- Api.call(document, variables_fun.(after_cursor)),
          {:ok, %{"edges" => edges, "pageInfo" => page_info}} <-
            fetch_connection(data, field_name) do
       acc = acc ++ Enum.map(edges, &decode_fun.(&1["node"]))
 
-      if length(acc) >= max or !page_info["hasNextPage"] do
-        {:ok, Enum.take(acc, max)}
+      if reached_limit?(acc, max) or !page_info["hasNextPage"] do
+        {:ok, take_max(acc, max)}
       else
-        do_all(document, field_name, variables_fun, decode_fun, page_info["endCursor"], max, acc)
+        next_cursor = page_info["endCursor"]
+
+        if next_cursor == after_cursor do
+          {:error, {:non_advancing_cursor, next_cursor}}
+        else
+          do_all(document, field_name, variables_fun, decode_fun, next_cursor, max, acc)
+        end
       end
     else
       {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp reached_limit?(acc, max), do: length(acc) >= max
+
+  defp take_max(acc, max), do: Enum.take(acc, max)
 
   # Safely extracts the named connection from the response data. Returns
   # {:error, {:unexpected_response, ...}} instead of crashing with KeyError

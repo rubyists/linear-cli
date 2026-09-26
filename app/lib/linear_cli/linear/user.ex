@@ -20,11 +20,12 @@ defmodule LinearCli.Linear.User do
   attributes do
     attribute :id, :string, primary_key?: true, allow_nil?: false, public?: true
     attribute :name, :string, public?: true
+    attribute :display_name, :string, public?: true
     attribute :email, :string, public?: true
     attribute :teams, {:array, :term}, public?: true, default: []
   end
 
-  @base_fields "id name email"
+  @base_fields "id name displayName email"
 
   @doc "GraphQL field selection for a user's own fields (no nested teams)."
   def base_fields, do: @base_fields
@@ -39,6 +40,7 @@ defmodule LinearCli.Linear.User do
     struct!(__MODULE__,
       id: map["id"],
       name: map["name"],
+      display_name: map["displayName"],
       email: map["email"],
       teams: Enum.map(get_in(map, ["teams", "nodes"]) || [], &LinearCli.Linear.Team.from_map/1)
     )

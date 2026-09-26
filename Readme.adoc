@@ -289,17 +289,38 @@ $ lc issue assign CRY-1234 <4>
 ==== Unassign one or more issues
 
 This command clears the assignee from each listed issue. It accepts explicit
-issue identifiers only.
+issue identifiers or a filter-only selection. Filter mode requires at least one
+narrowing selector: `--assignee`, `--team`, `--project`, `--state`, `--status`,
+or `--labels`. `--no-mine`, `--no-profile`, and `--all` modify that selection
+but are not selectors by themselves. Positional issue identifiers cannot be
+combined with filter options.
 
 [source,sh]
 ----
 $ lc issue unassign CRY-1234
 $ lc issue unassign CRY-1 CRY-2
 $ lc issue unassign --output json CRY-1 CRY-2
+$ lc issue unassign --no-profile --assignee "Alice Smith" --yes
+$ lc issue unassign --team CRY --project "Roadmap" --status "Human Review" --dry-run
+$ lc issue unassign --no-mine --all --labels Bug,Feature --yes
 ----
 
 Text output shows each updated issue and a confirmation. JSON output returns
-one object for one issue and an array for multiple issues.
+one object for one issue and an array for multiple issues. A filter with no
+matches prints `No issues matched.` in text mode and returns `[]` in JSON mode.
+Filter mode selects only your own issues by default; use `--no-mine` to include
+issues assigned to other users, or `--assignee` to select a named user. Already
+unassigned issues are skipped. Exact
+project and assignee matches are used without a prompt. Partial matches prompt
+you to choose a project or assignee. Before any filtered mutation, the command
+asks for confirmation; `--yes` skips that prompt and `--dry-run` prints the
+matching issues without changing them.
+The command processes at most 100 matches at a time. If more than 100 issues
+match, it prints a warning and processes only the first 100. Updates remain
+independent API calls, so a failed request can leave earlier matches already
+unassigned. In JSON mode, the warning goes to stderr so stdout stays valid
+JSON. The existing `--unassigned` issue-list filter is not a selector for this
+command because unassigning already-unassigned issues has no effect.
 
 ==== Create an issue
 

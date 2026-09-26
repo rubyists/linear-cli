@@ -63,6 +63,20 @@ defmodule LinearCli.Linear.IssueTest do
     assert {:ok, []} = Linear.issues(%{unassigned: true})
   end
 
+  test "issues/1 with mine: false does not add an assignee filter" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+      refute Map.has_key?(filter, "assignee")
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{mine: false})
+  end
+
   test "issues/1 with labels sends the correct label filter to the API" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)

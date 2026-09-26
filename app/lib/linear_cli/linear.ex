@@ -32,6 +32,7 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.Issue do
       define :issues, action: :list
+      define :issues_first_page, action: :list_first_page, args: [:input]
       define :create_issue, action: :create, args: [:title, :description, :team_id]
       define :assign_issue, action: :assign, args: [:assignee_id]
       define :unassign_issue, action: :unassign
