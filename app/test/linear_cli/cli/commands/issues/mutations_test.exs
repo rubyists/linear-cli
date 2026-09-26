@@ -420,6 +420,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
                    "unassign",
                    "--no-profile",
                    "--no-mine",
+                   "--yes",
                    "--team",
                    "ENG",
                    "--state",
