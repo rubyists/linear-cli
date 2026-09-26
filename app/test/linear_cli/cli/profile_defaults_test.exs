@@ -444,6 +444,66 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       assert_received {:id, "CRY-42"}
       assert output =~ "CRY-42 unassigned"
     end
+
+    test "filter mode applies the active profile's team and project defaults" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map("CRY")}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map(%{"assignee" => me_map()})]))
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issueUpdate" => %{"issue" => issue_map(%{"assignee" => nil})}
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        unknown: [],
+        flags: %{no_mine: false, no_profile: false, all: false},
+        options: %{
+          assignee: "Ada",
+          team: nil,
+          project: nil,
+          state: [],
+          status: [],
+          labels: [],
+          output: "text"
+        }
+      }
+
+      output = capture_io(fn -> assert :ok = Mutations.issue_unassign(result) end)
+
+      assert output =~ "CRY-1 unassigned"
+      assert_received {:filter, filter}
+      assert filter["assignee"] == %{"name" => %{"eqIgnoreCase" => "Ada"}}
+      assert filter["team"] == %{"key" => %{"eq" => "CRY"}}
+      assert filter["project"] == %{"id" => %{"eq" => "p1"}}
+    end
   end
 
   describe "Development.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do

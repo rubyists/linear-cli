@@ -5,8 +5,11 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   comment.rb, status.rb, and assign.rb.
   """
 
-  alias LinearCli.CLI.{Display, Prompt, WhatFor}
+  alias LinearCli.CLI.Commands.Issues.Filter
+  alias LinearCli.CLI.Display
   alias LinearCli.CLI.Issue.{Actions, Identifiers}
+  alias LinearCli.CLI.Prompt
+  alias LinearCli.CLI.WhatFor
   alias LinearCli.Linear
 
   @max_concurrent_issue_updates 20
@@ -120,22 +123,21 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   end
 
   @doc """
-  Clears the assignee from one or more issues.
+  Clears assignees from explicit issue IDs or from issues selected by filters.
 
   Optimus captures the explicit issue IDs in `unknown`, since it has no
-  variadic positional-argument type. Each issue is resolved before its
-  assignee is cleared. Updates run concurrently with the same limit and input
-  order as the other batch issue mutations.
+  variadic positional-argument type. Filter mode requires an explicit
+  assignee, team, project, state, status, or label selector. Each matching
+  issue is resolved before its assignee is cleared.
   """
   @spec issue_unassign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
-  def issue_unassign(%{unknown: issue_ids, options: options}) do
-    with :ok <- validate_issue_ids(issue_ids),
-         {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
-         {:ok, updated_issues} <- unassign_issues(issues) do
-      Display.show(one_or_many(updated_issues), %{output: options.output})
-      print_unassign_results(updated_issues, options.output)
-      :ok
+  def issue_unassign(%{unknown: issue_ids, options: options} = result) do
+    flags = Map.get(result, :flags, %{})
+
+    case unassign_mode(issue_ids, flags, options) do
+      {:ids, ids} -> issue_unassign_by_ids(ids, options)
+      :filter -> issue_unassign_by_filter(flags, options)
+      {:error, reason} -> {:error, reason}
     end
   end
 
@@ -172,6 +174,79 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
       :ok
     end
   end
+
+  defp issue_unassign_by_ids(issue_ids, options) do
+    with {:ok, issues} <-
+           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+         {:ok, updated_issues} <- unassign_issues(issues) do
+      show_unassign_results(updated_issues, options)
+    end
+  end
+
+  defp issue_unassign_by_filter(flags, options) do
+    with {:ok, input} <-
+           Filter.build_input(flags, options, [],
+             project_resolution: :strict,
+             include_labels: false,
+             fetch_all_pages: true
+           ),
+         {:ok, issues} <- Linear.issues(input),
+         {:ok, updated_issues} <- unassign_filtered_issues(issues) do
+      show_unassign_results(updated_issues, options)
+    end
+  end
+
+  defp unassign_filtered_issues([]), do: {:ok, []}
+  defp unassign_filtered_issues(issues), do: unassign_issues(issues)
+
+  defp show_unassign_results([], options) do
+    if Map.get(options, :output) == "json" do
+      Display.show([], %{output: "json"})
+    else
+      Prompt.ok("No issues matched.")
+    end
+
+    :ok
+  end
+
+  defp show_unassign_results(updated_issues, options) do
+    output = Map.get(options, :output, "text")
+    Display.show(one_or_many(updated_issues), %{output: output})
+    print_unassign_results(updated_issues, output)
+    :ok
+  end
+
+  defp unassign_mode(issue_ids, flags, options) do
+    filters? = explicit_filter_selector?(options) or filter_qualifier?(flags)
+
+    cond do
+      issue_ids != [] and filters? ->
+        {:error, {:smells_bad, "Issue IDs cannot be combined with filter options!"}}
+
+      issue_ids != [] ->
+        {:ids, issue_ids}
+
+      explicit_filter_selector?(options) ->
+        :filter
+
+      true ->
+        {:error, {:smells_bad, "Provide issue IDs or at least one filter selector!"}}
+    end
+  end
+
+  defp explicit_filter_selector?(options) do
+    Enum.any?([:assignee, :team, :project], &present_string?(Map.get(options, &1))) or
+      Enum.any?([:state, :status, :labels], &present_list?(Map.get(options, &1)))
+  end
+
+  defp filter_qualifier?(flags) do
+    Map.get(flags, :no_mine, false) or
+      Map.get(flags, :no_profile, false) or
+      Map.get(flags, :all, false)
+  end
+
+  defp present_string?(value), do: is_binary(value) and value != ""
+  defp present_list?(value), do: is_list(value) and value != []
 
   defp validate_issue_ids([]), do: {:error, {:smells_bad, "No issue IDs provided!"}}
   defp validate_issue_ids(_issue_ids), do: :ok

@@ -11,6 +11,7 @@ defmodule LinearCli.Linear.Issue do
       argument :ids, {:array, :string}, default: []
       argument :mine, :boolean, default: true
       argument :unassigned, :boolean, default: false
+      argument :assignee, :string, allow_nil?: true
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
       argument :all, :boolean, default: false
@@ -18,6 +19,7 @@ defmodule LinearCli.Linear.Issue do
       argument :status, {:array, :string}, default: []
       argument :labels, {:array, :string}, default: []
       argument :include_labels, :boolean, default: false
+      argument :fetch_all_pages, :boolean, default: false
       manual LinearCli.Linear.Issue.Read.List
     end
 
@@ -180,7 +182,11 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if args.ids != [] do
       find_by_ids(args.ids)
     else
-      list_all(build_filter(args), args.include_labels || args.labels != [])
+      list_all(
+        build_filter(args),
+        args.include_labels || args.labels != [],
+        args.fetch_all_pages
+      )
     end
   end
 
@@ -243,14 +249,15 @@ defmodule LinearCli.Linear.Issue.Read.List do
     end
   end
 
-  defp list_all(filter, include_labels) do
+  defp list_all(filter, include_labels, fetch_all_pages) do
     document = if include_labels, do: list_document_with_labels(), else: list_document()
 
     Paginate.all(
       document,
       "issues",
       fn after_cursor -> %{"filter" => filter, "first" => 50, "after" => after_cursor} end,
-      &Issue.from_map/1
+      &Issue.from_map/1,
+      if(fetch_all_pages, do: :infinity, else: 100)
     )
   end
 
@@ -297,6 +304,11 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if Enum.any?(states, &(&1 in @cancelled_types)),
       do: filter,
       else: Map.put(filter, "canceledAt", %{"null" => true})
+  end
+
+  defp maybe_put_assignee_filter(filter, %{assignee: assignee})
+       when is_binary(assignee) and assignee != "" do
+    Map.put(filter, "assignee", %{"name" => %{"eqIgnoreCase" => assignee}})
   end
 
   defp maybe_put_assignee_filter(filter, %{unassigned: true}) do

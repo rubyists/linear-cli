@@ -909,8 +909,53 @@ defmodule LinearCli.CLI do
             ],
             unassign: [
               name: "unassign",
-              about: "Clear the assignee from one or more issues (ISSUE_ID...)",
-              allow_unknown_args: true
+              about: "Clear assignees by issue ID or filter",
+              allow_unknown_args: true,
+              flags: [
+                no_mine: [
+                  short: "-N",
+                  long: "--no-mine",
+                  help: "Include issues not assigned to the current user"
+                ],
+                no_profile: [
+                  long: "--no-profile",
+                  help: "Ignore the active profile's team/project defaults"
+                ],
+                all: [
+                  long: "--all",
+                  help: "Include completed and cancelled issues"
+                ]
+              ],
+              options: [
+                assignee: [
+                  short: "-a",
+                  long: "--assignee",
+                  help: "Filter by exact assignee name, case-insensitive"
+                ],
+                team: [short: "-t", long: "--team", help: "Filter by team key"],
+                project: [
+                  short: "-p",
+                  long: "--project",
+                  help: "Filter by project name, URL, ID, or search term"
+                ],
+                state: [
+                  long: "--state",
+                  help: "Filter by workflow state type(s) (comma-separated)",
+                  parser: &parse_states/1
+                ],
+                status: [
+                  short: "-s",
+                  long: "--status",
+                  help: "Filter by workflow status name(s) (comma-separated)",
+                  parser: &parse_statuses/1
+                ],
+                labels: [
+                  short: "-l",
+                  long: "--labels",
+                  help: "Filter by label name(s) (comma-separated, OR match)",
+                  parser: &parse_labels/1
+                ]
+              ]
             ],
             take: [
               name: "take",

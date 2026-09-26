@@ -126,7 +126,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert Enum.map(decoded, & &1["identifier"]) == ["CRY-1", "CRY-2"]
     end
 
-    test "with no issue IDs, exits 22" do
+    test "with no issue IDs or filter selector, exits 22" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
 
@@ -136,7 +136,312 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         end)
 
       assert_received {:halted, 22}
-      assert output =~ "No issue IDs provided!"
+      assert output =~ "Provide issue IDs or at least one filter selector!"
+    end
+
+    test "filters by assignee and clears every matching issue" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:issue_filter, decoded["variables"]})
+            Req.Test.json(conn, issues_response([issue_map(%{"assignee" => me_map()})]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:unassign_input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--assignee",
+                     "Ada"
+                   ])
+        end)
+
+      assert_received {:issue_filter, %{"filter" => filter, "first" => 50, "after" => nil}}
+      assert filter["assignee"] == %{"name" => %{"eqIgnoreCase" => "Ada"}}
+      refute get_in(filter, ["assignee", "isMe"])
+      assert_received {:unassign_input, %{"assigneeId" => nil}}
+      assert output =~ "CRY-1 unassigned"
+    end
+
+    test "fetches all filtered pages before unassigning more than 100 matches" do
+      test_pid = self()
+
+      page_issues = fn first, last ->
+        Enum.map(first..last, fn number ->
+          issue_map(%{"id" => "i#{number}", "identifier" => "CRY-#{number}"})
+        end)
+      end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            cursor = decoded["variables"]["after"]
+            send(test_pid, {:page_requested, cursor})
+
+            page =
+              case cursor do
+                nil -> issues_response_page(page_issues.(1, 50), true, "c1")
+                "c1" -> issues_response_page(page_issues.(51, 100), true, "c2")
+                "c2" -> issues_response_page(page_issues.(101, 120), false, "c3")
+              end
+
+            Req.Test.json(conn, page)
+
+          String.contains?(query, "issueUpdate") ->
+            identifier = decoded["variables"]["id"]
+            send(test_pid, {:updated, identifier})
+            Req.Test.json(conn, issue_updated(%{"identifier" => identifier, "assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--output",
+                     "json",
+                     "--no-profile",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert_received {:page_requested, nil}
+      assert_received {:page_requested, "c1"}
+      assert_received {:page_requested, "c2"}
+
+      assert {:ok, updated} = Jason.decode(output)
+      assert length(updated) == 120
+      assert List.first(updated)["identifier"] == "CRY-1"
+      assert List.last(updated)["identifier"] == "CRY-120"
+
+      updated_ids =
+        Enum.reduce(1..120, [], fn _number, acc ->
+          receive do
+            {:updated, identifier} -> [identifier | acc]
+          after
+            1_000 -> flunk("expected all 120 issue updates")
+          end
+        end)
+
+      assert length(updated_ids) == 120
+    end
+
+    test "shares team, state, status, and label filters with issue list" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          send(test_pid, {:issue_filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "unassign must not mutate an empty filtered result"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "unassign",
+                   "--no-profile",
+                   "--no-mine",
+                   "--team",
+                   "ENG",
+                   "--state",
+                   "started",
+                   "--status",
+                   "Human Review",
+                   "--labels",
+                   "Bug,Feature"
+                 ])
+      end)
+
+      assert_received {:issue_filter, filter}
+      assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
+      assert filter["state"]["type"] == %{"in" => ["started"]}
+      assert filter["state"]["name"] == %{"eqIgnoreCase" => "Human Review"}
+
+      assert filter["labels"] == %{
+               "some" => %{
+                 "or" => [
+                   %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                   %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                 ]
+               }
+             }
+    end
+
+    test "reports no matches without sending an update" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "no update is expected when no issues match"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+    end
+
+    test "returns an empty JSON array for no matches" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "no update is expected when no issues match"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--output",
+                     "json",
+                     "--no-profile",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert {:ok, []} = Jason.decode(output)
+    end
+
+    test "rejects issue IDs combined with filter options before a GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn ->
+        raise "the conflicting invocation must not make a GraphQL call"
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--team", "ENG", "--no-profile", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "Issue IDs cannot be combined with filter options!"
+    end
+
+    test "fails safely when the requested project does not resolve" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "projects(first: $first") do
+          Req.Test.json(conn, all_projects([]))
+        else
+          raise "a missing project must stop before the issue query"
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--no-profile", "--project", "Missing Project"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No project found matching Missing Project"
+    end
+
+    test "fetches every page before starting updates" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            case decoded["variables"]["after"] do
+              nil -> Req.Test.json(conn, issues_response_page([issue_map()], true, "c1"))
+              "c1" -> Plug.Conn.resp(conn, 502, "upstream unavailable")
+            end
+
+          String.contains?(query, "issueUpdate") ->
+            raise "no update is allowed after a later-page read error"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--no-profile", "--team", "ENG"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 88}
+      assert output =~ "Cannot Continue"
     end
 
     test "rejects unrecognized options before making a GraphQL call" do

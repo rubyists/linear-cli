@@ -6,10 +6,11 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   """
 
   alias LinearCli.Browser
+  alias LinearCli.CLI.Commands.Issues.Filter
   alias LinearCli.CLI.Commands.Issues.Graph
-  alias LinearCli.CLI.{Display, Projects}
+  alias LinearCli.CLI.Display
   alias LinearCli.CLI.Issue.Identifiers
-  alias LinearCli.{Linear, Profiles}
+  alias LinearCli.Linear
 
   @doc """
   Ported from commands/issue/list.rb + operations/issue/list.rb.
@@ -25,34 +26,13 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   `--team`/`--project` passed explicitly always win over the active profile.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
-    no_profile = Map.get(flags, :no_profile, false)
-    team_key = options.team || unless no_profile, do: Profiles.default_team()
-
-    project_source =
-      options.project || unless no_profile, do: Profiles.default_project()
-
-    with {:ok, project_id} <- resolve_project_id(project_source, team_key) do
-      label_filter = Map.get(options, :labels) || []
-      include_labels = Map.get(flags, :include_labels, false) || label_filter != []
-
-      input = %{
-        ids: Enum.map(ids, &Identifiers.expand_issue_id/1),
-        mine: !flags.no_mine,
-        unassigned: flags.unassigned,
-        team_key: team_key,
-        project_id: project_id,
-        all: Map.get(flags, :all, false),
-        state: Map.get(options, :state) || [],
-        status: Map.get(options, :status) || [],
-        labels: label_filter,
-        include_labels: include_labels
-      }
-
+    with {:ok, input} <-
+           Filter.build_input(flags, options, Enum.map(ids, &Identifiers.expand_issue_id/1)) do
       with {:ok, issues} <- Linear.issues(input) do
         Display.show(issues, %{
           output: options.output,
           full: flags.full,
-          labels: include_labels
+          labels: input.include_labels
         })
 
         :ok
@@ -100,27 +80,6 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
             :ok
           end
         end
-    end
-  end
-
-  defp resolve_project_id(nil, _team_key), do: {:ok, nil}
-
-  defp resolve_project_id(search, team_key) when is_binary(team_key) do
-    with {:ok, team} <- Linear.find_team(team_key),
-         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}) do
-      case Projects.project_for(projects, search) do
-        nil -> {:ok, nil}
-        project -> {:ok, project.id}
-      end
-    end
-  end
-
-  defp resolve_project_id(search, _team_key) do
-    with {:ok, projects} <- Linear.projects() do
-      case Projects.project_for(projects, search) do
-        nil -> {:ok, nil}
-        project -> {:ok, project.id}
-      end
     end
   end
 end
