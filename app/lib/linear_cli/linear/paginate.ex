@@ -12,7 +12,7 @@ defmodule LinearCli.Linear.Paginate do
   @doc """
   Fetches pages via `LinearCli.Api.call(document, variables(after_cursor))` until
   `max` records are collected or the API reports no more pages, decoding each raw
-  node through `decode_fun`. Pass `:infinity` to fetch every page.
+  node through `decode_fun`.
 
   `field_name` is the top-level response key (e.g. `"teams"`) holding
   `edges`/`pageInfo`. `variables_fun` receives the current `after` cursor
@@ -64,10 +64,8 @@ defmodule LinearCli.Linear.Paginate do
     end
   end
 
-  defp reached_limit?(_acc, :infinity), do: false
   defp reached_limit?(acc, max), do: length(acc) >= max
 
-  defp take_max(acc, :infinity), do: acc
   defp take_max(acc, max), do: Enum.take(acc, max)
 
   # Safely extracts the named connection from the response data. Returns

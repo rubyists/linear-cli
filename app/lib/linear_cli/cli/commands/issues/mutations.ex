@@ -188,9 +188,10 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
            Filter.build_input(flags, options, [],
              project_resolution: :strict,
              include_labels: false,
-             resolve_assignee: true
+             resolve_assignee: true,
+             assigned_only: true
            ),
-         {:ok, issues, has_next_page} <- Linear.issues_first_page(input) do
+         {:ok, %{issues: issues, has_next_page: has_next_page}} <- Linear.issues_first_page(input) do
       unassign_filtered_issues(issues, has_next_page, flags, options)
     end
   end

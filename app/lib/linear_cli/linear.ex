@@ -32,6 +32,7 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.Issue do
       define :issues, action: :list
+      define :issues_first_page, action: :list_first_page, args: [:input]
       define :create_issue, action: :create, args: [:title, :description, :team_id]
       define :assign_issue, action: :assign, args: [:assignee_id]
       define :unassign_issue, action: :unassign
@@ -64,10 +65,5 @@ defmodule LinearCli.Linear do
       define :create_issue_relation, action: :create, args: [:issue_id, :related_issue_id, :type]
       define :delete_issue_relation, action: :destroy
     end
-  end
-
-  @doc "Fetches one issue page and returns whether more matches exist."
-  def issues_first_page(input) do
-    LinearCli.Linear.Issue.Read.List.first_page(input)
   end
 end

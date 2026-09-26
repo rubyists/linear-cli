@@ -309,7 +309,8 @@ Text output shows each updated issue and a confirmation. JSON output returns
 one object for one issue and an array for multiple issues. A filter with no
 matches prints `No issues matched.` in text mode and returns `[]` in JSON mode.
 Filter mode selects only your own issues by default; use `--no-mine` to include
-issues assigned to other users, or `--assignee` to select a named user. Exact
+issues assigned to other users, or `--assignee` to select a named user. Already
+unassigned issues are skipped. Exact
 project and assignee matches are used without a prompt. Partial matches prompt
 you to choose a project or assignee. Before any filtered mutation, the command
 asks for confirmation; `--yes` skips that prompt and `--dry-run` prints the

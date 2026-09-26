@@ -59,47 +59,6 @@ defmodule LinearCli.Linear.PaginateTest do
     refute_receive {:cursor, "c1"}
   end
 
-  test "fetches every page when max is infinity" do
-    test_pid = self()
-
-    Req.Test.stub(LinearCli.Api, fn conn ->
-      {:ok, body, conn} = Plug.Conn.read_body(conn)
-      cursor = Jason.decode!(body)["variables"]["after"]
-      send(test_pid, {:cursor, cursor})
-
-      response =
-        case cursor do
-          nil -> response([1], true, "c1")
-          "c1" -> response([2], true, "c2")
-          "c2" -> response([3], false, "c3")
-        end
-
-      Req.Test.json(conn, response)
-    end)
-
-    assert {:ok, [1, 2, 3]} =
-             Paginate.all("query", "issues", &variables_fun/1, & &1["id"], :infinity)
-
-    assert_receive {:cursor, nil}
-    assert_receive {:cursor, "c1"}
-    assert_receive {:cursor, "c2"}
-  end
-
-  test "returns a later-page error before completing an unbounded read" do
-    Req.Test.stub(LinearCli.Api, fn conn ->
-      {:ok, body, conn} = Plug.Conn.read_body(conn)
-      cursor = Jason.decode!(body)["variables"]["after"]
-
-      case cursor do
-        nil -> Req.Test.json(conn, response([1], true, "c1"))
-        "c1" -> Plug.Conn.resp(conn, 502, "upstream unavailable")
-      end
-    end)
-
-    assert {:error, {:http_error, 502}} =
-             Paginate.all("query", "issues", &variables_fun/1, & &1["id"], :infinity)
-  end
-
   test "returns an error when the API repeats a continuation cursor" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -115,6 +74,6 @@ defmodule LinearCli.Linear.PaginateTest do
     end)
 
     assert {:error, {:non_advancing_cursor, "c1"}} =
-             Paginate.all("query", "issues", &variables_fun/1, & &1["id"], :infinity)
+             Paginate.all("query", "issues", &variables_fun/1, & &1["id"])
   end
 end

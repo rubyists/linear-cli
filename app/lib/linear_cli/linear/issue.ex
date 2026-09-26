@@ -11,8 +11,8 @@ defmodule LinearCli.Linear.Issue do
       argument :ids, {:array, :string}, default: []
       argument :mine, :boolean, default: true
       argument :unassigned, :boolean, default: false
-      argument :assignee, :string, allow_nil?: true
       argument :assignee_id, :string, allow_nil?: true
+      argument :assigned_only, :boolean, default: false
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
       argument :all, :boolean, default: false
@@ -20,8 +20,12 @@ defmodule LinearCli.Linear.Issue do
       argument :status, {:array, :string}, default: []
       argument :labels, {:array, :string}, default: []
       argument :include_labels, :boolean, default: false
-      argument :fetch_all_pages, :boolean, default: false
       manual LinearCli.Linear.Issue.Read.List
+    end
+
+    action :list_first_page, :map do
+      argument :input, :map, allow_nil?: false
+      run LinearCli.Linear.Issue.Actions.ListFirstPage
     end
 
     # Ruby: Issue::ClassMethods#create(title:, description:, team:, project:, labels: [])
@@ -183,11 +187,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if args.ids != [] do
       find_by_ids(args.ids)
     else
-      list_all(
-        build_filter(args),
-        args.include_labels || args.labels != [],
-        args.fetch_all_pages
-      )
+      list_all(build_filter(args), args.include_labels || args.labels != [])
     end
   end
 
@@ -263,7 +263,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     end
   end
 
-  defp list_all(filter, include_labels, fetch_all_pages) do
+  defp list_all(filter, include_labels) do
     document = if include_labels, do: list_document_with_labels(), else: list_document()
 
     Paginate.all(
@@ -271,7 +271,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
       "issues",
       fn after_cursor -> %{"filter" => filter, "first" => 50, "after" => after_cursor} end,
       &Issue.from_map/1,
-      if(fetch_all_pages, do: :infinity, else: 100)
+      100
     )
   end
 
@@ -336,17 +336,16 @@ defmodule LinearCli.Linear.Issue.Read.List do
     Map.put(filter, "assignee", %{"id" => %{"eq" => assignee_id}})
   end
 
-  defp maybe_put_assignee_filter(filter, %{assignee: assignee})
-       when is_binary(assignee) and assignee != "" do
-    Map.put(filter, "assignee", %{"name" => %{"eqIgnoreCase" => assignee}})
-  end
-
   defp maybe_put_assignee_filter(filter, %{unassigned: true}) do
     Map.put(filter, "assignee", %{"null" => true})
   end
 
   defp maybe_put_assignee_filter(filter, %{mine: true}) do
     Map.put(filter, "assignee", %{"isMe" => %{"eq" => true}})
+  end
+
+  defp maybe_put_assignee_filter(filter, %{assigned_only: true}) do
+    Map.put(filter, "assignee", %{"null" => false})
   end
 
   defp maybe_put_assignee_filter(filter, _args), do: filter
@@ -400,6 +399,21 @@ defmodule LinearCli.Linear.Issue.Read.List do
   defp maybe_put_label_filter(filter, %{labels: labels}) do
     or_clauses = Enum.map(labels, &%{"name" => %{"eqIgnoreCase" => &1}})
     Map.put(filter, "labels", %{"some" => %{"or" => or_clauses}})
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Actions.ListFirstPage do
+  @moduledoc false
+  use Ash.Resource.Actions.Implementation
+
+  alias LinearCli.Linear.Issue.Read.List
+
+  @impl true
+  def run(input, _opts, _context) do
+    case List.first_page(input.arguments.input) do
+      {:ok, issues, has_next_page} -> {:ok, %{issues: issues, has_next_page: has_next_page}}
+      error -> error
+    end
   end
 end
 

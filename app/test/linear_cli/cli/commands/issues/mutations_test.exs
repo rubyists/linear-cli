@@ -433,6 +433,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
       assert_received {:issue_filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
+      assert filter["assignee"] == %{"null" => false}
       assert filter["state"]["type"] == %{"in" => ["started"]}
       assert filter["state"]["name"] == %{"eqIgnoreCase" => "Human Review"}
 

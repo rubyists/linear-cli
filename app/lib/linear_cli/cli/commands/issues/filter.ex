@@ -35,8 +35,8 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
       ids: ids,
       mine: not Map.get(flags, :no_mine, false),
       unassigned: Keyword.get(opts, :unassigned, Map.get(flags, :unassigned, false)),
-      assignee: assignee_for_input(options, assignee_id),
       assignee_id: assignee_id,
+      assigned_only: Keyword.get(opts, :assigned_only, false),
       team_key: team_key,
       project_id: project_id,
       all: Map.get(flags, :all, false),
@@ -44,13 +44,9 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
       status: Map.get(options, :status) || [],
       labels: labels,
       include_labels:
-        Keyword.get(opts, :include_labels, Map.get(flags, :include_labels, false) || labels != []),
-      fetch_all_pages: Keyword.get(opts, :fetch_all_pages, false)
+        Keyword.get(opts, :include_labels, Map.get(flags, :include_labels, false) || labels != [])
     }
   end
-
-  defp assignee_for_input(options, nil), do: Map.get(options, :assignee)
-  defp assignee_for_input(_options, _assignee_id), do: nil
 
   defp resolve_project_id(nil, _team_key, _resolution), do: {:ok, nil}
 

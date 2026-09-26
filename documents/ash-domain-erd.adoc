@@ -366,12 +366,17 @@ manual-implementation module, and the Linear GraphQL operation it calls.
   (case-insensitive OR match via `IssueLabelCollectionFilter.some`); `include_labels`
   (boolean, default `false`) selects label fields in the response without adding a
   label filter — `labels` non-empty also forces label-field selection as a defensive
-  invariant; `assignee` filters by exact case-insensitive assignee name when no
-  resolved ID is supplied, while `assignee_id` filters by exact user ID; and
-  `fetch_all_pages` opts into an unbounded cursor walk for callers that need
-  every page; or `issue(id:)` per id (full, fanned concurrently). The
-  `Linear.issues_first_page/1` helper fetches one 100-record page and returns
-  `hasNextPage` for capped filter-only batch operations.
+  invariant; `assignee_id` filters by exact user ID; `assigned_only` excludes
+  unassigned issues for filter-only batch operations; or `issue(id:)` per id
+  (full, fanned concurrently).
+
+| `Issue`
+| `issues_first_page`
+| `:list_first_page`
+| generic action (`:map`)
+| `Linear.Issue.Actions.ListFirstPage`
+| `input` contains the `Issue.list` arguments; returns `%{issues:, has_next_page:}`
+  after fetching one 100-record page. The action never follows the cursor.
 
 | `Issue`
 | `create_issue`
@@ -556,17 +561,18 @@ listing keeps the existing permissive project resolution and 100-record cap.
 
 Provides `all/5`: fetches cursor-paginated GraphQL connections
 (`edges { node { ... } cursor } pageInfo { hasNextPage endCursor }`)
-until `max` records are collected or the API signals no more pages. Passing
-`:infinity` fetches every advertised page, and a repeated continuation cursor
-returns an error instead of looping forever. `first_page/4` fetches one page,
-returns its `hasNextPage` value, and never follows a continuation cursor.
+until `max` records are collected or the API signals no more pages. It returns
+an error for a repeated continuation cursor instead of looping forever.
+`first_page/4` fetches one page, returns its `hasNextPage` value, and never
+follows a continuation cursor.
 Used by:
 
 * `Team.Read.All` — `teams(first:, after:)` paginated query
 * `Project.Read.All` — `projects(first:, after:)` paginated query
 * `Issue.Read.List` — `issues(filter:, first:, after:)` paginated list
-  (the find-by-ids path fans out individual `issue(id:)` calls instead; the
-  filter-only unassign path uses `first_page/4`)
+  (the find-by-ids path fans out individual `issue(id:)` calls instead)
+* `Issue.Actions.ListFirstPage` — wraps `Issue.Read.List.first_page/1` in an
+  Ash generic action for the filter-only unassign path
 
 == Maintenance contract
 
