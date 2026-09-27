@@ -14,7 +14,7 @@ linear_states:
   terminal: [Done, Closed, Cancelled, Canceled, Duplicate]
 
 polling:
-  interval_ms: 15000
+  interval_ms: 30000
 
 workspace:
   root: ~/.local/share/stokowski/workspaces/linear-cli

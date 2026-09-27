@@ -1,9 +1,9 @@
 # Glean Stage
 
-You are reviewing the completed workflow run for **{{ issue.identifier }}**:
-{{ issue.title }}.
+You are reviewing the completed workflow run for **{{ issue_identifier }}**:
+{{ issue_title }}.
 
-**URL:** {{ issue.url }}
+**URL:** {{ issue_url }}
 
 ## Objective
 
@@ -72,26 +72,46 @@ future enhancement.
    Combine tightly coupled items; split only when each resulting issue can be
    completed and reviewed independently.
 5. Write `.stokowski/report.json` with:
+   - `follow_ups` — the contract for the next stage. One object for each
+     proposed follow-up, in priority order, numbered `G1`, `G2`, … with no
+     gaps:
+     - `id` — `G1`, `G2`, and so on.
+     - `title` — the exact Linear issue title.
+     - `description` — the complete Linear issue body, in Markdown, exactly as
+       it must be filed. Include the source issue ({{ issue_identifier }}) and
+       any PR, the problem, the desired outcome, acceptance criteria, the scope
+       boundary, and the evidence. For a learning follow-up, include the
+       `documents/agent_learnings/` acceptance criteria described above.
+     - `priority` — one of `urgent`, `high`, `medium`, `low` or `none`.
+     - `labels` — optional; only label names that already exist on the EXT
+       team.
+
+     The improvement stage creates each approved item by copying these fields
+     verbatim. It does not read the rest of this report and cannot fill a
+     gap, so every item must be complete as written. Use `"follow_ups": []`
+     when nothing should be filed.
+   - `claims` — one entry for each follow-up. Start `claim` with its id, for
+     example `G1 — the claim`. Put the evidence and why it was deferred in
+     `evidence`, and the exact report, PR, comment, file/line, or Linear search
+     in `source`.
    - `summary` — a brief account of what the workflow established.
-   - `claims` — one entry for each proposed follow-up. Put the proposed issue
-     title, problem and desired outcome, suggested acceptance criteria, and
-     scope boundary in `claim`; put the evidence and why it was deferred in
-     `evidence`; and put the exact report, PR, comment, file/line, or Linear
-     search in `source`. This is the rendered, reviewable follow-up list.
    - `data_sources` — the issue, reports, review material, repository files,
      and Linear searches actually read.
    - `risks`, `open_questions`, and `assumptions`.
    - `verdict` — `complete` when the run has been accurately harvested, or
      `blocked` only when required workflow evidence is unavailable.
-   - `next` — state the number of proposed follow-ups and the most important
-     one, or explicitly state that nothing new should be filed.
+   - `next` — the number of proposed follow-ups and the most important one,
+     or an explicit statement that nothing new should be filed.
    - `key_points` — three to five evidence-backed takeaways.
-   - `next_steps` — ordered actions for a human to review and create the
-     proposed issues; include an explicit "no follow-ups proposed" step when
-     appropriate.
+   - `next_steps` — when there are follow-ups, the first step is exactly:
+     "Approve with a comment containing `Approve` and the ids to create, for
+     example `Approve G1, G2`." When there are none, state "No follow-ups
+     proposed."
 
-6. Do not create the proposed Linear issues in this draft stage. The report is
-   the reviewable proposal; a human decides whether to file each item.
+6. Do not create the proposed Linear issues in this stage. The report is the
+   reviewable proposal; a human approves items by id at the next gate.
+   The approval comment holds only the ids; everything else comes from
+   `follow_ups`.
 
 ## Rules
 

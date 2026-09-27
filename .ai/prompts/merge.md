@@ -1,9 +1,9 @@
 # Claims Stage
 
 You are following up on any unresolved issues from
-the approved PR for **{{ issue.identifier }}**: {{ issue.title }}
+the approved PR for **{{ issue_identifier }}**: {{ issue_title }}
 
-**URL:** {{ issue.url }}
+**URL:** {{ issue_url }}
 
 ## Objective
 
@@ -20,8 +20,8 @@ the approved PR for **{{ issue.identifier }}**: {{ issue.title }}
    gh pr view <number> --json reviewDecision,statusCheckRollup
    ```
 3. If CI is failing, investigate briefly.  If it is a flaky test or transient
-   failure, re-run the checks.  If it is a real failure, post a comment on the
-   Linear issue and stop.
+   failure, re-run the checks.  If it is a real failure, stop and report
+   `blocked`.
 4. Merge the approved PR after confirming the required approvals and CI:
    ```
    gh pr merge -sd <number>
@@ -30,6 +30,12 @@ the approved PR for **{{ issue.identifier }}**: {{ issue.title }}
 
 The workflow runner owns the transition to `Done`. Do not move the Linear
 issue to a terminal state yourself.
+
+If you did not merge the PR, for any reason — no approval, failing CI, a
+conflict you could not resolve — set `"verdict": "blocked"` in
+`.stokowski/report.json` and give the reason in `next`. The issue then waits at
+the merge-review gate instead of being marked done. Use `complete` only after
+the PR is merged.
 
 ## Rework run
 
@@ -43,7 +49,8 @@ If this is a rework run (merge was attempted before but failed):
 3. If CI failed:
    - Read the failure logs.
    - If it is a test failure caused by the PR's changes, post details to
-     Linear and stop (this needs to go back to implementation).
+     `.stokowski/report.json` and stop with `blocked` (this needs to go back
+     to implementation).
    - If it is a flaky or infrastructure issue, re-run and retry the merge.
 4. Update the workpad with what happened.
 
