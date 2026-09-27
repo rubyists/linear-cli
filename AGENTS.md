@@ -62,8 +62,9 @@ This repo uses two Mix projects side-by-side, not nested:
 
 - `app/` — The CLI itself (`LinearCli` application, version-managed,
   Burrito-released). All end-user features live here.
-- `lib/`, `mix.exs` (root) — Repo-management tooling (`RepoTasks` project,
-  no deps). Mix tasks that operate on the repo as a whole: `mix lc`,
+- `lib/`, `mix.exs` (root) — Repo-management tooling (`RepoTasks` project;
+  its own small deps, such as `req`, so a fresh clone needs `mix deps.get`
+  here as well as in `app/`). Mix tasks that operate on the repo as a whole: `mix lc`,
   `mix setup`, `mix git_hooks`, `mix stokowski`, `mix container.build/publish`.
   These tasks orchestrate other tools as child processes and know nothing
   about `app/`'s internal modules.
