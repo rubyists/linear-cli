@@ -15,6 +15,11 @@ defmodule LinearCli.CLI.PromptTest do
       assert capture_io(fn -> Prompt.warn("Careful now") end) ==
                "\e[33mCareful now\e[39m\e[0m\n"
     end
+
+    test "can print the message to stderr" do
+      assert capture_io(:stderr, fn -> Prompt.warn("Careful now", :stderr) end) ==
+               "\e[33mCareful now\e[39m\e[0m\n"
+    end
   end
 
   describe "say/1" do

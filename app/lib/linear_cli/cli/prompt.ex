@@ -21,7 +21,7 @@ defmodule LinearCli.CLI.Prompt do
 
   ## Testing without a real terminal
 
-  `ok/1`, `warn/1`, and `say/1` only ever write to stdout, so, like every
+  `ok/1`, `warn/1`, and `say/1` write to stdout by default, so, like every
   other command output in this codebase, they're already covered by
   `ExUnit.CaptureIO.capture_io/1` (see `LinearCli.CLITest`).
 
@@ -52,13 +52,13 @@ defmodule LinearCli.CLI.Prompt do
                assert Prompt.ask("Title", default: "untitled") == "untitled"
              end)
 
-  There is deliberately no injectable io-device parameter anywhere on this
-  module's own API - the injection point is the group leader that
-  `ExUnit.CaptureIO` already owns, one level below this module (inside Owl).
-  Any other module that calls into `LinearCli.CLI.Prompt` is testable the
-  same way, with no plumbing of its own required - it's the same pattern
-  `LinearCli.CLI.main/2` uses an injectable `halt` function for (different
-  mechanism, same goal: keep side effects swappable in tests).
+  There is deliberately no injectable input-device parameter on this module's
+  API. The input injection point is the group leader that `ExUnit.CaptureIO`
+  already owns, one level below this module (inside Owl). Output warnings can
+  name a device when a command must keep standard output machine-readable.
+  Any other module that calls into `LinearCli.CLI.Prompt` is testable the same
+  way, with no plumbing of its own required - it uses the same pattern as
+  `LinearCli.CLI.main/2`'s injectable `halt` function.
 
   `edit/2` is the one function here that doesn't touch stdin/stdout at all -
   it shells out to an external editor via `Owl.IO.open_in_editor/2`, so it
@@ -85,8 +85,8 @@ defmodule LinearCli.CLI.Prompt do
 
   Ported from `TTY::Prompt#warn`.
   """
-  @spec warn(Owl.Data.t()) :: :ok
-  def warn(message), do: Owl.IO.puts(Owl.Data.tag(message, :yellow))
+  @spec warn(Owl.Data.t(), IO.device()) :: :ok
+  def warn(message, device \\ :stdio), do: Owl.IO.puts(Owl.Data.tag(message, :yellow), device)
 
   @doc """
   Prints `message` plainly, with no color.

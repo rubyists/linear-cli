@@ -141,6 +141,17 @@ defmodule LinearCli.CLI.IssueCommandsHelpers do
     }
   end
 
+  def issues_response_page(issues, has_next_page, end_cursor) do
+    %{
+      "data" => %{
+        "issues" => %{
+          "edges" => Enum.map(issues, &%{"node" => &1, "cursor" => &1["id"]}),
+          "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+        }
+      }
+    }
+  end
+
   def tmp_path(prefix) do
     Path.join(
       System.tmp_dir!(),

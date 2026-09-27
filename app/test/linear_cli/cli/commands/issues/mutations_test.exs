@@ -10,6 +10,10 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     %{"id" => id, "name" => name, "position" => position, "type" => type, "description" => nil}
   end
 
+  defp assignee_members_response(members) do
+    %{"data" => %{"team" => %{"members" => %{"nodes" => members}}}}
+  end
+
   describe "issue unassign edge cases" do
     test "sends a null assignee and confirms each issue in text output" do
       test_pid = self()
@@ -126,7 +130,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert Enum.map(decoded, & &1["identifier"]) == ["CRY-1", "CRY-2"]
     end
 
-    test "with no issue IDs, exits 22" do
+    test "with no issue IDs or filter selector, exits 22" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
 
@@ -136,7 +140,540 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         end)
 
       assert_received {:halted, 22}
-      assert output =~ "No issue IDs provided!"
+      assert output =~ "Provide issue IDs or at least one filter selector!"
+    end
+
+    test "filters by assignee and clears every matching issue" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "team" => %{
+                    "members" => %{
+                      "nodes" => [%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}]
+                    }
+                  }
+                }
+              }
+            )
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:issue_filter, decoded["variables"]})
+            Req.Test.json(conn, issues_response([issue_map(%{"assignee" => me_map()})]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:unassign_input, decoded["variables"]["input"]})
+            Req.Test.json(conn, issue_updated(%{"assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--assignee",
+                     "Ada",
+                     "--yes"
+                   ])
+        end)
+
+      assert_received {:issue_filter, %{"filter" => filter, "first" => 100, "after" => nil}}
+      assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
+      refute get_in(filter, ["assignee", "isMe"])
+      assert_received {:unassign_input, %{"assigneeId" => nil}}
+      refute output =~ "Unassign 1 issue(s)?"
+      assert output =~ "CRY-1 unassigned"
+    end
+
+    test "limits a filtered batch to 100 matches and warns when more exist" do
+      test_pid = self()
+
+      page_issues = fn first, last ->
+        Enum.map(first..last, fn number ->
+          issue_map(%{"id" => "i#{number}", "identifier" => "CRY-#{number}"})
+        end)
+      end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            cursor = decoded["variables"]["after"]
+            send(test_pid, {:page_requested, cursor})
+
+            page =
+              case cursor do
+                nil ->
+                  assert decoded["variables"]["first"] == 100
+                  issues_response_page(page_issues.(1, 100), true, "c100")
+
+                _ ->
+                  issues_response_page([], false, cursor)
+              end
+
+            Req.Test.json(conn, page)
+
+          String.contains?(query, "issueUpdate") ->
+            identifier = decoded["variables"]["id"]
+            send(test_pid, {:updated, identifier})
+            Req.Test.json(conn, issue_updated(%{"identifier" => identifier, "assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--yes"
+                   ])
+        end)
+
+      assert_received {:page_requested, nil}
+      refute_received {:page_requested, _}
+      assert output =~ "More than 100 issues match this filter"
+      assert output =~ "Only the first 100 will be processed"
+
+      updated_ids =
+        Enum.reduce(1..100, [], fn _number, acc ->
+          receive do
+            {:updated, identifier} -> [identifier | acc]
+          after
+            1_000 -> flunk("expected all 100 issue updates")
+          end
+        end)
+
+      assert length(updated_ids) == 100
+    end
+
+    test "confirms the filtered batch and cancels without mutating" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = decoded = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            raise "a declined filtered batch must not mutate"
+
+          true ->
+            raise "no stub matched query: #{inspect(decoded)}"
+        end
+      end)
+
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--state",
+                     "started"
+                   ])
+        end)
+
+      refute_received :mutated
+      assert output =~ "Unassign 1 issue(s)?"
+      assert output =~ "Unassign cancelled"
+    end
+
+    test "--dry-run lists filtered matches without mutation" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            raise "--dry-run must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--state",
+                     "started",
+                     "--dry-run"
+                   ])
+        end)
+
+      refute_received :mutated
+      assert output =~ "CRY-1"
+      assert output =~ "Would unassign 1 issue(s)"
+    end
+
+    test "--dry-run returns the selected issues as JSON without mutation" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            raise "--dry-run must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--output",
+                     "json",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--state",
+                     "started",
+                     "--dry-run"
+                   ])
+        end)
+
+      refute_received :mutated
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+    end
+
+    test "shares team, state, status, and label filters with issue list" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          send(test_pid, {:issue_filter, decoded["variables"]["filter"]})
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "unassign must not mutate an empty filtered result"
+        end
+      end)
+
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "unassign",
+                   "--no-profile",
+                   "--no-mine",
+                   "--yes",
+                   "--team",
+                   "ENG",
+                   "--state",
+                   "started",
+                   "--status",
+                   "Human Review",
+                   "--labels",
+                   "Bug,Feature"
+                 ])
+      end)
+
+      assert_received {:issue_filter, filter}
+      assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
+      assert filter["assignee"] == %{"null" => false}
+      assert filter["state"]["type"] == %{"in" => ["started"]}
+      assert filter["state"]["name"] == %{"eqIgnoreCase" => "Human Review"}
+
+      assert filter["labels"] == %{
+               "some" => %{
+                 "or" => [
+                   %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                   %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                 ]
+               }
+             }
+    end
+
+    test "reports no matches without sending an update" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "no update is expected when no issues match"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+    end
+
+    test "returns an empty JSON array for no matches" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "issues(filter:") do
+          Req.Test.json(conn, issues_response([]))
+        else
+          raise "no update is expected when no issues match"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--output",
+                     "json",
+                     "--no-profile",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      assert {:ok, []} = Jason.decode(output)
+    end
+
+    test "rejects issue IDs combined with filter options before a GraphQL call" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn ->
+        raise "the conflicting invocation must not make a GraphQL call"
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--team", "ENG", "--no-profile", "CRY-1"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "Issue IDs cannot be combined with filter options!"
+    end
+
+    test "fails safely when the requested project does not resolve" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        if String.contains?(query, "projects(first: $first") do
+          Req.Test.json(conn, all_projects([]))
+        else
+          raise "a missing project must stop before the issue query"
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--no-profile", "--project", "Missing Project"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 22}
+      assert output =~ "No project found matching Missing Project"
+    end
+
+    test "prompts for a partial project match before filtering" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Roadmap Q4")]))
+
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "1\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--project",
+                     "Roadmap",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "Project:"
+      assert output =~ "No issues matched."
+    end
+
+    test "prompts for a partial assignee match and filters by the selected ID" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = decoded = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              assignee_members_response([
+                %{"id" => "u1", "name" => "Alice Smith", "displayName" => "alice"},
+                %{"id" => "u2", "name" => "Alina Jones", "displayName" => "alina"}
+              ])
+            )
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "1\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--assignee",
+                     "Ali",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "Assignee:"
+      assert output =~ "No issues matched."
+      assert_received {:filter, filter}
+      assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
+    end
+
+    test "reports a first-page read error without mutating" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Plug.Conn.resp(conn, 502, "upstream unavailable")
+
+          String.contains?(query, "issueUpdate") ->
+            raise "no update is allowed after a first-page read error"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            ["issue", "unassign", "--no-profile", "--team", "ENG"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 88}
+      assert output =~ "Cannot Continue"
     end
 
     test "rejects unrecognized options before making a GraphQL call" do
