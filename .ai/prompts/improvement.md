@@ -16,9 +16,13 @@ Its approved ids are every `G<number>` that appears after that word, such as
 `Approve G1, G3` or `Approve follow-ups: G2 G4`. If more than one comment is an
 approval, use the latest one.
 
-That is the only rule. If no comment is an approval, or the approval names no
-`G<number>`, the approved list is empty. Do not infer approval from any other
-comment, however it is worded.
+That is the only rule. Do not infer approval from any other comment, however
+it is worded.
+
+When you find an approval, write its ids to `.stokowski/follow-ups-approved.json`
+as a JSON list, for example `["G1", "G3"]`. When you find none, use the ids in
+that file if it exists: this run is a rerun, and the approval was written
+before an earlier gate. With neither, the approved list is empty.
 
 ## 2. Create the approved issues
 
