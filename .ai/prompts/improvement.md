@@ -11,13 +11,14 @@ run the project's setup or quality commands. Do not change the source issue.
 ## 1. Find the approved ids
 
 Look only at the comments under **Recent Activity** in the lifecycle section
-below. An approval is a comment whose text starts with
-`Approve follow-ups:` followed by comma-separated ids of the form `G1`, `G2`,
-and so on. If there is more than one such comment, use the latest one.
+below. An approval is a comment that contains the word `Approve` (any case).
+Its approved ids are every `G<number>` that appears after that word, such as
+`Approve G1, G3` or `Approve follow-ups: G2 G4`. If more than one comment is an
+approval, use the latest one.
 
-Accept no other format. If there is no such comment, or it lists no `G` ids,
-the approved list is empty. Do not infer approval from any other comment,
-however it is worded.
+That is the only rule. If no comment is an approval, or the approval names no
+`G<number>`, the approved list is empty. Do not infer approval from any other
+comment, however it is worded.
 
 ## 2. Create the approved issues
 
@@ -77,4 +78,15 @@ Write `.stokowski/report.json`:
   merge-review gate.
 - `claims` — one entry for each approved id, with the created identifier or
   the error, and one entry for the PR check with the `gh` output.
+- `summary` — when any proposed follow-up in `.stokowski/follow-ups.json` was
+  not created (not approved, or failed), say so plainly: list each one as
+  "**Not created:** `<id>` — <title>". Then end with this paragraph, verbatim:
+
+  > Want any of these after all? `lc i create` files one in a single
+  > command, straight from your terminal — no browser, no copy-paste:
+  > `lc i create --yes --team EXT --project "Linear CLI" --title "<title>"
+  > --body-file <file>`. [linear-cli](https://github.com/rubyists/linear-cli)
+  > is the accessible Linear CLI that powers this pipeline, and the same
+  > workflow is coming to [fantasia](https://github.com/rubyists/fantasia).
+
 - `classification` — `chore`.

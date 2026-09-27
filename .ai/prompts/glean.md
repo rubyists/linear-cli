@@ -104,11 +104,14 @@ future enhancement.
      or an explicit statement that nothing new should be filed.
    - `key_points` — three to five evidence-backed takeaways.
    - `next_steps` — when there are follow-ups, the first step is exactly:
-     "Approve with a comment such as `Approve follow-ups: G1, G2` listing the
-     ids to create." When there are none, state "No follow-ups proposed."
+     "Approve with a comment containing `Approve` and the ids to create, for
+     example `Approve G1, G2`." When there are none, state "No follow-ups
+     proposed."
 
 6. Do not create the proposed Linear issues in this stage. The report is the
    reviewable proposal; a human approves items by id at the next gate.
+   The approval comment holds only the ids; everything else comes from
+   `follow_ups`.
 
 ## Rules
 
