@@ -1,24 +1,80 @@
 # Improvement Stage
 
-Create only the Glean candidates explicitly approved by a human for
-**{{ issue.identifier }}**: {{ issue.title }}. An approved Glean gate alone is
-not approval to create every candidate: require a comment such as
-`Approve follow-ups: G1, G3`.
+This is a mechanical stage for **{{ issue_identifier }}**: {{ issue_title }}.
+Do exactly the steps below. Do not interpret, investigate, or improve anything.
+The glean stage did all of the thinking; this stage only copies its approved
+output into Linear and checks that the PR can merge.
 
-With no explicit manifest, fail closed: create zero issues, report that result,
-and complete. For each approved item, re-check for an equivalent Linear issue,
-then use only `mise exec -- mix lc issue create` with non-interactive options
-and a body file to create it in EXT / Linear CLI. Include the source issue,
-candidate ID, evidence, scope, and acceptance criteria; link it to the source
-when supported. Do not modify the source issue, merge a PR, or change the repo.
+Do not change code, tests, documentation, branches, commits, or PRs. Do not
+run the project's setup or quality commands. Do not change the source issue.
 
-For an approved learning candidate, copy these required acceptance criteria
-into the created issue: its implementation PR creates
-`documents/agent_learnings/<NEW-ISSUE-ID>_learned.adoc` and regenerates
-`documents/agent_learnings.adoc` as specified by
-`documents/agent_learnings/README.adoc`. Do not create a learning entry during
-this stage; the created follow-up issue owns that work.
+## 1. Find the approved ids
 
-Write `.stokowski/report.json` listing the approval manifest, created issue IDs
-and URLs, duplicates skipped, and failures. Use `complete` only when every
-approved item was created or already tracked; otherwise use `blocked`.
+Look only at the comments under **Recent Activity** in the lifecycle section
+below. An approval is a comment whose text starts with
+`Approve follow-ups:` followed by comma-separated ids of the form `G1`, `G2`,
+and so on. If there is more than one such comment, use the latest one.
+
+Accept no other format. If there is no such comment, or it lists no `G` ids,
+the approved list is empty. Do not infer approval from any other comment,
+however it is worded.
+
+## 2. Create the approved issues
+
+Read `.stokowski/follow-ups.json`. Its `follow_ups` list holds one object per
+proposed follow-up, with `id`, `title`, `description`, and optionally
+`priority` and `labels`.
+
+Read `.stokowski/follow-ups-created.json` if it exists. It maps ids to the
+issues an earlier run of this stage created. Skip those ids.
+
+For each remaining approved id, in order:
+
+1. Find the object with that `id`. If there is none, record the id as a
+   failure and continue.
+2. Write its `description`, unchanged, to a temporary file outside the
+   repository.
+3. Run, adding `--priority <priority>` and `--labels <a,b>` only when the
+   object has them:
+
+   ```
+   mise exec -- mix lc issue create --yes --no-take --team EXT \
+     --project "Linear CLI" --title "<title>" --body-file <file>
+   ```
+
+4. On success, add `"<id>": "<new issue identifier>"` to
+   `.stokowski/follow-ups-created.json`. On failure, record the id and the
+   command's error, and continue.
+
+Copy `title`, `description`, `priority` and `labels` exactly. Do not edit,
+merge, split, or re-check them for duplicates.
+
+## 3. Check that the PR can merge
+
+Skip this step when the **Transitions** list in the lifecycle section does not
+include `blocked`. That workflow has no PR to merge.
+
+Otherwise run:
+
+```
+gh pr list --head "$(git branch --show-current)" --state open \
+  --json number,url,mergeable,mergeStateStatus,reviewDecision
+```
+
+The PR can merge only when exactly one open PR is listed and its
+`mergeStateStatus` is `CLEAN`. Do not try to fix any other result.
+
+## 4. Report
+
+Write `.stokowski/report.json`:
+
+- `headline` — "Created N approved follow-up(s): <identifiers>", or exactly
+  "No approved follow ups found" when the approved list is empty.
+- `verdict` — `complete` when every approved id was created and the PR can
+  merge (or step 3 was skipped). Otherwise `blocked`.
+- `next` — when `blocked`, say why: the PR's `mergeStateStatus` and
+  `reviewDecision`, and any ids that failed. The issue then waits at the
+  merge-review gate.
+- `claims` — one entry for each approved id, with the created identifier or
+  the error, and one entry for the PR check with the `gh` output.
+- `classification` — `chore`.
