@@ -513,6 +513,43 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert vars3["input"]["projectId"] == "p-tgt"
     end
 
+    test "--from/--to proceeds with an explicit yes answer" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        %{"query" => query} = decoded
+
+        if String.contains?(query, "issueUpdate") do
+          send(test_pid, :update)
+        end
+
+        case Enum.find(bulk_stub_pairs(), fn {match, _} -> String.contains?(query, match) end) do
+          {_match, response} -> Req.Test.json(conn, response)
+          nil -> raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "y\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "move",
+                   "--from",
+                   "Source Project",
+                   "--to",
+                   "Target Project",
+                   "--team",
+                   "ENG"
+                 ])
+      end)
+
+      assert_received :update
+      assert_received :update
+      assert_received :update
+    end
+
     test "--from/--to --all sends list query without completedAt/canceledAt guards" do
       test_pid = self()
 
