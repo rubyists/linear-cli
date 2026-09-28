@@ -10,6 +10,9 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
 
 permissions:
+  # actions: write lets manage-release-pr dispatch a release run whose
+  # release-PR merge run failed (ci/recover_release.sh).
+  actions: write
   contents: write
   packages: write
   pull-requests: write
@@ -50,6 +53,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-tags: true
+      -
+        # Only the release-PR merge run builds and publishes a release. If
+        # that run fails (as 2.10.0 and 2.11.0 did, on validation), the
+        # manifest version is never tagged and release-please below aborts
+        # on every push. This dispatches the release run for that version.
+        name: Recover a release whose run failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/recover_release.sh
       -
         # skip-github-release: this only ever manages the version-bump PR
         # (manifest/CHANGELOG.md/mix.exs) - it never creates a tag or
@@ -338,14 +350,32 @@ jobs:
         # keeps finding this PR stuck "pending" forever and refuses to
         # open any future release PR ("There are untagged, merged release
         # PRs outstanding - aborting").
+        # A dispatched run (a manual or recovered release) has no PR in its
+        # event, so it relabels every merged release PR still marked pending.
         name: Mark the release PR as tagged
-        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr edit "${{ github.event.pull_request.number }}" \
-              --remove-label "autorelease: pending" \
-              --add-label "autorelease: tagged"
+          if [ -n "$PR_NUMBER" ]
+          then
+              numbers="$PR_NUMBER"
+          elif ! numbers=$(gh pr list --state merged --label "autorelease: pending" \
+              --head release-please--branches--main --json number --jq '.[].number')
+          then
+              printf 'ERROR: unable to list pending release PRs\n' >&2
+              exit 1
+          fi
+          for number in $numbers
+          do
+              if ! gh pr edit "$number" \
+                  --remove-label "autorelease: pending" \
+                  --add-label "autorelease: tagged"
+              then
+                  printf 'ERROR: unable to relabel release PR #%s\n' "$number" >&2
+                  exit 1
+              fi
+          done
         working-directory: .
 
   container:
