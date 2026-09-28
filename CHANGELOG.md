@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.2](https://github.com/rubyists/linear-cli/compare/v2.11.1...v2.11.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **cli:** fail closed on destructive confirmations [EXT-69] ([#292](https://github.com/rubyists/linear-cli/issues/292)) ([d5ee641](https://github.com/rubyists/linear-cli/commit/d5ee641578461d35cf7ee86e4b4afbebc8a44782))
+
 ## [2.11.1](https://github.com/rubyists/linear-cli/compare/v2.11.0...v2.11.1) (2026-09-28)
 
 
