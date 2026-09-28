@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.11.1](https://github.com/rubyists/linear-cli/compare/v2.11.0...v2.11.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **ci:** recover a release whose release-PR merge run failed ([#289](https://github.com/rubyists/linear-cli/issues/289)) ([4a35c55](https://github.com/rubyists/linear-cli/commit/4a35c5566658d7cb533b06d4a2a574166b50e510))
+* **stokowski:** keep PR branches intact and accept "Accept" approvals ([#290](https://github.com/rubyists/linear-cli/issues/290)) ([d1788ed](https://github.com/rubyists/linear-cli/commit/d1788ed48ead7c46a2f9671bc91272eb727d78b0))
+
 ## [2.11.0](https://github.com/rubyists/linear-cli/compare/v2.10.0...v2.11.0) (2026-09-14)
 
 
