@@ -323,6 +323,10 @@ unassigned. In JSON mode, the warning goes to stderr so stdout stays valid
 JSON. The existing `--unassigned` issue-list filter is not a selector for this
 command because unassigning already-unassigned issues has no effect.
 
+NOTE: In JSON mode, filtered unassign requires `--yes` or `--dry-run`. Partial
+project or assignee matches return a diagnostic on stderr instead of prompting.
+Successful commands write one JSON value to stdout.
+
 ==== Create an issue
 
 [source,sh]
@@ -459,6 +463,12 @@ $ lc issue move --from Retired --to Active --dry-run <4>
 <2> Includes completed and cancelled issues too
 <3> Move by project UUID — the way to target a project in another team
 <4> Preview without mutating
+
+NOTE: In JSON mode, ID and bulk moves require `--yes` or `--dry-run`. Project
+names must match exactly. A name-based bulk move must provide `--team` or an
+active profile; UUID-only moves do not need either. Partial matches and other
+prompt-required inputs return a diagnostic on stderr. A successful dry-run
+writes the selected issues as one JSON value.
 
 ==== Default team/project (profiles)
 

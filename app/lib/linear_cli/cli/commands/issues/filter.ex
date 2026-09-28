@@ -89,6 +89,17 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
     end
   end
 
+  defp resolve_project_match(projects, search, :strict_non_interactive) do
+    case Projects.project_for_strict(projects, search) do
+      nil ->
+        {:error,
+         {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+
+      project ->
+        {:ok, project.id}
+    end
+  end
+
   defp resolve_assignee_id(nil, _team_key, _opts), do: {:ok, nil}
 
   defp resolve_assignee_id(assignee, _team_key, _opts)
@@ -98,7 +109,12 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   defp resolve_assignee_id(assignee, team_key, opts) do
     if Keyword.get(opts, :resolve_assignee, false) do
       with {:ok, members} <- assignee_members(team_key),
-           {:ok, member} <- resolve_assignee_member(members, assignee) do
+           {:ok, member} <-
+             resolve_assignee_member(
+               members,
+               assignee,
+               Keyword.get(opts, :non_interactive, false)
+             ) do
         {:ok, member.id}
       end
     else
@@ -136,7 +152,7 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   defp members_from_result({:ok, members_by_id}), do: {:ok, Map.values(members_by_id)}
   defp members_from_result(error), do: error
 
-  defp resolve_assignee_member(members, search) do
+  defp resolve_assignee_member(members, search, non_interactive) do
     normalized_search = String.downcase(search)
     exact = Enum.filter(members, &assignee_exact_match?(&1, normalized_search))
 
@@ -151,8 +167,15 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
         partial = Enum.filter(members, &assignee_partial_match?(&1, normalized_search))
 
         case partial do
-          [] -> {:error, unknown_assignee_error(members, search)}
-          matches -> {:ok, Prompt.select("Assignee:", assignee_choices(matches))}
+          [] ->
+            {:error, unknown_assignee_error(members, search)}
+
+          _matches when non_interactive ->
+            {:error,
+             {:smells_bad, "JSON output requires an exact assignee match for #{inspect(search)}"}}
+
+          matches ->
+            {:ok, Prompt.select("Assignee:", assignee_choices(matches))}
         end
     end
   end

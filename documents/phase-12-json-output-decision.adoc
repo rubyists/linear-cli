@@ -1,0 +1,38 @@
+= Phase 12 JSON output decision
+:revdate: Sep 27, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+== Decision
+
+`issue unassign --output json` and `issue move --output json` keep stdout
+machine-readable. A successful invocation writes one JSON value.
+
+JSON mode does not prompt for confirmation or partial project and assignee
+matches. It returns a diagnostic on stderr and exits before mutation. Use
+`--yes` to confirm a mutation, or `--dry-run` to return the selected issues.
+Exact project and assignee matches do not prompt. A name-based bulk move in
+JSON mode also requires `--team` or an active profile. UUID-only bulk moves do
+not need a team lookup. These rules prevent team selection from printing a
+prompt to stdout.
+
+No-match results remain a JSON empty array. Text-mode prompts and messages are
+unchanged.
+
+== Scope
+
+This decision applies only to the `issue unassign` and `issue move` command
+families. It does not change the global display layer or other interactive
+commands.
+
+== Reason
+
+The shared prompt renderer writes prompts to stdout. That output would precede
+the JSON value and make it invalid for scripts that parse stdout.

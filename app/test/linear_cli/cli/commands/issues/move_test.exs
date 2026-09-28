@@ -322,6 +322,126 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       refute output =~ "->"
     end
 
+    test "--output json --dry-run emits the selected issue as one JSON value" do
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map()}}},
+        {"projects(first: 100", move_team_projects()}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "--dry-run",
+                     "--output",
+                     "json",
+                     "CRY-1"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+    end
+
+    test "JSON confirmation is rejected without mutating an ID move" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            raise "JSON confirmation must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                ["issue", "move", "--project", "Manhattan", "--output", "json", "CRY-1"],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires --yes or --dry-run for issue move"
+      assert stdout == ""
+    end
+
+    test "JSON dry-run rejects a partial target project before mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects([move_project_map("p2", "Manhattan West")]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "partial JSON project resolution must stop before mutation"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--project",
+                  "Manhattan",
+                  "--dry-run",
+                  "--output",
+                  "json",
+                  "CRY-1"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires an exact project match"
+      assert stdout == ""
+    end
+
     test "with no issue ids, exits 22 (smells bad)" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
@@ -624,6 +744,160 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert output =~ "Would move"
     end
 
+    test "--from/--to --dry-run --output json emits one JSON value without text" do
+      stub_responses(bulk_stub_pairs())
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--from",
+                     "Source Project",
+                     "--to",
+                     "Target Project",
+                     "--team",
+                     "ENG",
+                     "--dry-run",
+                     "--output",
+                     "json"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert is_list(decoded)
+      assert length(decoded) == 3
+      refute output =~ "Would move"
+    end
+
+    test "--from/--to JSON confirmation is rejected without mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+      stub_responses(bulk_stub_pairs())
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--from",
+                  "Source Project",
+                  "--to",
+                  "Target Project",
+                  "--team",
+                  "ENG",
+                  "--output",
+                  "json"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires --yes or --dry-run for issue move"
+      assert stdout == ""
+    end
+
+    test "--from/--to JSON dry-run rejects a partial project before listing issues" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "$teamId") ->
+            Req.Test.json(
+              conn,
+              team_projects([
+                project_map("p-src", "Source Project"),
+                project_map("p-tgt", "Target Project")
+              ])
+            )
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            raise "partial JSON project resolution must stop before listing issues"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--from",
+                  "Source",
+                  "--to",
+                  "Target Project",
+                  "--team",
+                  "ENG",
+                  "--dry-run",
+                  "--output",
+                  "json"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires an exact project match"
+      assert stdout == ""
+    end
+
+    test "--from/--to --output json returns an empty array when no issues match" do
+      pairs =
+        Enum.map(bulk_stub_pairs(), fn
+          {"issues(filter:", _response} -> {"issues(filter:", issues_response([])}
+          pair -> pair
+        end)
+
+      stub_responses(pairs)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--from",
+                     "Source Project",
+                     "--to",
+                     "Target Project",
+                     "--team",
+                     "ENG",
+                     "--yes",
+                     "--output",
+                     "json"
+                   ])
+        end)
+
+      assert {:ok, []} = Jason.decode(output)
+    end
+
     test "--from/--to error mid-batch halts with non-zero exit" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
@@ -750,6 +1024,46 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
         end)
 
       assert output =~ "moved to"
+    end
+
+    test "--from/--to UUID JSON dry-run needs no team lookup" do
+      src_uuid = "00000000-0000-1000-8000-000000000001"
+      tgt_uuid = "00000000-0000-1000-8000-000000000002"
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        if String.contains?(query, "$teamId") or String.contains?(query, "team(id: $id)") do
+          raise "UUID JSON move must not look up a team"
+        end
+
+        if String.contains?(query, "issues(filter:") do
+          Req.Test.json(conn, issues_response(bulk_issues()))
+        else
+          raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--from",
+                     src_uuid,
+                     "--to",
+                     tgt_uuid,
+                     "--dry-run",
+                     "--output",
+                     "json"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert is_list(decoded)
+      assert length(decoded) == 3
     end
 
     test "--from/--to identical source and target UUIDs error before listing" do

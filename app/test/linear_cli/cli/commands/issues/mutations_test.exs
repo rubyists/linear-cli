@@ -471,6 +471,198 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert decoded["identifier"] == "CRY-1"
     end
 
+    test "filtered JSON output with --yes returns one JSON value" do
+      stub_responses([
+        {"issues(filter:", issues_response([issue_map()])},
+        {"issueUpdate", issue_updated(%{"assignee" => nil})}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--output",
+                     "json",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--state",
+                     "started",
+                     "--yes"
+                   ])
+        end)
+
+      assert {:ok, decoded} = Jason.decode(output)
+      assert decoded["identifier"] == "CRY-1"
+      assert is_nil(decoded["assignee"])
+    end
+
+    test "filtered JSON confirmation is rejected without mutating" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "JSON confirmation must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "unassign",
+                  "--output",
+                  "json",
+                  "--no-profile",
+                  "--team",
+                  "ENG",
+                  "--state",
+                  "started"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires --yes or --dry-run for issue unassign"
+      assert stdout == ""
+    end
+
+    test "filtered JSON dry-run rejects a partial project before issue lookup" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Roadmap Q4")]))
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            raise "partial JSON project resolution must stop before issue lookup"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "unassign",
+                  "--output",
+                  "json",
+                  "--no-profile",
+                  "--team",
+                  "ENG",
+                  "--project",
+                  "Roadmap",
+                  "--dry-run"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires an exact project match"
+      assert stdout == ""
+    end
+
+    test "filtered JSON dry-run rejects a partial assignee before issue lookup" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(
+              conn,
+              assignee_members_response([
+                %{"id" => "u1", "name" => "Alice Smith", "displayName" => "alice"},
+                %{"id" => "u2", "name" => "Alina Jones", "displayName" => "alina"}
+              ])
+            )
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            raise "partial JSON assignee resolution must stop before issue lookup"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "unassign",
+                  "--output",
+                  "json",
+                  "--no-profile",
+                  "--team",
+                  "ENG",
+                  "--assignee",
+                  "Ali",
+                  "--dry-run"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires an exact assignee match"
+      assert stdout == ""
+    end
+
     test "shares team, state, status, and label filters with issue list" do
       test_pid = self()
 
