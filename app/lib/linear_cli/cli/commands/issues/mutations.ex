@@ -217,7 +217,7 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   end
 
   defp unassign_filtered_issues(issues, _flags, options) do
-    if Prompt.yes?("Unassign #{length(issues)} issue(s)?") do
+    if Prompt.confirm_destructive?("Unassign #{length(issues)} issue(s)?") do
       unassign_and_show(issues, options)
     else
       cancel_unassign(options)

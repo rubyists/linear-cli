@@ -94,7 +94,7 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   end
 
   defp execute_moves_if_confirmed(issues, project, _flags, output) do
-    if Prompt.yes?("Proceed with move?"),
+    if Prompt.confirm_destructive?("Proceed with move?"),
       do: apply_moves(issues, project, output),
       else: Prompt.warn("Move cancelled")
   end
@@ -182,9 +182,11 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   end
 
   defp handle_bulk_move(issues, source, target, %{yes: false}, options) do
-    if Prompt.yes?("Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"),
-      do: apply_project_moves_and_show(issues, source, target, options.output),
-      else: Prompt.warn("Move cancelled")
+    if Prompt.confirm_destructive?(
+         "Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"
+       ),
+       do: apply_project_moves_and_show(issues, source, target, options.output),
+       else: Prompt.warn("Move cancelled")
   end
 
   defp handle_bulk_move(issues, source, target, %{yes: true}, options),

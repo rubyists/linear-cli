@@ -74,6 +74,42 @@ defmodule LinearCli.CLI.PromptTest do
     end
   end
 
+  describe "confirm_destructive?/1" do
+    test "defaults to false on EOF" do
+      assert capture_io([input: ""], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "defaults to false on a blank answer" do
+      assert capture_io([input: "\n"], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "returns false when invalid input is followed by EOF" do
+      output =
+        capture_io([input: "invalid\n"], fn ->
+          refute Prompt.confirm_destructive?("Proceed?")
+        end)
+
+      assert output =~ "unknown answer"
+      assert output =~ "[yN]"
+    end
+
+    test "an explicit yes answer returns true" do
+      assert capture_io([input: "yes\n"], fn ->
+               assert Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "an explicit no answer returns false" do
+      assert capture_io([input: "n\n"], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+  end
+
   describe "select/2" do
     test "returns the value paired with the chosen label" do
       choices = [{"Bug fixes", :fix}, {"New feature work", :feat}]
