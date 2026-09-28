@@ -41,6 +41,16 @@ hooks:
       echo "before_run: preserving uncommitted workspace changes; skipping rebase"
       exit 0
     fi
+    # A branch that tracks a remote branch (main, or a pushed PR branch) is
+    # shared history: fast-forward it to its own upstream and never rewrite
+    # it. Rebasing a PR branch onto main drops its merge commits and leaves
+    # the workspace diverged from the PR. Only an unpushed branch rebases.
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+      if ! git pull --ff-only; then
+        echo "before_run: cannot fast-forward to the upstream branch; leaving it as is" >&2
+      fi
+      exit 0
+    fi
     if ! git rebase origin/main; then
       echo "before_run: rebase onto origin/main failed; aborting it" >&2
       if ! git rebase --abort; then
