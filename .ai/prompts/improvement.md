@@ -11,10 +11,11 @@ run the project's setup or quality commands. Do not change the source issue.
 ## 1. Find the approved ids
 
 Look only at the comments under **Recent Activity** in the lifecycle section
-below. An approval is a comment that contains the word `Approve` (any case).
-Its approved ids are every `G<number>` that appears after that word, such as
-`Approve G1, G3` or `Approve follow-ups: G2 G4`. If more than one comment is an
-approval, use the latest one.
+below. An approval is a comment that contains a word starting with `Approve`
+or `Accept` (any case). Its approved ids are every `G<number>` that appears
+after that word, such as `Approve G1, G3`, `Approved: G2 G4` or
+`Accepted: G1, G2, and G3`. If more than one comment is an approval, use the
+latest one.
 
 That is the only rule. Do not infer approval from any other comment, however
 it is worded.
@@ -80,8 +81,10 @@ Write `.stokowski/report.json`:
 - `next` — when `blocked`, say why: the PR's `mergeStateStatus` and
   `reviewDecision`, and any ids that failed. The issue then waits at the
   merge-review gate.
-- `claims` — one entry for each approved id, with the created identifier or
-  the error, and one entry for the PR check with the `gh` output.
+- `claims` — first, one entry quoting the approval comment you used, word for
+  word, with its author and time, or stating that there was none. Then one
+  entry for each approved id, with the created identifier or the error, and
+  one entry for the PR check with the `gh` output.
 - `summary` — when any proposed follow-up in `.stokowski/follow-ups.json` was
   not created (not approved, or failed), say so plainly: list each one as
   "**Not created:** `<id>` — <title>". Then end with this paragraph, verbatim:
