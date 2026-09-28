@@ -25,6 +25,7 @@ Do not apply both to the same text.
 - Phase 10 Plan: documents/phase-10-plan.adoc
 - Phase 11 Plan: documents/phase-11-plan.adoc
 - Phase 12 Plan: documents/phase-12-plan.adoc
+- Phase 12 JSON output decision: documents/phase-12-json-output-decision.adoc
 - Phase 13 Plan: documents/phase-13-plan.adoc
 - Phase 14 Plan: documents/phase-14-plan.adoc
 - Phase 15 Plan: documents/phase-15-plan.adoc

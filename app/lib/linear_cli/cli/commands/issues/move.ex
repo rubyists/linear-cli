@@ -52,14 +52,26 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   defp resolve_move_project(issues, options) do
     with {:ok, tid} <- resolve_move_team_id(options.team || Profiles.default_team(), issues),
          {:ok, projects} <- Linear.projects_by_team(tid, %{search: options.project}) do
-      project_result(Projects.project_for(projects, options.project), options.project)
+      project =
+        if options.output == "json" do
+          Projects.project_for_strict(projects, options.project)
+        else
+          Projects.project_for(projects, options.project)
+        end
+
+      project_result(project, options.project, options.output)
     end
   end
 
-  defp project_result(nil, search),
+  defp project_result(nil, search, "json"),
+    do:
+      {:error,
+       {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+
+  defp project_result(nil, search, _output),
     do: {:error, {:smells_bad, "No project found matching #{inspect(search)}"}}
 
-  defp project_result(project, _search), do: {:ok, project}
+  defp project_result(project, _search, _output), do: {:ok, project}
 
   defp resolve_move_team_id(nil, issues), do: {:ok, hd(issues).team.id}
 
@@ -67,10 +79,19 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
     with {:ok, team} <- Linear.find_team(key), do: {:ok, team.id}
   end
 
+  defp execute_moves_if_confirmed(issues, _project, %{dry_run: true}, "json") do
+    Display.show(one_or_many(issues), %{output: "json"})
+    :ok
+  end
+
   defp execute_moves_if_confirmed(_issues, _project, %{dry_run: true}, _output), do: :ok
 
   defp execute_moves_if_confirmed(issues, project, %{yes: true}, output),
     do: apply_moves(issues, project, output)
+
+  defp execute_moves_if_confirmed(_issues, _project, _flags, "json") do
+    {:error, {:smells_bad, "JSON output requires --yes or --dry-run for issue move"}}
+  end
 
   defp execute_moves_if_confirmed(issues, project, _flags, output) do
     if Prompt.yes?("Proceed with move?"),
@@ -127,57 +148,111 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   defp validate_issue_ids(_issue_ids), do: :ok
 
   defp move_issues_by_project(options, flags) do
-    team_fn = fn -> WhatFor.team_for(options.team || Profiles.default_team()) end
+    team_key = options.team || Profiles.default_team()
+    team_fn = fn -> WhatFor.team_for(team_key) end
 
-    with {:ok, source} <- resolve_bulk_project(options.from, team_fn),
-         {:ok, target} <- resolve_bulk_project(options.to, team_fn),
+    with :ok <- validate_bulk_team(team_key, options),
+         {:ok, source} <- resolve_bulk_project(options.from, team_fn, options.output),
+         {:ok, target} <- resolve_bulk_project(options.to, team_fn, options.output),
          :ok <- guard_different_projects(source, target),
          {:ok, issues} <- Linear.issues(%{project_id: source.id, mine: false, all: flags.all}) do
-      cond do
-        issues == [] ->
-          label = if flags.all, do: "issues", else: "open issues"
-          Prompt.ok("No #{label} in #{source.name} to move")
-          :ok
+      handle_bulk_move(issues, source, target, flags, options)
+    end
+  end
 
-        flags.dry_run ->
-          Display.show(one_or_many(issues), %{output: options.output})
-          Prompt.ok("Would move #{length(issues)} issue(s) from #{source.name} to #{target.name}")
-          :ok
+  defp handle_bulk_move([], _source, _target, _flags, %{output: "json"}) do
+    Display.show([], %{output: "json"})
+    :ok
+  end
 
-        not flags.yes and
-            not Prompt.yes?(
-              "Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"
-            ) ->
-          Prompt.warn("Move cancelled")
+  defp handle_bulk_move([], source, _target, flags, %{output: _output}) do
+    label = if flags.all, do: "issues", else: "open issues"
+    Prompt.ok("No #{label} in #{source.name} to move")
+    :ok
+  end
 
-        true ->
-          with {:ok, pairs} <- apply_project_moves(issues, target) do
-            show_move_results(pairs, source, target, options.output)
-          end
-      end
+  defp handle_bulk_move(issues, source, target, %{dry_run: true}, options) do
+    Display.show(one_or_many(issues), %{output: options.output})
+    print_bulk_dry_run(issues, source, target, options)
+    :ok
+  end
+
+  defp handle_bulk_move(_issues, _source, _target, %{yes: false}, %{output: "json"}) do
+    {:error, {:smells_bad, "JSON output requires --yes or --dry-run for issue move"}}
+  end
+
+  defp handle_bulk_move(issues, source, target, %{yes: false}, options) do
+    if Prompt.yes?("Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"),
+      do: apply_project_moves_and_show(issues, source, target, options.output),
+      else: Prompt.warn("Move cancelled")
+  end
+
+  defp handle_bulk_move(issues, source, target, %{yes: true}, options),
+    do: apply_project_moves_and_show(issues, source, target, options.output)
+
+  defp print_bulk_dry_run(_issues, _source, _target, %{output: "json"}), do: :ok
+
+  defp print_bulk_dry_run(issues, source, target, %{output: output}) when output != "json" do
+    Prompt.ok("Would move #{length(issues)} issue(s) from #{source.name} to #{target.name}")
+  end
+
+  defp apply_project_moves_and_show(issues, source, target, output) do
+    with {:ok, pairs} <- apply_project_moves(issues, target) do
+      show_move_results(pairs, source, target, output)
     end
   end
 
   # UUID by structure: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (8-4-4-4-12, dashes at fixed positions)
   defp resolve_bulk_project(
          <<_::8*8, ?-, _::4*8, ?-, _::4*8, ?-, _::4*8, ?-, _::12*8>> = uuid,
-         _team_fn
+         _team_fn,
+         _output
        ) do
     short_name = String.slice(uuid, 0, 8) <> "…"
     {:ok, struct(LinearCli.Linear.Project, %{id: uuid, name: short_name})}
   end
 
-  defp resolve_bulk_project(value, team_fn) do
+  defp resolve_bulk_project(value, team_fn, output) do
     team = team_fn.()
 
     with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}),
-         project when not is_nil(project) <- Projects.project_for(projects, value) do
+         project when not is_nil(project) <- project_for_bulk(projects, value, output) do
       {:ok, project}
     else
-      nil -> {:error, {:smells_bad, "No project found matching #{value}"}}
-      {:error, reason} -> {:error, reason}
+      nil ->
+        if output == "json" do
+          {:error,
+           {:smells_bad, "JSON output requires an exact project match for #{inspect(value)}"}}
+        else
+          {:error, {:smells_bad, "No project found matching #{value}"}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
+
+  defp project_for_bulk(projects, value, "json"),
+    do: Projects.project_for_strict(projects, value)
+
+  defp project_for_bulk(projects, value, _output),
+    do: Projects.project_for(projects, value)
+
+  defp validate_bulk_team(nil, %{output: "json", from: from, to: to}) do
+    if uuid?(from) and uuid?(to) do
+      :ok
+    else
+      {:error,
+       {:smells_bad, "JSON output requires --team or an active profile for bulk issue move"}}
+    end
+  end
+
+  defp validate_bulk_team(_team_key, _options), do: :ok
+
+  defp uuid?(<<_::8*8, ?-, _::4*8, ?-, _::4*8, ?-, _::4*8, ?-, _::12*8>>),
+    do: true
+
+  defp uuid?(_value), do: false
 
   defp guard_different_projects(%{id: id}, %{id: id}),
     do: {:error, {:smells_bad, "source and target are the same project"}}

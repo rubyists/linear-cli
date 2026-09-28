@@ -186,10 +186,11 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   defp issue_unassign_by_filter(flags, options) do
     with {:ok, input} <-
            Filter.build_input(flags, options, [],
-             project_resolution: :strict,
+             project_resolution: project_resolution(options),
              include_labels: false,
              resolve_assignee: true,
-             assigned_only: true
+             assigned_only: true,
+             non_interactive: json_output?(options)
            ),
          {:ok, %{issues: issues, has_next_page: has_next_page}} <- Linear.issues_first_page(input) do
       unassign_filtered_issues(issues, has_next_page, flags, options)
@@ -209,6 +210,10 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
 
   defp unassign_filtered_issues(issues, %{yes: true}, options) do
     unassign_and_show(issues, options)
+  end
+
+  defp unassign_filtered_issues(_issues, _flags, %{output: "json"}) do
+    {:error, {:smells_bad, "JSON output requires --yes or --dry-run for issue unassign"}}
   end
 
   defp unassign_filtered_issues(issues, _flags, options) do
@@ -300,6 +305,12 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     Enum.any?([:assignee, :team, :project], &present_string?(Map.get(options, &1))) or
       Enum.any?([:state, :status, :labels], &present_list?(Map.get(options, &1)))
   end
+
+  defp project_resolution(options) do
+    if json_output?(options), do: :strict_non_interactive, else: :strict
+  end
+
+  defp json_output?(options), do: Map.get(options, :output, "text") == "json"
 
   defp filter_qualifier?(flags) do
     Map.get(flags, :no_mine, false) or
