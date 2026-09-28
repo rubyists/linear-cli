@@ -73,7 +73,7 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
     do: apply_moves(issues, project, output)
 
   defp execute_moves_if_confirmed(issues, project, _flags, output) do
-    if Prompt.yes?("Proceed with move?"),
+    if Prompt.confirm_destructive?("Proceed with move?"),
       do: apply_moves(issues, project, output),
       else: Prompt.warn("Move cancelled")
   end
@@ -145,7 +145,7 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
           :ok
 
         not flags.yes and
-            not Prompt.yes?(
+            not Prompt.confirm_destructive?(
               "Move #{length(issues)} issue(s) from #{source.name} to #{target.name}?"
             ) ->
           Prompt.warn("Move cancelled")

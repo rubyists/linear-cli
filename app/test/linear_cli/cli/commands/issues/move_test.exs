@@ -150,6 +150,46 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert output =~ "Move cancelled"
     end
 
+    test "closed stdin cancels explicit-ID move without mutation" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects())
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutation_called)
+            raise "closed stdin must not send issueUpdate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: ""], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--project",
+                     "Manhattan",
+                     "CRY-1"
+                   ])
+        end)
+
+      refute_received :mutation_called
+      assert output =~ "Move cancelled"
+    end
+
     test "user confirms, mutation is called" do
       test_pid = self()
 
@@ -723,6 +763,43 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
                    ])
         end)
 
+      assert output =~ "Move cancelled"
+    end
+
+    test "--from/--to closed stdin cancels without mutation" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        if String.contains?(query, "issueUpdate") do
+          send(test_pid, :mutation_called)
+          raise "closed stdin must not send issueUpdate"
+        end
+
+        case Enum.find(bulk_stub_pairs(), fn {match, _} -> String.contains?(query, match) end) do
+          {_match, response} -> Req.Test.json(conn, response)
+          nil -> raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: ""], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "move",
+                     "--from",
+                     "Source Project",
+                     "--to",
+                     "Target Project",
+                     "--team",
+                     "ENG"
+                   ])
+        end)
+
+      refute_received :mutation_called
       assert output =~ "Move cancelled"
     end
 
