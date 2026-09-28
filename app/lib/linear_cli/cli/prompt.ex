@@ -127,6 +127,16 @@ defmodule LinearCli.CLI.Prompt do
   def yes?(message), do: Owl.IO.confirm(message: message, default: true)
 
   @doc """
+  Asks a yes/no question for a destructive operation, defaulting to `false`.
+
+  A blank answer or end of input cancels the operation. Use this helper for
+  destructive confirmations. Keep `yes?/1` for prompts where the affirmative
+  default is part of the existing behavior.
+  """
+  @spec confirm_destructive?(Owl.Data.t()) :: boolean()
+  def confirm_destructive?(message), do: Owl.IO.confirm(message: message, default: false)
+
+  @doc """
   Prompts for a single choice from an ordered `[{label, value}]` list,
   returning the chosen `value`.
 

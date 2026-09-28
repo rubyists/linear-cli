@@ -315,6 +315,80 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert output =~ "Unassign cancelled"
     end
 
+    test "confirms the filtered batch with an explicit yes answer" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            Req.Test.json(conn, issue_updated(%{"assignee" => nil}))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      capture_io([input: "yes\n"], fn ->
+        assert :ok =
+                 LinearCli.CLI.main([
+                   "issue",
+                   "unassign",
+                   "--no-profile",
+                   "--team",
+                   "ENG",
+                   "--state",
+                   "started"
+                 ])
+      end)
+
+      assert_received :mutated
+    end
+
+    test "closed stdin cancels the filtered batch without mutating" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issues(filter:") ->
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, :mutated)
+            raise "closed stdin must not send issueUpdate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: ""], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--state",
+                     "started"
+                   ])
+        end)
+
+      refute_received :mutated
+      assert output =~ "Unassign cancelled"
+    end
+
     test "--dry-run lists filtered matches without mutation" do
       test_pid = self()
 

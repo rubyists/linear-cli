@@ -313,8 +313,9 @@ issues assigned to other users, or `--assignee` to select a named user. Already
 unassigned issues are skipped. Exact
 project and assignee matches are used without a prompt. Partial matches prompt
 you to choose a project or assignee. Before any filtered mutation, the command
-asks for confirmation; `--yes` skips that prompt and `--dry-run` prints the
-matching issues without changing them.
+asks for confirmation. An explicit `y` or `yes`, or `--yes`, is required.
+EOF, blank input, and exhausted invalid input cancel without
+changing issues. `--dry-run` prints the matching issues without changing them.
 The command processes at most 100 matches at a time. If more than 100 issues
 match, it prints a warning and processes only the first 100. Updates remain
 independent API calls, so a failed request can leave earlier matches already
@@ -437,7 +438,7 @@ $ lc issue move --project Manhattan --dry-run CRY-1 <3>
 $ lc issue move --project Manhattan --yes CRY-1 <4>
 $ lc issue move --project Manhattan --team ENG CRY-1 <5>
 ----
-<1> Move a single issue; prompts for confirmation before executing
+<1> Move a single issue; an explicit `y` or `yes` is required before execution
 <2> Move multiple issues at once — updates run concurrently
 <3> Preview the planned moves without executing any mutations
 <4> Skip the confirmation prompt
@@ -454,7 +455,7 @@ $ lc issue move --from Retired --to Active --all <2>
 $ lc issue move --from p-uuid-1 --to p-uuid-2 <3>
 $ lc issue move --from Retired --to Active --dry-run <4>
 ----
-<1> Moves all open issues from "Retired" to "Active", prompts for confirmation
+<1> Moves all open issues from "Retired" to "Active". An explicit `y` or `yes` is required
 <2> Includes completed and cancelled issues too
 <3> Move by project UUID — the way to target a project in another team
 <4> Preview without mutating
