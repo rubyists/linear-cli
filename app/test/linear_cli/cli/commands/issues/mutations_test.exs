@@ -14,6 +14,30 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     %{"data" => %{"team" => %{"members" => %{"nodes" => members}}}}
   end
 
+  defp workspace_teams_response(teams) do
+    %{
+      "data" => %{
+        "teams" => %{
+          "edges" => Enum.map(teams, &%{"node" => &1, "cursor" => &1["id"]}),
+          "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+        }
+      }
+    }
+  end
+
+  defp workspace_members_page(members, has_next_page, end_cursor) do
+    %{
+      "data" => %{
+        "team" => %{
+          "members" => %{
+            "edges" => Enum.map(members, &%{"node" => &1, "cursor" => &1["id"]}),
+            "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+          }
+        }
+      }
+    }
+  end
+
   describe "issue unassign edge cases" do
     test "sends a null assignee and confirms each issue in text output" do
       test_pid = self()
@@ -203,6 +227,213 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert_received {:unassign_input, %{"assigneeId" => nil}}
       refute output =~ "Unassign 1 issue(s)?"
       assert output =~ "CRY-1 unassigned"
+    end
+
+    test "workspace-wide assignee lookup follows later member pages" do
+      test_pid = self()
+      first_page_members = Enum.map(1..50, &%{"id" => "u#{&1}", "name" => "Member #{&1}"})
+      late_member = %{"id" => "u-late", "name" => "Late Member"}
+      team = %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "teams(first: $first") ->
+            Req.Test.json(conn, workspace_teams_response([team]))
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
+
+              "member-50" ->
+                Req.Test.json(conn, workspace_members_page([late_member], false, "member-51"))
+            end
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "a dry-run lookup must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--assignee",
+                     "Late Member",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+      assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-late"}}}}
+    end
+
+    test "workspace-wide assignee partial-match prompts include later member pages" do
+      test_pid = self()
+      first_member = %{"id" => "u-first", "name" => "Alice First"}
+      later_member = %{"id" => "u-later", "name" => "Alice Later"}
+      team = %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "teams(first: $first") ->
+            Req.Test.json(conn, workspace_teams_response([team]))
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_members_page([first_member], true, "member-1"))
+
+              "member-1" ->
+                Req.Test.json(conn, workspace_members_page([later_member], false, "member-2"))
+            end
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "2\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--assignee",
+                     "Ali",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "Alice First"
+      assert output =~ "Alice Later"
+      assert output =~ "No issues matched."
+      assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-later"}}}}
+    end
+
+    test "workspace-wide assignee lookup deduplicates members shared by teams" do
+      test_pid = self()
+      shared = %{"id" => "u-shared", "name" => "Shared Member"}
+
+      teams = [
+        %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil},
+        %{"id" => "t2", "key" => "OPS", "name" => "Operations", "description" => nil}
+      ]
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "teams(first: $first") ->
+            Req.Test.json(conn, workspace_teams_response(teams))
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            Req.Test.json(conn, workspace_members_page([shared], false, "member-1"))
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--assignee",
+                     "Shared Member",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+      assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-shared"}}}}
+    end
+
+    test "a later workspace member lookup error stops before issue lookup and mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+      first_page_members = Enum.map(1..50, &%{"id" => "u#{&1}", "name" => "Member #{&1}"})
+      team = %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "teams(first: $first") ->
+            Req.Test.json(conn, workspace_teams_response([team]))
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
+
+              "member-50" ->
+                Plug.Conn.resp(conn, 502, "upstream unavailable")
+            end
+
+          String.contains?(query, "issues(filter:") ->
+            raise "a member lookup error must stop before issue lookup"
+
+          String.contains?(query, "issueUpdate") ->
+            raise "a member lookup error must stop before mutation"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_stderr(fn stderr ->
+          LinearCli.CLI.main(
+            [
+              "issue",
+              "unassign",
+              "--no-profile",
+              "--assignee",
+              "Late Member",
+              "--yes"
+            ],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      assert_received {:halted, 88}
+      assert output =~ "Cannot Continue"
     end
 
     test "limits a filtered batch to 100 matches and warns when more exist" do

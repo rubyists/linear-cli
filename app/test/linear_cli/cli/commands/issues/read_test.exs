@@ -36,6 +36,97 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
       assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p1"}}}}
     end
 
+    test "--project resolves an exact match from a later workspace page" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            cursor = decoded["variables"]["after"]
+            send(test_pid, {:project_cursor, cursor})
+
+            case cursor do
+              nil ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page([project_map("p1", "First Page")], true, "project-1")
+                )
+
+              "project-1" ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page([project_map("p2", "Later Page")], false, "project-2")
+                )
+            end
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "list", "--project", "Later Page"])
+        end)
+
+      assert output =~ "CRY-1"
+      assert_received {:project_cursor, nil}
+      assert_received {:project_cursor, "project-1"}
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p2"}}}}
+    end
+
+    test "--project partial-match prompts include candidates from later workspace pages" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page([project_map("p1", "Roadmap First")], true, "project-1")
+                )
+
+              "project-1" ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page([project_map("p2", "Roadmap Later")], false, "project-2")
+                )
+            end
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map()]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io([input: "2\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["issue", "list", "--project", "Roadmap"])
+        end)
+
+      assert output =~ "Roadmap First"
+      assert output =~ "Roadmap Later"
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p2"}}}}
+    end
+
     test "--project with --team resolves against team-scoped projects only" do
       test_pid = self()
 

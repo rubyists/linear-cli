@@ -18,7 +18,7 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   `--project`/`-p` resolution is team-scoped when `--team` is given (or
   the active profile supplies a team) - it searches that team's projects via
   `projects_by_team`. Without a team context it falls back to all workspace
-  projects (`Project.all`). Prompts interactively when the search is
+  projects (`Project.workspace_projects`). Prompts interactively when the search is
   ambiguous or omitted-but-requested (`-p -`). Only resolved at all when
   `--project` was actually given (or `LinearCli.Profiles.default_project/0`
   supplies one) - unlike `issue create`/`issue update`, a bare `issue list`

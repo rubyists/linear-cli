@@ -10,6 +10,10 @@ defmodule LinearCli.Linear.Team do
       manual LinearCli.Linear.Team.Read.All
     end
 
+    read :all_for_lookup do
+      manual LinearCli.Linear.Team.Read.AllForLookup
+    end
+
     read :mine do
       manual LinearCli.Linear.Team.Read.Mine
     end
@@ -74,6 +78,31 @@ defmodule LinearCli.Linear.Team.Read.All do
 
   def read(_query, _ecto_query, _opts, _context) do
     Paginate.all(
+      @document,
+      "teams",
+      fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,
+      &Team.from_map/1
+    )
+  end
+end
+
+defmodule LinearCli.Linear.Team.Read.AllForLookup do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Linear.{Paginate, Team}
+
+  @document """
+  query($first: Int!, $after: String) {
+    teams(first: $first, after: $after) {
+      edges { node { #{Team.base_fields()} } cursor }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+  """
+
+  def read(_query, _ecto_query, _opts, _context) do
+    Paginate.all_pages(
       @document,
       "teams",
       fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,

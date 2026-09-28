@@ -14,16 +14,19 @@ defmodule LinearCli.Linear do
     resource LinearCli.Linear.User do
       define :me, action: :me, get?: true
       define :team_members, action: :by_team, args: [:team_id]
+      define :workspace_team_members, action: :by_team_for_lookup, args: [:team_id]
     end
 
     resource LinearCli.Linear.Team do
       define :teams, action: :all
+      define :workspace_teams, action: :all_for_lookup
       define :my_teams, action: :mine
       define :find_team, action: :find, args: [:id], get?: true
     end
 
     resource LinearCli.Linear.Project do
       define :projects, action: :all
+      define :workspace_projects, action: :all_for_lookup
       define :my_projects, action: :mine
       define :projects_by_team, action: :by_team, args: [:team_id]
       define :create_project, action: :create, args: [:name, :team_id]

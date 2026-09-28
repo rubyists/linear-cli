@@ -10,6 +10,10 @@ defmodule LinearCli.Linear.Project do
       manual LinearCli.Linear.Project.Read.All
     end
 
+    read :all_for_lookup do
+      manual LinearCli.Linear.Project.Read.AllForLookup
+    end
+
     read :mine do
       manual LinearCli.Linear.Project.Read.Mine
     end
@@ -164,6 +168,31 @@ defmodule LinearCli.Linear.Project.Read.All do
 
   def read(_query, _ecto_query, _opts, _context) do
     Paginate.all(
+      @document,
+      "projects",
+      fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,
+      &Project.from_map/1
+    )
+  end
+end
+
+defmodule LinearCli.Linear.Project.Read.AllForLookup do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Linear.{Paginate, Project}
+
+  @document """
+  query($first: Int!, $after: String) {
+    projects(first: $first, after: $after) {
+      edges { node { #{Project.base_fields()} } cursor }
+      pageInfo { hasNextPage endCursor }
+    }
+  }
+  """
+
+  def read(_query, _ecto_query, _opts, _context) do
+    Paginate.all_pages(
       @document,
       "projects",
       fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,
