@@ -15,11 +15,15 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
   end
 
   defp workspace_teams_response(teams) do
+    workspace_teams_page(teams, false, nil)
+  end
+
+  defp workspace_teams_page(teams, has_next_page, end_cursor) do
     %{
       "data" => %{
         "teams" => %{
           "edges" => Enum.map(teams, &%{"node" => &1, "cursor" => &1["id"]}),
-          "pageInfo" => %{"hasNextPage" => false, "endCursor" => nil}
+          "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
         }
       }
     }
@@ -282,6 +286,93 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-late"}}}}
     end
 
+    test "workspace-wide assignee lookup follows teams beyond the first 100" do
+      test_pid = self()
+
+      first_page_teams =
+        Enum.map(1..50, fn number ->
+          %{
+            "id" => "t#{number}",
+            "key" => "T#{number}",
+            "name" => "Team #{number}",
+            "description" => nil
+          }
+        end)
+
+      second_page_teams =
+        Enum.map(51..100, fn number ->
+          %{
+            "id" => "t#{number}",
+            "key" => "T#{number}",
+            "name" => "Team #{number}",
+            "description" => nil
+          }
+        end)
+
+      late_team = %{
+        "id" => "t101",
+        "key" => "T101",
+        "name" => "Team 101",
+        "description" => nil
+      }
+
+      late_member = %{"id" => "u-late-team", "name" => "Late Team Member"}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "teams(first: $first") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_teams_page(first_page_teams, true, "team-50"))
+
+              "team-50" ->
+                Req.Test.json(conn, workspace_teams_page(second_page_teams, true, "team-100"))
+
+              "team-100" ->
+                Req.Test.json(conn, workspace_teams_page([late_team], false, "team-101"))
+            end
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["id"] do
+              "t101" ->
+                send(test_pid, {:late_member_team, "t101"})
+                Req.Test.json(conn, workspace_members_page([late_member], false, "member-101"))
+
+              _team_id ->
+                Req.Test.json(conn, workspace_members_page([], false, nil))
+            end
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--assignee",
+                     "Late Team Member",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+      assert_received {:late_member_team, "t101"}
+      assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-late-team"}}}}
+    end
+
     test "workspace-wide assignee partial-match prompts include later member pages" do
       test_pid = self()
       first_member = %{"id" => "u-first", "name" => "Alice First"}
@@ -402,7 +493,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
                 Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
 
               "member-50" ->
-                Plug.Conn.resp(conn, 502, "upstream unavailable")
+                Plug.Conn.resp(conn, 401, "upstream unavailable")
             end
 
           String.contains?(query, "issues(filter:") ->
@@ -432,8 +523,11 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           )
         end)
 
-      assert_received {:halted, 88}
-      assert output =~ "Cannot Continue"
+      assert_received {:halted, 77}
+      assert output =~ "Linear API authentication failed (HTTP 401)."
+      assert output =~ "Authentication error, cannot continue"
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
     end
 
     test "limits a filtered batch to 100 matches and warns when more exist" do
@@ -1048,6 +1142,77 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
       assert_received {:halted, 22}
       assert output =~ "No project found matching Missing Project"
+    end
+
+    test "unassign resolves an exact workspace project after the first 100" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page(
+                    Enum.map(1..50, &project_map("p#{&1}", "First Project #{&1}")),
+                    true,
+                    "project-50"
+                  )
+                )
+
+              "project-50" ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page(
+                    Enum.map(51..100, &project_map("p#{&1}", "Middle Project #{&1}")),
+                    true,
+                    "project-100"
+                  )
+                )
+
+              "project-100" ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page(
+                    [project_map("p101", "Later Project")],
+                    false,
+                    "project-101"
+                  )
+                )
+            end
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "a dry-run lookup must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--project",
+                     "Later Project",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p101"}}}}
     end
 
     test "prompts for a partial project match before filtering" do

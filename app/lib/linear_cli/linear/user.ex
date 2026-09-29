@@ -129,27 +129,37 @@ defmodule LinearCli.Linear.User.Read.ByTeamForLookup do
   defp page(team_id, after_cursor, acc) do
     case Api.call(@document, %{"id" => team_id, "after" => after_cursor}) do
       {:ok, %{"team" => %{"members" => members}}} when is_map(members) ->
-        nodes = Enum.map(members["edges"] || [], &User.from_map(&1["node"]))
-        acc = acc ++ nodes
-        page_info = members["pageInfo"] || %{}
+        continue_page(members, team_id, after_cursor, acc)
 
-        if page_info["hasNextPage"] == true do
-          next_cursor = page_info["endCursor"]
-
-          if next_cursor == after_cursor do
-            {:error, {:non_advancing_cursor, next_cursor}}
-          else
-            page(team_id, next_cursor, acc)
-          end
-        else
-          {:ok, acc}
-        end
-
-      {:ok, _} ->
+      {:ok, _response} when is_nil(after_cursor) ->
         {:ok, acc}
+
+      {:ok, response} ->
+        {:error, {:unexpected_response, response}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
 
       error ->
         error
+    end
+  end
+
+  defp continue_page(members, team_id, after_cursor, acc) do
+    nodes = Enum.map(members["edges"] || [], &User.from_map(&1["node"]))
+    acc = acc ++ nodes
+    page_info = members["pageInfo"] || %{}
+
+    if page_info["hasNextPage"] == true do
+      next_cursor = page_info["endCursor"]
+
+      if next_cursor == after_cursor do
+        {:error, {:non_advancing_cursor, next_cursor}}
+      else
+        page(team_id, next_cursor, acc)
+      end
+    else
+      {:ok, acc}
     end
   end
 end

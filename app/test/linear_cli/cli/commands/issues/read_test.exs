@@ -53,13 +53,27 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
               nil ->
                 Req.Test.json(
                   conn,
-                  all_projects_page([project_map("p1", "First Page")], true, "project-1")
+                  all_projects_page(
+                    Enum.map(1..50, &project_map("p#{&1}", "First Page #{&1}")),
+                    true,
+                    "project-50"
+                  )
                 )
 
-              "project-1" ->
+              "project-50" ->
                 Req.Test.json(
                   conn,
-                  all_projects_page([project_map("p2", "Later Page")], false, "project-2")
+                  all_projects_page(
+                    Enum.map(51..100, &project_map("p#{&1}", "Middle Page #{&1}")),
+                    true,
+                    "project-100"
+                  )
+                )
+
+              "project-100" ->
+                Req.Test.json(
+                  conn,
+                  all_projects_page([project_map("p101", "Later Page")], false, "project-101")
                 )
             end
 
@@ -80,8 +94,9 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
 
       assert output =~ "CRY-1"
       assert_received {:project_cursor, nil}
-      assert_received {:project_cursor, "project-1"}
-      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p2"}}}}
+      assert_received {:project_cursor, "project-50"}
+      assert_received {:project_cursor, "project-100"}
+      assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p101"}}}}
     end
 
     test "--project partial-match prompts include candidates from later workspace pages" do
