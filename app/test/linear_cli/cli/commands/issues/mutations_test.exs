@@ -42,6 +42,56 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     }
   end
 
+  defp run_later_member_lookup_error(status, test_pid) do
+    halt = fn code -> send(test_pid, {:halted, code}) end
+    first_page_members = Enum.map(1..50, &%{"id" => "u#{&1}", "name" => "Member #{&1}"})
+    team = %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil}
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      decoded = Jason.decode!(body)
+      query = decoded["query"]
+
+      cond do
+        String.contains?(query, "teams(first: $first") ->
+          Req.Test.json(conn, workspace_teams_response([team]))
+
+        String.contains?(query, "members(first: 50, after: $after)") ->
+          case decoded["variables"]["after"] do
+            nil ->
+              Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
+
+            "member-50" ->
+              Plug.Conn.resp(conn, status, "upstream unavailable")
+          end
+
+        String.contains?(query, "issues(filter:") ->
+          raise "a member lookup error must stop before issue lookup"
+
+        String.contains?(query, "issueUpdate") ->
+          raise "a member lookup error must stop before mutation"
+
+        true ->
+          raise "no stub matched query: #{query}"
+      end
+    end)
+
+    capture_stderr(fn stderr ->
+      LinearCli.CLI.main(
+        [
+          "issue",
+          "unassign",
+          "--no-profile",
+          "--assignee",
+          "Late Member",
+          "--yes"
+        ],
+        halt,
+        stderr: stderr
+      )
+    end)
+  end
+
   describe "issue unassign edge cases" do
     test "sends a null assignee and confirms each issue in text output" do
       test_pid = self()
@@ -472,56 +522,17 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-shared"}}}}
     end
 
-    test "a later workspace member lookup error stops before issue lookup and mutation" do
-      test_pid = self()
-      halt = fn code -> send(test_pid, {:halted, code}) end
-      first_page_members = Enum.map(1..50, &%{"id" => "u#{&1}", "name" => "Member #{&1}"})
-      team = %{"id" => "t1", "key" => "ENG", "name" => "Engineering", "description" => nil}
+    test "a later workspace member HTTP error stops before issue lookup and mutation" do
+      output = run_later_member_lookup_error(502, self())
 
-      Req.Test.stub(LinearCli.Api, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        decoded = Jason.decode!(body)
-        query = decoded["query"]
+      assert_received {:halted, 88}
+      assert output =~ "Linear API returned HTTP 502."
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
+    end
 
-        cond do
-          String.contains?(query, "teams(first: $first") ->
-            Req.Test.json(conn, workspace_teams_response([team]))
-
-          String.contains?(query, "members(first: 50, after: $after)") ->
-            case decoded["variables"]["after"] do
-              nil ->
-                Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
-
-              "member-50" ->
-                Plug.Conn.resp(conn, 401, "upstream unavailable")
-            end
-
-          String.contains?(query, "issues(filter:") ->
-            raise "a member lookup error must stop before issue lookup"
-
-          String.contains?(query, "issueUpdate") ->
-            raise "a member lookup error must stop before mutation"
-
-          true ->
-            raise "no stub matched query: #{query}"
-        end
-      end)
-
-      output =
-        capture_stderr(fn stderr ->
-          LinearCli.CLI.main(
-            [
-              "issue",
-              "unassign",
-              "--no-profile",
-              "--assignee",
-              "Late Member",
-              "--yes"
-            ],
-            halt,
-            stderr: stderr
-          )
-        end)
+    test "a later workspace member authentication error uses the auth handler" do
+      output = run_later_member_lookup_error(401, self())
 
       assert_received {:halted, 77}
       assert output =~ "Linear API authentication failed (HTTP 401)."
