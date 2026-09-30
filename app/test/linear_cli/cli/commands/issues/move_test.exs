@@ -442,6 +442,99 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert stdout == ""
     end
 
+    test "JSON ID move names the missing --project option" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "issueUpdate") ->
+            raise "a missing --project must stop before mutation"
+
+          true ->
+            raise "missing --project must not resolve a target project"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                ["issue", "move", "--output", "json", "CRY-1"],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "JSON output requires --project for issue move"
+      assert stdout == ""
+    end
+
+    test "JSON ID move reports when no project matches" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, move_team_projects([]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "an unknown project must stop before mutation"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--project",
+                  "Missing Project",
+                  "--dry-run",
+                  "--output",
+                  "json",
+                  "CRY-1"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "No project found matching Missing Project"
+      refute stderr =~ "exact project match"
+      assert stdout == ""
+    end
+
     test "with no issue ids, exits 22 (smells bad)" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
@@ -807,6 +900,46 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert stdout == ""
     end
 
+    test "JSON bulk move requires --team or an active profile" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn _conn ->
+        send(test_pid, :api_called)
+        raise "the bulk team guard must run before any API call"
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--from",
+                  "Source Project",
+                  "--to",
+                  "Target Project",
+                  "--dry-run",
+                  "--output",
+                  "json"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      refute_received :api_called
+      assert stderr =~ "JSON output requires --team or an active profile for bulk issue move"
+      assert stdout == ""
+    end
+
     test "--from/--to JSON dry-run rejects a partial project before listing issues" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
@@ -865,6 +998,62 @@ defmodule LinearCli.CLI.Commands.Issues.MoveTest do
       assert_received {:halted, 22}
       assert_received {:stderr, stderr}
       assert stderr =~ "JSON output requires an exact project match"
+      assert stdout == ""
+    end
+
+    test "--from/--to JSON dry-run reports when no project matches" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "$teamId") ->
+            Req.Test.json(conn, team_projects([]))
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            raise "an unknown project must stop before listing issues"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      stdout =
+        capture_io(fn ->
+          stderr =
+            capture_stderr(fn stderr ->
+              LinearCli.CLI.main(
+                [
+                  "issue",
+                  "move",
+                  "--from",
+                  "Missing Project",
+                  "--to",
+                  "Target Project",
+                  "--team",
+                  "ENG",
+                  "--dry-run",
+                  "--output",
+                  "json"
+                ],
+                halt,
+                stderr: stderr
+              )
+            end)
+
+          send(test_pid, {:stderr, stderr})
+        end)
+
+      assert_received {:halted, 22}
+      assert_received {:stderr, stderr}
+      assert stderr =~ "No project found matching Missing Project"
+      refute stderr =~ "exact project match"
       assert stdout == ""
     end
 

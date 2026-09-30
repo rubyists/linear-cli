@@ -241,13 +241,8 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     :ok
   end
 
-  defp cancel_unassign(options) do
-    if Map.get(options, :output, "text") == "json" do
-      Display.show([], %{output: "json"})
-    else
-      Prompt.warn("Unassign cancelled")
-    end
-
+  defp cancel_unassign(_options) do
+    Prompt.warn("Unassign cancelled")
     :ok
   end
 

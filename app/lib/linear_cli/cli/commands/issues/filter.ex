@@ -90,13 +90,19 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   end
 
   defp resolve_project_match(projects, search, :strict_non_interactive) do
-    case Projects.project_for_strict(projects, search) do
-      nil ->
-        {:error,
-         {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+    case Projects.project_scores(projects, search) do
+      [] ->
+        {:error, {:smells_bad, "No project found matching #{search}"}}
 
-      project ->
-        {:ok, project.id}
+      _possibles ->
+        case Projects.project_for_strict(projects, search) do
+          nil ->
+            {:error,
+             {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+
+          project ->
+            {:ok, project.id}
+        end
     end
   end
 

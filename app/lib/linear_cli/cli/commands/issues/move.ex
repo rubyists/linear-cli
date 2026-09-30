@@ -49,6 +49,10 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
     end
   end
 
+  defp resolve_move_project(_issues, %{project: nil, output: "json"}) do
+    {:error, {:smells_bad, "JSON output requires --project for issue move"}}
+  end
+
   defp resolve_move_project(issues, options) do
     with {:ok, tid} <- resolve_move_team_id(options.team || Profiles.default_team(), issues),
          {:ok, projects} <- Linear.projects_by_team(tid, %{search: options.project}) do
@@ -59,19 +63,23 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
           Projects.project_for(projects, options.project)
         end
 
-      project_result(project, options.project, options.output)
+      project_result(project, projects, options.project, options.output)
     end
   end
 
-  defp project_result(nil, search, "json"),
-    do:
+  defp project_result(nil, projects, search, "json") do
+    if Projects.project_scores(projects, search) == [] do
+      {:error, {:smells_bad, "No project found matching #{search}"}}
+    else
       {:error,
        {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+    end
+  end
 
-  defp project_result(nil, search, _output),
+  defp project_result(nil, _projects, search, _output),
     do: {:error, {:smells_bad, "No project found matching #{inspect(search)}"}}
 
-  defp project_result(project, _search, _output), do: {:ok, project}
+  defp project_result(project, _projects, _search, _output), do: {:ok, project}
 
   defp resolve_move_team_id(nil, issues), do: {:ok, hd(issues).team.id}
 
@@ -217,22 +225,24 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
   defp resolve_bulk_project(value, team_fn, output) do
     team = team_fn.()
 
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}),
-         project when not is_nil(project) <- project_for_bulk(projects, value, output) do
-      {:ok, project}
-    else
-      nil ->
-        if output == "json" do
-          {:error,
-           {:smells_bad, "JSON output requires an exact project match for #{inspect(value)}"}}
-        else
-          {:error, {:smells_bad, "No project found matching #{value}"}}
-        end
-
-      {:error, reason} ->
-        {:error, reason}
+    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: value}) do
+      case project_for_bulk(projects, value, output) do
+        nil -> bulk_project_error(projects, value, output)
+        project -> {:ok, project}
+      end
     end
   end
+
+  defp bulk_project_error(projects, value, "json") do
+    if Projects.project_scores(projects, value) == [] do
+      {:error, {:smells_bad, "No project found matching #{value}"}}
+    else
+      {:error, {:smells_bad, "JSON output requires an exact project match for #{inspect(value)}"}}
+    end
+  end
+
+  defp bulk_project_error(_projects, value, _output),
+    do: {:error, {:smells_bad, "No project found matching #{value}"}}
 
   defp project_for_bulk(projects, value, "json"),
     do: Projects.project_for_strict(projects, value)
