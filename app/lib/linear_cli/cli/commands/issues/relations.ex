@@ -17,9 +17,8 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
   """
   @spec issue_relation_list(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_relation_list(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = Identifiers.expand_issue_id(issue_id)
-
-    with {:ok, relations} <- Linear.issue_relations(expanded_id) do
+    with {:ok, expanded_id} <- Identifiers.expand_issue_id(issue_id, output: options.output),
+         {:ok, relations} <- Linear.issue_relations(expanded_id) do
       Display.show(relations, %{output: options.output, relations: true})
       :ok
     end
@@ -50,16 +49,33 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_add(%{unknown: [subject_id | related_ids], options: options}, opts) do
-    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
-    results =
-      Enum.map(related_ids, fn related_id ->
-        expanded_related = Identifiers.expand_issue_id(related_id)
-        add_single_relation(expanded_subject, expanded_related, user_type)
-      end)
+    if options.output == "json" do
+      with {:ok, [expanded_subject | expanded_related_ids]} <-
+             Identifiers.expand_issue_ids([subject_id | related_ids], output: options.output) do
+        results =
+          Enum.map(expanded_related_ids, fn expanded_related ->
+            add_single_relation(expanded_subject, expanded_related, user_type)
+          end)
 
-    print_relation_add_results(results, options.output, Keyword.get(opts, :stderr, :stderr))
+        finish_relation_add(results, options.output, Keyword.get(opts, :stderr, :stderr))
+      end
+    else
+      expanded_subject = Identifiers.expand_issue_id(subject_id)
+
+      results =
+        Enum.map(related_ids, fn related_id ->
+          expanded_related = Identifiers.expand_issue_id(related_id)
+          add_single_relation(expanded_subject, expanded_related, user_type)
+        end)
+
+      finish_relation_add(results, options.output, Keyword.get(opts, :stderr, :stderr))
+    end
+  end
+
+  defp finish_relation_add(results, output, stderr) do
+    print_relation_add_results(results, output, stderr)
 
     failed_count =
       Enum.count(results, fn r -> match?({:failed, _, _}, r) or match?({:self_link, _}, r) end)
@@ -205,29 +221,47 @@ defmodule LinearCli.CLI.Commands.Issues.Relations do
     do: {:error, {:smells_bad, "At least one RELATED_ISSUE is required"}}
 
   def issue_relation_remove(%{unknown: [subject_id | related_ids], options: options}, opts) do
-    expanded_subject = Identifiers.expand_issue_id(subject_id)
     user_type = options.type
 
-    with {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
-      results =
-        Enum.map(related_ids, fn related_id ->
-          expanded_related = Identifiers.expand_issue_id(related_id)
-          remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
-        end)
+    if options.output == "json" do
+      with {:ok, [expanded_subject | expanded_related_ids]} <-
+             Identifiers.expand_issue_ids([subject_id | related_ids], output: options.output),
+           {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
+        results =
+          Enum.map(expanded_related_ids, fn expanded_related ->
+            remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
+          end)
 
-      print_relation_remove_results(results, options.output, Keyword.get(opts, :stderr, :stderr))
-
-      failed_count =
-        Enum.count(results, fn r ->
-          match?({:failed, _, _}, r) or match?({:ambiguous, _, _}, r) or
-            match?({:self_link, _}, r)
-        end)
-
-      if failed_count > 0 do
-        {:error, {:smells_bad, "#{failed_count} relation(s) failed to be removed"}}
-      else
-        :ok
+        finish_relation_remove(results, options.output, Keyword.get(opts, :stderr, :stderr))
       end
+    else
+      expanded_subject = Identifiers.expand_issue_id(subject_id)
+
+      with {:ok, all_relations} <- Linear.issue_relations(expanded_subject) do
+        results =
+          Enum.map(related_ids, fn related_id ->
+            expanded_related = Identifiers.expand_issue_id(related_id)
+            remove_single_relation(expanded_subject, expanded_related, user_type, all_relations)
+          end)
+
+        finish_relation_remove(results, options.output, Keyword.get(opts, :stderr, :stderr))
+      end
+    end
+  end
+
+  defp finish_relation_remove(results, output, stderr) do
+    print_relation_remove_results(results, output, stderr)
+
+    failed_count =
+      Enum.count(results, fn r ->
+        match?({:failed, _, _}, r) or match?({:ambiguous, _, _}, r) or
+          match?({:self_link, _}, r)
+      end)
+
+    if failed_count > 0 do
+      {:error, {:smells_bad, "#{failed_count} relation(s) failed to be removed"}}
+    else
+      :ok
     end
   end
 

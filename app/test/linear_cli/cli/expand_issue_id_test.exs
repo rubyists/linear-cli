@@ -76,6 +76,59 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
       assert output =~ "Choose a team"
     end
 
+    test "JSON mode rejects several favorited teams without prompting" do
+      Favorites.add("team", "ENG")
+      Favorites.add("team", "SUP")
+
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, message}} =
+                   Identifiers.expand_issue_id("42", output: "json")
+
+          assert message =~ "cannot prompt for a team"
+        end)
+
+      assert output == ""
+    end
+
+    test "JSON mode rejects several available teams without prompting" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(
+          conn,
+          teams_response([
+            %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+            %{"id" => "t2", "key" => "SUP", "name" => "Support"}
+          ])
+        )
+      end)
+
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, message}} =
+                   Identifiers.expand_issue_id("42", output: "json")
+
+          assert message =~ "cannot prompt for a team"
+        end)
+
+      assert output == ""
+    end
+
+    test "JSON mode uses the only available team without prompting" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(
+          conn,
+          teams_response([%{"id" => "t1", "key" => "ENG", "name" => "Engineering"}])
+        )
+      end)
+
+      output =
+        capture_io(fn ->
+          assert {:ok, "ENG-42"} = Identifiers.expand_issue_id("42", output: "json")
+        end)
+
+      assert output == ""
+    end
+
     test "an already-prefixed id and a UUID pass through unchanged, regardless of profile/favorites" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -87,6 +140,13 @@ defmodule LinearCli.CLI.ExpandIssueIdTest do
                assert Identifiers.expand_issue_id("550e8400-e29b-41d4-a716-446655440000") ==
                         "550e8400-e29b-41d4-a716-446655440000"
              end) == ""
+    end
+
+    test "output-aware expansion keeps full and UUID identifiers unchanged" do
+      assert {:ok, "CRY-1234"} = Identifiers.expand_issue_id("CRY-1234", output: "json")
+
+      uuid = "550e8400-e29b-41d4-a716-446655440000"
+      assert {:ok, ^uuid} = Identifiers.expand_issue_id(uuid, output: "json")
     end
   end
 end

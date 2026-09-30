@@ -41,10 +41,11 @@ defmodule LinearCli.CLI.Issue.Assignment do
   """
   @spec gimme_da_issue!(String.t(), keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def gimme_da_issue!(issue_id, opts \\ []) do
-    issue_id = Identifiers.expand_issue_id(issue_id)
     status_opt = parse_status_opt(opts)
 
-    with {:ok, me} <- resolve_me(opts),
+    with {:ok, issue_id} <-
+           Identifiers.expand_issue_id(issue_id, output: Keyword.get(opts, :output, "text")),
+         {:ok, me} <- resolve_me(opts),
          {:ok, [issue]} <- Linear.issues(%{ids: [issue_id]}),
          {:ok, state_id} <- resolve_status_for_issue(issue, status_opt) do
       assign_or_confirm(issue, me, issue_id, state_id)

@@ -26,8 +26,8 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   `--team`/`--project` passed explicitly always win over the active profile.
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
-    with {:ok, input} <-
-           Filter.build_input(flags, options, Enum.map(ids, &Identifiers.expand_issue_id/1)) do
+    with {:ok, expanded_ids} <- Identifiers.expand_issue_ids(ids, output: options.output),
+         {:ok, input} <- Filter.build_input(flags, options, expanded_ids) do
       with {:ok, issues} <- Linear.issues(input) do
         Display.show(issues, %{
           output: options.output,
@@ -61,18 +61,16 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
         {:error, {:smells_bad, "--graph and --web cannot be used together"}}
 
       graph? ->
-        expanded_id = Identifiers.expand_issue_id(issue_id)
-
-        with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
+        with {:ok, expanded_id} <- Identifiers.expand_issue_id(issue_id, output: options.output),
+             {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
              {:ok, graph} <- Graph.build(issue.identifier, issue) do
           Display.show_graph(graph, %{output: options.output})
           :ok
         end
 
       true ->
-        expanded_id = Identifiers.expand_issue_id(issue_id)
-
-        with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
+        with {:ok, expanded_id} <- Identifiers.expand_issue_id(issue_id, output: options.output),
+             {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}) do
           if web? do
             Browser.open_url(issue.url, opts)
           else

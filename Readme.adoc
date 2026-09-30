@@ -465,8 +465,11 @@ $ lc issue move --from Retired --to Active --dry-run <4>
 <4> Preview without mutating
 
 NOTE: In JSON mode, ID and bulk moves require `--yes` or `--dry-run`. Project
-names must match exactly. A name-based bulk move must provide `--team` or an
-active profile; UUID-only moves do not need either. Partial matches and other
+names must match exactly. A bare-number ID must resolve its team from an
+active profile, one favorite team, or the only available team. If team
+selection is ambiguous, the command writes a diagnostic to stderr and exits
+before mutation. A name-based bulk move must provide `--team` or an active
+profile; UUID-only moves do not need either. Partial matches and other
 prompt-required inputs return a diagnostic on stderr. A successful dry-run
 writes the selected issues as one JSON value.
 
