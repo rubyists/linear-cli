@@ -130,6 +130,17 @@ defmodule LinearCli.CLI.IssueCommandsHelpers do
     }
   end
 
+  def all_projects_page(projects, has_next_page, end_cursor) do
+    %{
+      "data" => %{
+        "projects" => %{
+          "edges" => Enum.map(projects, &%{"node" => &1, "cursor" => &1["id"]}),
+          "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+        }
+      }
+    }
+  end
+
   def issues_response(issues) do
     %{
       "data" => %{

@@ -58,7 +58,7 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   end
 
   defp resolve_project_id(search, _team_key, resolution) do
-    with {:ok, projects} <- Linear.projects() do
+    with {:ok, projects} <- Linear.workspace_projects() do
       resolve_project_match(projects, search, resolution)
     end
   end
@@ -127,7 +127,7 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   end
 
   defp assignee_members(nil) do
-    with {:ok, teams} <- Linear.teams() do
+    with {:ok, teams} <- Linear.workspace_teams() do
       teams
       |> Enum.reduce_while({:ok, %{}}, &collect_team_members/2)
       |> members_from_result()
@@ -135,7 +135,7 @@ defmodule LinearCli.CLI.Commands.Issues.Filter do
   end
 
   defp collect_team_members(team, {:ok, members_by_id}) do
-    case Linear.team_members(team.id) do
+    case Linear.workspace_team_members(team.id) do
       {:ok, members} ->
         members_by_id =
           Enum.reduce(members, members_by_id, fn member, acc ->

@@ -47,6 +47,71 @@ defmodule LinearCli.Linear.UserTest do
     assert {:ok, []} = Linear.team_members("t1")
   end
 
+  test "workspace_team_members/1 follows every member page for lookup" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      decoded = Jason.decode!(body)
+      query = decoded["query"]
+      after_cursor = decoded["variables"]["after"]
+      assert query =~ "members(first: 50, after: $after)"
+
+      {members, page_info} =
+        case after_cursor do
+          nil ->
+            {[%{"id" => "u1", "name" => "First", "email" => "first@example.com"}],
+             %{"hasNextPage" => true, "endCursor" => "member-1"}}
+
+          "member-1" ->
+            {[%{"id" => "u2", "name" => "Later", "email" => "later@example.com"}],
+             %{"hasNextPage" => false, "endCursor" => "member-2"}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "team" => %{
+            "members" => %{
+              "edges" => Enum.map(members, &%{"node" => &1, "cursor" => &1["id"]}),
+              "pageInfo" => page_info
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, members} = Linear.workspace_team_members("t1")
+    assert Enum.map(members, & &1.id) == ["u1", "u2"]
+  end
+
+  test "workspace_team_members/1 reports a malformed later page" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      after_cursor = Jason.decode!(body)["variables"]["after"]
+
+      response =
+        case after_cursor do
+          nil ->
+            %{
+              "data" => %{
+                "team" => %{
+                  "members" => %{
+                    "edges" => [],
+                    "pageInfo" => %{"hasNextPage" => true, "endCursor" => "member-1"}
+                  }
+                }
+              }
+            }
+
+          "member-1" ->
+            %{"data" => %{"team" => nil}}
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:error, %Ash.Error.Unknown{errors: [%{value: [{:unexpected_response, _}]}]}} =
+             Linear.workspace_team_members("t1")
+  end
+
   test "team_members/1 propagates API errors" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{"errors" => [%{"message" => "Unauthorized"}]})

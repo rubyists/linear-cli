@@ -42,6 +42,46 @@ defmodule LinearCli.Linear.PaginateTest do
     refute_receive {:cursor, "c2"}
   end
 
+  test "all_pages follows every page without the default record limit" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+      send(test_pid, {:cursor, cursor})
+
+      response =
+        case cursor do
+          nil -> response(1..100, true, "c1")
+          "c1" -> response(101..120, false, "c2")
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:ok, values} = Paginate.all_pages("query", "issues", &variables_fun/1, & &1["id"])
+    assert length(values) == 120
+    assert List.first(values) == 1
+    assert List.last(values) == 120
+    assert_receive {:cursor, nil}
+    assert_receive {:cursor, "c1"}
+  end
+
+  test "all_pages returns a later-page HTTP error" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+
+      case cursor do
+        nil -> Req.Test.json(conn, response([1], true, "c1"))
+        "c1" -> Plug.Conn.resp(conn, 502, "upstream unavailable")
+      end
+    end)
+
+    assert {:error, {:http_error, 502}} =
+             Paginate.all_pages("query", "issues", &variables_fun/1, & &1["id"])
+  end
+
   test "returns the first page and reports more records without following the cursor" do
     test_pid = self()
 

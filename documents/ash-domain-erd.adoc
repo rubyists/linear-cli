@@ -300,12 +300,33 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `Linear.User.Read.Me`
 | `{ viewer { ... } }` — `viewer` query with `User.fields_with_teams/0`
 
+| `User`
+| `team_members`
+| `:by_team`
+| read
+| `Linear.User.Read.ByTeam`
+| `team(id: $id) { members(first: 50) { ... } }` — one page for team-scoped assignment
+
+| `User`
+| `workspace_team_members`
+| `:by_team_for_lookup`
+| read
+| `Linear.User.Read.ByTeamForLookup`
+| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page for workspace-wide matching
+
 | `Team`
 | `teams`
 | `:all`
 | read
 | `Linear.Team.Read.All`
 | `teams(first:, after:)` — paginated with `Team.base_fields/0`
+
+| `Team`
+| `workspace_teams`
+| `:all_for_lookup`
+| read
+| `Linear.Team.Read.AllForLookup`
+| `teams(first:, after:)` — follows every page for workspace-wide member matching
 
 | `Team`
 | `my_teams`
@@ -327,6 +348,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | read
 | `Linear.Project.Read.All`
 | `projects(first:, after:)` — paginated with `Project.base_fields/0`
+
+| `Project`
+| `workspace_projects`
+| `:all_for_lookup`
+| read
+| `Linear.Project.Read.AllForLookup`
+| `projects(first:, after:)` — follows every page for workspace-wide project matching
 
 | `Project`
 | `my_projects`
@@ -554,6 +582,9 @@ and returns the common issue-list arguments for the domain. Filter-only
 unassignment requests strict project matching and uses the one-page issue
 helper, which caps the batch at 100 and reports more matches. Ordinary issue
 listing keeps the existing permissive project resolution and 100-record cap.
+Workspace project lookup uses `Project.workspace_projects`. Workspace assignee
+lookup follows every page of every accessible team and deduplicates members by
+user ID. Team-scoped lookup keeps the existing one-page member action.
 
 === `LinearCli.Linear.Paginate`
 
@@ -563,16 +594,24 @@ Provides `all/5`: fetches cursor-paginated GraphQL connections
 (`edges { node { ... } cursor } pageInfo { hasNextPage endCursor }`)
 until `max` records are collected or the API signals no more pages. It returns
 an error for a repeated continuation cursor instead of looping forever.
+`all_pages/4` follows every page without a record limit. Lookup-only actions use
+this variant. The bounded `all/5` path remains unchanged for issue operations.
 `first_page/4` fetches one page, returns its `hasNextPage` value, and never
 follows a continuation cursor.
 Used by:
 
 * `Team.Read.All` — `teams(first:, after:)` paginated query
+* `Team.Read.AllForLookup` — complete workspace team lookup
 * `Project.Read.All` — `projects(first:, after:)` paginated query
+* `Project.Read.AllForLookup` — complete workspace project lookup
 * `Issue.Read.List` — `issues(filter:, first:, after:)` paginated list
   (the find-by-ids path fans out individual `issue(id:)` calls instead)
 * `Issue.Actions.ListFirstPage` — wraps `Issue.Read.List.first_page/1` in an
   Ash generic action for the filter-only unassign path
+
+`User.Read.ByTeamForLookup` follows the nested member connection with the same
+cursor advancement guard. It returns every member for one team before the CLI
+deduplicates the workspace-wide candidate set.
 
 == Maintenance contract
 

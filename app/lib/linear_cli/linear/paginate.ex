@@ -23,6 +23,16 @@ defmodule LinearCli.Linear.Paginate do
   end
 
   @doc """
+  Fetches every page of a GraphQL connection and decodes each record.
+
+  This variant has no record limit. Use it only for lookup candidate sets that
+  must be complete before matching, rather than for bounded issue operations.
+  """
+  def all_pages(document, field_name, variables_fun, decode_fun) do
+    do_all(document, field_name, variables_fun, decode_fun, nil, :unbounded, [])
+  end
+
+  @doc """
   Fetches one GraphQL connection page and returns its decoded records and
   `hasNextPage` value.
 
@@ -64,8 +74,10 @@ defmodule LinearCli.Linear.Paginate do
     end
   end
 
+  defp reached_limit?(_acc, :unbounded), do: false
   defp reached_limit?(acc, max), do: length(acc) >= max
 
+  defp take_max(acc, :unbounded), do: acc
   defp take_max(acc, max), do: Enum.take(acc, max)
 
   # Safely extracts the named connection from the response data. Returns

@@ -30,6 +30,36 @@ defmodule LinearCli.Linear.ProjectTest do
     assert {:ok, [%Linear.Project{id: "p1", name: "Manhattan"}]} = Linear.projects()
   end
 
+  test "workspace_projects/0 follows every project page for lookup" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"after" => after_cursor}} = Jason.decode!(body)
+
+      {projects, page_info} =
+        case after_cursor do
+          nil ->
+            {[%{"id" => "p1", "name" => "First"}],
+             %{"hasNextPage" => true, "endCursor" => "page-1"}}
+
+          "page-1" ->
+            {[%{"id" => "p2", "name" => "Later"}],
+             %{"hasNextPage" => false, "endCursor" => "page-2"}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "projects" => %{
+            "edges" => Enum.map(projects, &%{"node" => &1, "cursor" => &1["id"]}),
+            "pageInfo" => page_info
+          }
+        }
+      })
+    end)
+
+    assert {:ok, projects} = Linear.workspace_projects()
+    assert Enum.map(projects, & &1.id) == ["p1", "p2"]
+  end
+
   test "projects_by_team/1 paginates only the selected team's projects" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
