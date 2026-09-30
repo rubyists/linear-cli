@@ -6,7 +6,7 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   """
 
   alias LinearCli.CLI.{Display, Prompt}
-  alias LinearCli.CLI.Issue.{Assignment, PullRequest}
+  alias LinearCli.CLI.Issue.{Assignment, Identifiers, PullRequest}
   alias LinearCli.Git
 
   @doc """
@@ -25,7 +25,9 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   """
   @spec issue_develop(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
   def issue_develop(result, opts \\ [])
-  def issue_develop(%{args: %{issue_id: issue_id}}, opts), do: run_develop(issue_id, opts)
+
+  def issue_develop(%{args: %{issue_id: issue_id}} = result, opts),
+    do: run_develop(issue_id, maybe_put(opts, :output, result_output(result)))
 
   @doc """
   Ported from commands/issue/pr.rb: resolves/self-assigns `issue_id`, checks
@@ -42,6 +44,8 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   def issue_pr(result, opts \\ [])
 
   def issue_pr(%{args: %{issue_id: issue_id}, options: options}, opts) do
+    opts = maybe_put(opts, :output, Map.get(options, :output, "text"))
+
     with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
       Prompt.ok("Checked out branch #{issue.branch_name}")
@@ -72,10 +76,13 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   def issue_take(result, opts \\ [])
 
   def issue_take(%{unknown: issue_ids, options: options}, opts) do
-    opts = maybe_put_status(opts, Map.get(options, :status))
+    opts =
+      opts
+      |> maybe_put_status(Map.get(options, :status))
+      |> maybe_put(:output, Map.get(options, :output, "text"))
 
     with {:ok, updates} <- take_issues(issue_ids, opts) do
-      Display.show(updates, %{output: options.output})
+      Display.show(updates, %{output: Map.get(options, :output, "text")})
       :ok
     end
   end
@@ -112,27 +119,40 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   defp maybe_put(list, _key, nil), do: list
   defp maybe_put(list, key, value), do: Keyword.put(list, key, value)
 
+  defp result_output(%{options: options}), do: Map.get(options, :output, "text")
+  defp result_output(_result), do: "text"
+
   defp maybe_put_status(opts, nil), do: opts
   defp maybe_put_status(opts, status), do: Keyword.put(opts, :status, status)
 
   defp take_issues(issue_ids, opts) do
-    issue_ids
-    |> Enum.reduce_while({:ok, []}, fn issue_id, {:ok, acc} ->
-      case Assignment.gimme_da_issue!(issue_id, opts) do
-        {:ok, issue} ->
-          {:cont, {:ok, [issue | acc]}}
+    with {:ok, resolved_ids} <- preflight_take_ids(issue_ids, opts) do
+      resolved_ids
+      |> Enum.reduce_while({:ok, []}, fn issue_id, {:ok, acc} ->
+        case Assignment.gimme_da_issue!(issue_id, opts) do
+          {:ok, issue} ->
+            {:cont, {:ok, [issue | acc]}}
 
-        {:error, %Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}} ->
-          Prompt.warn("No issue found with id #{id}")
-          {:cont, {:ok, acc}}
+          {:error, %Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}} ->
+            Prompt.warn("No issue found with id #{id}")
+            {:cont, {:ok, acc}}
 
-        {:error, reason} ->
-          {:halt, {:error, reason}}
+          {:error, reason} ->
+            {:halt, {:error, reason}}
+        end
+      end)
+      |> case do
+        {:ok, acc} -> {:ok, Enum.reverse(acc)}
+        error -> error
       end
-    end)
-    |> case do
-      {:ok, acc} -> {:ok, Enum.reverse(acc)}
-      error -> error
+    end
+  end
+
+  defp preflight_take_ids(issue_ids, opts) do
+    if Keyword.get(opts, :output, "text") == "json" do
+      Identifiers.expand_issue_ids(issue_ids, output: "json")
+    else
+      {:ok, issue_ids}
     end
   end
 end

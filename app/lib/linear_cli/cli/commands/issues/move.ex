@@ -41,8 +41,9 @@ defmodule LinearCli.CLI.Commands.Issues.Move do
 
   defp move_issues_by_id(issue_ids, options, flags) do
     with :ok <- validate_issue_ids(issue_ids),
+         {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: options.output),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+           Linear.issues(%{ids: expanded_ids}),
          {:ok, project} <- resolve_move_project(issues, options) do
       print_move_plan(issues, project, options.output)
       execute_moves_if_confirmed(issues, project, flags, options.output)

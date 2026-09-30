@@ -31,12 +31,15 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   """
   @spec issue_update(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_update(%{unknown: issue_ids, options: options, flags: flags}) do
+    output = Map.get(options, :output, "text")
+
     with :ok <- validate_issue_ids(issue_ids),
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          {:ok, priority} <- parse_priority(Map.get(options, :priority)),
+         {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}) do
+           Linear.issues(%{ids: expanded_ids}) do
       update_opts = [
         comment: options.comment,
         description: description,
@@ -82,20 +85,23 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   """
   @spec issue_comment(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_comment(%{unknown: issue_ids, options: options}) do
+    output = Map.get(options, :output, "text")
+
     with :ok <- validate_issue_ids(issue_ids),
          :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
          {:ok, comment_text} <- resolve_body_from_file(options, :comment),
+         {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+           Linear.issues(%{ids: expanded_ids}),
          body = WhatFor.comment_for(hd(issues), comment_text),
          {:ok, pairs} <- add_comments_to_issues(issues, body) do
-      unless options.output == "json" do
+      unless output == "json" do
         Enum.each(pairs, fn {issue, _comment} ->
           Prompt.ok("Comment added to #{issue.identifier}")
         end)
       end
 
-      Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: options.output})
+      Display.show(one_or_many(Enum.map(pairs, &elem(&1, 1))), %{output: output})
       :ok
     end
   end
@@ -113,12 +119,15 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   """
   @spec issue_status(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_status(%{unknown: issue_ids, options: options}) do
+    output = Map.get(options, :output, "text")
+
     with :ok <- validate_issue_ids(issue_ids),
+         {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
          {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+           Linear.issues(%{ids: expanded_ids}),
          {:ok, planned_updates} <- plan_status_updates(issues, options.status),
          {:ok, completed_updates} <- apply_status_updates(planned_updates, options.comment) do
-      show_status_updates(completed_updates, options.output)
+      show_status_updates(completed_updates, output)
     end
   end
 
@@ -150,17 +159,18 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   """
   @spec issue_assign(Optimus.ParseResult.t()) :: :ok | {:error, term()}
   def issue_assign(%{args: %{issue_id: issue_id}, options: options}) do
-    expanded_id = Identifiers.expand_issue_id(issue_id)
+    output = Map.get(options, :output, "text")
 
-    with {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
+    with {:ok, expanded_id} <- Identifiers.expand_issue_id(issue_id, output: output),
+         {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
          {:ok, members} <- Linear.team_members(issue.team.id),
          :ok <- guard_has_members(members, issue),
          {:ok, target_member} <- resolve_target_member(members, options.assignee),
          {:ok, state_id} <- resolve_optional_status(issue, Map.get(options, :status)),
          {:ok, updated} <- Linear.assign_issue(issue, target_member.id, %{state_id: state_id}) do
-      Display.show(updated, %{output: options.output})
+      Display.show(updated, %{output: output})
 
-      if options.output != "json" do
+      if output != "json" do
         msg = "#{updated.identifier} assigned to #{target_member.name}"
 
         msg =
@@ -176,8 +186,10 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   end
 
   defp issue_unassign_by_ids(issue_ids, options) do
-    with {:ok, issues} <-
-           Linear.issues(%{ids: Enum.map(issue_ids, &Identifiers.expand_issue_id/1)}),
+    output = Map.get(options, :output, "text")
+
+    with {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
+         {:ok, issues} <- Linear.issues(%{ids: expanded_ids}),
          {:ok, updated_issues} <- unassign_issues(issues) do
       show_unassign_results(updated_issues, options)
     end
