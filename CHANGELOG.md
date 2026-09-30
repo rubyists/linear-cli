@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.11.2](https://github.com/rubyists/linear-cli/compare/v2.11.1...v2.11.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **cli:** fail closed on destructive confirmations [EXT-69] ([#292](https://github.com/rubyists/linear-cli/issues/292)) ([d5ee641](https://github.com/rubyists/linear-cli/commit/d5ee641578461d35cf7ee86e4b4afbebc8a44782))
+* **cli:** keep bulk JSON output parseable ([#293](https://github.com/rubyists/linear-cli/issues/293)) ([d03b838](https://github.com/rubyists/linear-cli/commit/d03b838bf120778fc583ef9e41345c2cda6a2e92))
+* **cli:** reject ambiguous bare IDs in JSON mode ([#298](https://github.com/rubyists/linear-cli/issues/298)) ([da83866](https://github.com/rubyists/linear-cli/commit/da83866be5309b794762e2aae5f2cc87db511219))
+* **issues:** clarify JSON project diagnostics ([#297](https://github.com/rubyists/linear-cli/issues/297)) ([ebe18b9](https://github.com/rubyists/linear-cli/commit/ebe18b939e5f6fa38a25e12ebec7159659fa5064))
+* **issues:** paginate workspace lookup candidates ([#295](https://github.com/rubyists/linear-cli/issues/295)) ([077f10b](https://github.com/rubyists/linear-cli/commit/077f10bbf2eee7e4a9d8101be8f37c70f526ed75))
+
 ## [2.11.1](https://github.com/rubyists/linear-cli/compare/v2.11.0...v2.11.1) (2026-09-28)
 
 
