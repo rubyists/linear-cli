@@ -36,3 +36,14 @@ commands.
 
 The shared prompt renderer writes prompts to stdout. That output would precede
 the JSON value and make it invalid for scripts that parse stdout.
+
+== EXT-72 addendum: bare-number issue IDs
+
+The shared bare-number issue-ID expander follows the same non-interactive rule
+in JSON mode. An active profile, one favorite team, or the only available team
+can resolve the team without a prompt. If more than one team is available, the
+command writes a diagnostic to stderr and stops before any lookup or mutation.
+Text-mode expansion, full identifiers, and UUID identifiers are unchanged.
+
+This addendum applies to every command that uses the shared bare-number path.
+It does not change partial project or assignee resolution.
