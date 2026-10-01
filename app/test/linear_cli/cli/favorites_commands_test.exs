@@ -162,6 +162,41 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
       assert LinearCli.Favorites.list("project") == []
     end
 
+    test "JSON partial project input is rejected before project update mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      {:ok, stderr} = StringIO.open("")
+
+      stdout =
+        capture_io(fn ->
+          LinearCli.CLI.main(
+            [
+              "project",
+              "update",
+              "Platform",
+              "--team",
+              "ENG",
+              "--body",
+              "Update",
+              "--health",
+              "onTrack",
+              "--output",
+              "json"
+            ],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      {_input, stderr_text} = StringIO.contents(stderr)
+      StringIO.close(stderr)
+
+      assert stdout == ""
+      assert stderr_text =~ "exact project match"
+      assert_received {:halted, 22}
+    end
+
     test "JSON favorite resolves exact project and emits one value" do
       output =
         capture_io(fn ->
