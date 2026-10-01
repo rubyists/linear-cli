@@ -60,7 +60,7 @@ has no JSON value to print. These checks happen before any mutation that could
 otherwise precede a prompt.
 
 Successful profile, favorite, development, and update commands write one
-JSON object. Informational status lines that remain useful are sent to stderr.
+JSON value. Informational status lines that remain useful are sent to stderr.
 Text-mode prompts and messages remain unchanged. This is a caller-level
 decision; it does not redesign the shared display layer.
 
