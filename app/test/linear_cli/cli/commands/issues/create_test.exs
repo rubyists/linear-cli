@@ -7,6 +7,61 @@ defmodule LinearCli.CLI.Commands.Issues.CreateTest do
   alias LinearCli.Linear.User
 
   describe "issue create (Ruby: commands/issue/create.rb)" do
+    test "JSON mode rejects interactive creation unless --yes is given" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --yes for issue create"}} =
+                   Create.issue_create(%{
+                     options: %{output: "json", title: nil, description: nil},
+                     flags: %{yes: false, develop: false, no_take: false}
+                   })
+        end)
+
+      assert output == ""
+    end
+
+    test "JSON --yes rejects a partial project before issue creation" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "issueCreate") ->
+            raise "partial JSON project input must be rejected before issue creation"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, message}} =
+                   Create.issue_create(%{
+                     options: %{
+                       output: "json",
+                       title: "T",
+                       description: "D",
+                       team: "ENG",
+                       labels: [],
+                       project: "Manhattan",
+                       priority: nil
+                     },
+                     flags: %{yes: true, develop: false, no_take: true}
+                   })
+
+          assert message =~ "exact project match"
+        end)
+
+      assert output == ""
+    end
+
     test "resolves every field, declines to take it, and displays the created issue" do
       stub_responses([
         {"team(id: $id)", %{"data" => %{"team" => team_map()}}},

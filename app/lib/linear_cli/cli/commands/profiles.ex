@@ -4,7 +4,7 @@ defmodule LinearCli.CLI.Commands.Profiles do
   New in this port - Ruby has no equivalent.
   """
 
-  alias LinearCli.CLI.{Display, Prompt}
+  alias LinearCli.CLI.{Display, Output, Prompt}
   alias LinearCli.Profiles
 
   @doc """
@@ -34,10 +34,15 @@ defmodule LinearCli.CLI.Commands.Profiles do
   its team/project become the defaults `issue create`/`issue list` fall
   back to when `--team`/`--project` are omitted.
   """
-  def profile_use(%{args: %{name: name}}) do
+  def profile_use(%{args: %{name: name}, options: options}) do
     case Profiles.activate(name) do
       :ok ->
-        Prompt.ok("Switched to profile #{name}")
+        if Output.json?(options) do
+          Output.success("profile_use", %{"profile" => name}, options)
+        else
+          Prompt.ok("Switched to profile #{name}")
+        end
+
         :ok
 
       {:error, :not_found} ->
@@ -48,25 +53,44 @@ defmodule LinearCli.CLI.Commands.Profiles do
   @doc "New in this port - Ruby has no equivalent. Shows the active profile, if any."
   def profile_show(%{options: options}) do
     case Profiles.active() do
-      nil -> Prompt.warn("No active profile")
-      profile -> Display.show(profile, %{output: options.output})
+      nil ->
+        if Output.json?(options) do
+          Output.status(:warn, "No active profile", options)
+          Display.show(nil, %{output: "json"})
+        else
+          Prompt.warn("No active profile")
+        end
+
+      profile ->
+        Display.show(profile, %{output: options.output})
     end
 
     :ok
   end
 
   @doc "New in this port - Ruby has no equivalent. Deactivates the active profile without deleting it."
-  def profile_clear(_result) do
+  def profile_clear(%{options: options}) do
     Profiles.clear()
-    Prompt.ok("Cleared active profile")
+
+    if Output.json?(options) do
+      Output.success("profile_clear", %{}, options)
+    else
+      Prompt.ok("Cleared active profile")
+    end
+
     :ok
   end
 
   @doc "New in this port - Ruby has no equivalent. Deletes a saved profile."
-  def profile_delete(%{args: %{name: name}}) do
+  def profile_delete(%{args: %{name: name}, options: options}) do
     case Profiles.delete(name) do
       :ok ->
-        Prompt.ok("Deleted profile #{name}")
+        if Output.json?(options) do
+          Output.success("profile_delete", %{"profile" => name}, options)
+        else
+          Prompt.ok("Deleted profile #{name}")
+        end
+
         :ok
 
       {:error, :not_found} ->

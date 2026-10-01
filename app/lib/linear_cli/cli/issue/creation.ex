@@ -77,20 +77,29 @@ defmodule LinearCli.CLI.Issue.Creation do
       project_search = opts[:project] || Profiles.default_project()
 
       with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: project_search}) do
-        project =
-          if project_search,
-            do: Projects.project_for_strict(projects, project_search),
-            else: nil
+        with {:ok, project} <- resolve_project(projects, project_search) do
+          label_ids = Enum.map(labels, & &1.id)
 
-        label_ids = Enum.map(labels, & &1.id)
+          params =
+            %{label_ids: label_ids}
+            |> maybe_put_project_id(project)
+            |> maybe_put_priority(opts[:priority])
 
-        params =
-          %{label_ids: label_ids}
-          |> maybe_put_project_id(project)
-          |> maybe_put_priority(opts[:priority])
-
-        Linear.create_issue(title, description, team.id, params)
+          Linear.create_issue(title, description, team.id, params)
+        end
       end
+    end
+  end
+
+  defp resolve_project(_projects, nil), do: {:ok, nil}
+
+  defp resolve_project(projects, search) do
+    case Projects.project_for_strict(projects, search) do
+      nil ->
+        {:error, {:smells_bad, "--yes requires an exact project match for #{inspect(search)}"}}
+
+      project ->
+        {:ok, project}
     end
   end
 

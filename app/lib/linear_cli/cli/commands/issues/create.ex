@@ -28,7 +28,10 @@ defmodule LinearCli.CLI.Commands.Issues.Create do
   def issue_create(result, opts \\ [])
 
   def issue_create(%{options: options, flags: flags}, opts) do
-    with :ok <- validate_no_take_develop(flags),
+    command_opts = Keyword.put(opts, :output, Map.get(options, :output, "text"))
+
+    with :ok <- validate_json_create(options, flags),
+         :ok <- validate_no_take_develop(flags),
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          create_opts = [
@@ -41,7 +44,7 @@ defmodule LinearCli.CLI.Commands.Issues.Create do
            yes: flags.yes
          ],
          {:ok, issue} <- Creation.make_da_issue!(create_opts),
-         :ok <- maybe_take(issue, flags, opts) do
+         :ok <- maybe_take(issue, flags, command_opts) do
       Display.show(issue, %{output: options.output})
       if flags.develop, do: run_develop(issue.id, opts), else: :ok
     end
@@ -51,6 +54,23 @@ defmodule LinearCli.CLI.Commands.Issues.Create do
     do: {:error, {:smells_bad, "--no-take cannot be used with --dev"}}
 
   defp validate_no_take_develop(_flags), do: :ok
+
+  defp validate_json_create(options, flags) do
+    if Map.get(options, :output, "text") != "json" do
+      :ok
+    else
+      cond do
+        not Map.get(flags, :yes, false) ->
+          {:error, {:smells_bad, "JSON output requires --yes for issue create"}}
+
+        Map.get(flags, :develop, false) ->
+          {:error, {:smells_bad, "JSON output cannot be used with --dev"}}
+
+        true ->
+          :ok
+      end
+    end
+  end
 
   defp maybe_take(_issue, %{no_take: true}, _opts), do: :ok
 

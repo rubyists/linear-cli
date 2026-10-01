@@ -36,7 +36,7 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
 
   alias LinearCli.CLI.Issue.{PullRequest, WorkflowStates}
-  alias LinearCli.CLI.{Projects, Prompt, WhatFor}
+  alias LinearCli.CLI.{Output, Projects, Prompt, WhatFor}
   alias LinearCli.Linear
 
   @doc """
@@ -48,12 +48,14 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
   @spec issue_comment(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.Comment{}} | {:error, term()}
-  def issue_comment(issue, comment) do
+  def issue_comment(issue, comment), do: issue_comment(issue, comment, [])
+
+  def issue_comment(issue, comment, opts) do
     body = WhatFor.comment_for(issue, comment)
 
     case Linear.add_comment(issue.identifier, body) do
       {:ok, created} ->
-        Prompt.ok("Comment added to #{issue.identifier}")
+        Output.status(:ok, "Comment added to #{issue.identifier}", opts)
         {:ok, created}
 
       {:error, reason} ->
@@ -76,16 +78,16 @@ defmodule LinearCli.CLI.Issue.Actions do
   @spec cancel_issue(%Linear.Issue{}, keyword()) :: {:ok, %Linear.Issue{}} | {:error, term()}
   def cancel_issue(issue, opts \\ []) do
     if issue.state && issue.state.type in ["cancelled", "canceled"] do
-      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
+      Output.status(:ok, "#{issue.identifier} is already #{issue.state.name}", opts)
       {:ok, issue}
     else
       reason =
         WhatFor.reason_for(opts[:reason], four: "cancelling #{issue.identifier} - #{issue.title}")
 
-      with {:ok, _comment} <- issue_comment(issue, reason),
+      with {:ok, _comment} <- issue_comment(issue, reason, opts),
            {:ok, cancel_state} <- WorkflowStates.cancelled_state_for(issue, opts[:status]),
            {:ok, updated} <- Linear.close_issue(issue, cancel_state.id, %{trash: !!opts[:trash]}) do
-        Prompt.ok("#{issue.identifier} was cancelled")
+        Output.status(:ok, "#{issue.identifier} was cancelled", opts)
         {:ok, updated}
       end
     end
@@ -111,7 +113,7 @@ defmodule LinearCli.CLI.Issue.Actions do
     done = if cancelled, do: "cancelled", else: "closed"
 
     if issue.state && issue.state.type in target_types do
-      Prompt.ok("#{issue.identifier} is already #{issue.state.name}")
+      Output.status(:ok, "#{issue.identifier} is already #{issue.state.name}", opts)
       {:ok, issue}
     else
       doing = if cancelled, do: "cancelling", else: "closing"
@@ -119,11 +121,11 @@ defmodule LinearCli.CLI.Issue.Actions do
       reason =
         WhatFor.reason_for(opts[:reason], four: "#{doing} *#{issue.identifier} - #{issue.title}*")
 
-      with {:ok, _comment} <- issue_comment(issue, reason),
+      with {:ok, _comment} <- issue_comment(issue, reason, opts),
            {:ok, workflow_state} <- state_for(cancelled, issue, opts[:status]),
            {:ok, updated} <-
              Linear.close_issue(issue, workflow_state.id, %{trash: !!opts[:trash]}) do
-        Prompt.ok("#{issue.identifier} was #{done}")
+        Output.status(:ok, "#{issue.identifier} was #{done}", opts)
         {:ok, updated}
       end
     end
@@ -168,11 +170,35 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
   @spec attach_project(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
-  def attach_project(issue, project_search) do
+  def attach_project(issue, project_search, opts \\ []) do
     with {:ok, projects} <-
            Linear.projects_by_team(issue.team.id, %{search: project_search}) do
-      project = Projects.project_for(projects, project_search)
-      move_issue(issue, project)
+      project =
+        if Output.json?(opts) do
+          Projects.project_for_strict(projects, project_search)
+        else
+          Projects.project_for(projects, project_search)
+        end
+
+      if project do
+        case Linear.attach_issue_to_project(issue, project.id) do
+          {:ok, updated} ->
+            Output.status(:ok, "#{issue.identifier} was moved to #{project.name}", opts)
+            {:ok, updated}
+
+          {:error, reason} ->
+            {:error, reason}
+        end
+      else
+        message =
+          if Output.json?(opts) do
+            "JSON output requires an exact project match for #{inspect(project_search)}"
+          else
+            "No project found matching #{project_search}"
+          end
+
+        {:error, {:smells_bad, message}}
+      end
     end
   end
 
@@ -183,12 +209,12 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
   @spec update_description(%Linear.Issue{}, String.t() | nil) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
-  def update_description(issue, description_input) do
+  def update_description(issue, description_input, opts \\ []) do
     description = WhatFor.description_for(description_input)
 
     case Linear.update_issue_description(issue, description) do
       {:ok, updated} ->
-        Prompt.ok("#{issue.identifier} description updated")
+        Output.status(:ok, "#{issue.identifier} description updated", opts)
         {:ok, updated}
 
       {:error, reason} ->
@@ -204,10 +230,10 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
   @spec set_priority(%Linear.Issue{}, non_neg_integer()) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
-  def set_priority(issue, priority_value) do
+  def set_priority(issue, priority_value, opts \\ []) do
     case Linear.set_issue_priority(issue, priority_value) do
       {:ok, updated} ->
-        Prompt.ok("#{issue.identifier} priority updated")
+        Output.status(:ok, "#{issue.identifier} priority updated", opts)
         {:ok, updated}
 
       {:error, reason} ->
@@ -237,15 +263,15 @@ defmodule LinearCli.CLI.Issue.Actions do
   """
   @spec update_issue(%Linear.Issue{}, keyword()) :: :ok | {:error, term()}
   def update_issue(issue, opts \\ []) do
-    with :ok <- maybe_comment(issue, opts[:comment]) do
+    with :ok <- maybe_comment(issue, opts[:comment], opts) do
       dispatch_update(issue, opts)
     end
   end
 
-  defp maybe_comment(_issue, nil), do: :ok
+  defp maybe_comment(_issue, nil, _opts), do: :ok
 
-  defp maybe_comment(issue, comment) do
-    case issue_comment(issue, comment) do
+  defp maybe_comment(issue, comment, opts) do
+    case issue_comment(issue, comment, opts) do
       {:ok, _comment} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -256,17 +282,17 @@ defmodule LinearCli.CLI.Issue.Actions do
       opts[:close] -> normalize(close_issue(issue, opts))
       opts[:cancel] -> normalize(cancel_issue(issue, opts))
       opts[:pr] -> PullRequest.issue_pr(issue, opts)
-      opts[:project] -> normalize(attach_project(issue, opts[:project]))
-      opts[:description] -> normalize(update_description(issue, opts[:description]))
-      not is_nil(opts[:priority]) -> normalize(set_priority(issue, opts[:priority]))
+      opts[:project] -> normalize(attach_project(issue, opts[:project], opts))
+      opts[:description] -> normalize(update_description(issue, opts[:description], opts))
+      not is_nil(opts[:priority]) -> normalize(set_priority(issue, opts[:priority], opts))
       opts[:comment] -> :ok
-      true -> no_action_taken()
+      true -> no_action_taken(opts)
     end
   end
 
-  defp no_action_taken do
-    Prompt.warn("No action taken, no options specified")
-    Prompt.ok("Issue was not updated")
+  defp no_action_taken(opts) do
+    Output.status(:warn, "No action taken, no options specified", opts)
+    Output.status(:ok, "Issue was not updated", opts)
     :ok
   end
 
