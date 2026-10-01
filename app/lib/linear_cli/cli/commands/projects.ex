@@ -4,7 +4,7 @@ defmodule LinearCli.CLI.Commands.Projects do
   Ported from vendor/ruby-linear-cli/lib/linear/commands/project/.
   """
 
-  alias LinearCli.CLI.{Display, Projects, Prompt, WhatFor}
+  alias LinearCli.CLI.{Display, Output, Projects, Prompt, WhatFor}
   alias LinearCli.{Favorites, Linear, Profiles}
 
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
@@ -26,30 +26,38 @@ defmodule LinearCli.CLI.Commands.Projects do
   `project list` defaults to showing just favorites (`--all` overrides).
   """
   def project_favorite(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search) do
+    with {:ok, team} <- resolve_team(options),
+         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
+         {:ok, project} <- resolve_project(projects, search, options) do
       Favorites.add("project", project.id)
-      Prompt.ok("Favorited project #{project.name}")
+
+      if Output.json?(options) do
+        Output.success("project_favorite", %{"project" => project.id}, options)
+      else
+        Prompt.ok("Favorited project #{project.name}")
+      end
+
       :ok
     else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
       {:error, reason} -> {:error, reason}
     end
   end
 
   @doc "New in this port - Ruby has no equivalent. Un-favorites a project."
   def project_unfavorite(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search) do
+    with {:ok, team} <- resolve_team(options),
+         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
+         {:ok, project} <- resolve_project(projects, search, options) do
       Favorites.remove("project", project.id)
-      Prompt.ok("Un-favorited project #{project.name}")
+
+      if Output.json?(options) do
+        Output.success("project_unfavorite", %{"project" => project.id}, options)
+      else
+        Prompt.ok("Un-favorited project #{project.name}")
+      end
+
       :ok
     else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -63,17 +71,59 @@ defmodule LinearCli.CLI.Commands.Projects do
   profile, or an interactive prompt.
   """
   def project_update(%{args: %{project: search}, options: options}) do
-    team = WhatFor.team_for(options.team || Profiles.default_team())
-
-    with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search),
+    with {:ok, team} <- resolve_team(options),
+         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
+         {:ok, project} <- resolve_project(projects, search, options),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do
       Display.show(update, %{output: options.output})
       :ok
     else
-      nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_team(options) do
+    key = options.team || Profiles.default_team()
+
+    if Output.json?(options) do
+      strict_team(key)
+    else
+      {:ok, WhatFor.team_for(key)}
+    end
+  end
+
+  defp strict_team(nil) do
+    case Linear.my_teams() do
+      {:ok, [team]} -> {:ok, team}
+      {:ok, []} -> {:error, {:smells_bad, "JSON output requires --team or an active profile"}}
+      {:ok, _teams} -> {:error, {:smells_bad, "JSON output requires --team or an active profile"}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp strict_team(key) do
+    case Linear.find_team(key) do
+      {:ok, team} -> {:ok, team}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_project(projects, search, options) do
+    if Output.json?(options) do
+      case Projects.project_for_strict(projects, search) do
+        nil ->
+          {:error,
+           {:smells_bad, "JSON output requires an exact project match for #{inspect(search)}"}}
+
+        project ->
+          {:ok, project}
+      end
+    else
+      case Projects.project_for(projects, search) do
+        nil -> {:error, {:smells_bad, "No project found matching #{search}"}}
+        project -> {:ok, project}
+      end
     end
   end
 

@@ -243,6 +243,9 @@ $ lcls --labels Bug --include-labels <9>
 <8> Filter to issues carrying "Bug" or "Feature" (case-insensitive OR); all labels on each match are shown
 <9> Explicit `--include-labels` is redundant when `--labels` is also present; both work together
 
+In JSON mode, a project filter must match one project exactly. Partial project
+matches are rejected on stderr instead of opening the text-mode selection menu.
+
 ==== View an Issue
 
 Show full details for a single issue (title, description, and all comments):
@@ -259,6 +262,9 @@ $ lc issue view CRY-1234 -w <4>
 <2> Output as JSON
 <3> Open the issue in your browser instead of printing it
 <4> Short form of `--web`
+
+NOTE: JSON output cannot be combined with `--web`, because opening a browser
+does not produce an issue value on stdout.
 
 ==== Assign one or more issues to yourself (take em!)
 
@@ -285,6 +291,9 @@ $ lc issue assign CRY-1234 <4>
 <2> Assign and move to the named workflow state in one update
 <3> Short form of `--status`
 <4> Prompts for the assignee interactively
+
+NOTE: In JSON mode, `--assignee` is required. An omitted assignee is an
+interactive choice in text mode and is rejected on stderr in JSON mode.
 
 ==== Unassign one or more issues
 
@@ -344,6 +353,11 @@ NOTE: `--yes` creates and self-assigns an issue without prompting. Add
 
 TIP: When creating an issue, you can use the `--dev` (or `--develop`) option to immediately start development on the issue.
 
+NOTE: JSON issue creation requires `--yes`, which supplies all required
+fields without prompts. JSON mode does not support `--dev`; use the separate
+`issue develop` command after creation. A project supplied with `--yes` must
+match exactly; partial project searches are rejected before issue creation.
+
 ==== Develop an issue
 
 Switches to the branch for the issue, creating the branch if it doesn't exist.
@@ -361,6 +375,10 @@ Requires the `gh` CLI to be installed and configured.
 ----
 $ lc issue pr CRY-1234
 ----
+
+NOTE: JSON `issue pr` requires both `--title` and `--description`. Without
+those options the text command asks questions and JSON mode rejects the
+invocation before checking out the branch.
 
 ==== Update an issue
 
@@ -411,6 +429,12 @@ the team has more than one matching state.
 $ lc issue update --close --status Done --reason "These were closable" CRY-1234 CRY-2
 ----
 
+For JSON issue updates, close and cancel operations require both `--status`
+and `--reason`. Project moves also require an exact project match, and the
+`-` editor sentinel is not accepted for JSON comment, description, or reason
+inputs. These checks happen before the first issue mutation; text mode keeps
+its prompts.
+
 ==== Move an issue to a different workflow state
 
 Changes the workflow state of one or more issues. Prompts interactively when
@@ -427,6 +451,12 @@ $ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
 <2> Move to a named workflow state (case-insensitive, unique-prefix match)
 <3> Move multiple issues at once — updates run concurrently
 <4> Add a comment alongside the state change
+
+NOTE: JSON `issue status` requires `--status`. The interactive state menu is
+available in text mode only.
+
+For `issue comment`, JSON mode requires `--comment` or `--body-file`; the
+editor prompt used when neither is supplied remains a text-mode behavior.
 
 ==== Move issues to a project
 
@@ -490,6 +520,11 @@ $ lc profile delete manhattan
 
 An explicit `--team`/`--project` on the command line always overrides the
 active profile.
+
+Profile and favorite mutations return one JSON result when `--output json` is
+used. Project favorites and project updates require an exact project name or
+ID, and require `--team` or an active profile when more than one team is
+available. Text mode keeps its existing selection prompts.
 
 Issue commands also accept a bare number (`lc issue develop 1234`) in
 place of a full team-prefixed identifier - it's resolved via the active

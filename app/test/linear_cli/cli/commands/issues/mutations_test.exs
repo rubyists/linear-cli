@@ -1577,6 +1577,19 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
   end
 
   describe "issue status" do
+    test "JSON mode rejects the omitted status before any lookup" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --status"}} =
+                   Mutations.issue_status(%{
+                     unknown: ["CRY-1"],
+                     options: %{output: "json", status: nil, comment: nil}
+                   })
+        end)
+
+      assert output == ""
+    end
+
     defp issue_with_state(state_id, state_name) do
       issue_map(%{"state" => %{"id" => state_id, "name" => state_name, "type" => "started"}})
     end
@@ -2109,6 +2122,67 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
   end
 
   describe "issue update (Ruby: commands/issue/update.rb)" do
+    test "JSON close rejects missing reason before loading issues" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --reason for close or cancel"}} =
+                   Mutations.issue_update(%{
+                     unknown: ["CRY-1"],
+                     flags: %{close: true, cancel: false},
+                     options: %{output: "json", reason: nil, status: "Done"}
+                   })
+        end)
+
+      assert output == ""
+    end
+
+    test "JSON partial project input is rejected before a preceding comment mutation" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "commentCreate") ->
+            raise "comment mutation must not run"
+
+          String.contains?(query, "issueUpdate") ->
+            raise "issue mutation must not run"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, message}} =
+                   Mutations.issue_update(%{
+                     unknown: ["CRY-1"],
+                     flags: %{close: false, cancel: false, trash: false},
+                     options: %{
+                       output: "json",
+                       comment: "audit",
+                       description: nil,
+                       body_file: nil,
+                       priority: nil,
+                       project: "Manhattan",
+                       reason: nil,
+                       status: nil
+                     }
+                   })
+
+          assert message =~ "exact project match"
+        end)
+
+      assert output == ""
+    end
+
     test "--close --status selects a completed state without prompting" do
       test_pid = self()
 
@@ -2528,7 +2602,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert_received {:updated, "CRY-2"}
     end
 
-    test "--output json still updates priority and confirms via stdout" do
+    test "--output json still updates priority and emits one JSON value" do
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
         query = Jason.decode!(body)["query"]
@@ -2559,7 +2633,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
                    ])
         end)
 
-      assert output =~ "CRY-1 priority updated"
+      assert %{"action" => "issue_update", "status" => "ok"} = Jason.decode!(output)
     end
 
     test "--priority combined with --comment posts comment first then updates priority" do
@@ -2838,6 +2912,38 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
 
       assert output =~ "Choose an assignee"
       assert output =~ "assigned to Alice"
+    end
+
+    test "JSON mode rejects an omitted assignee before mutation" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50)") ->
+            Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "an omitted JSON assignee must stop before mutation"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --assignee"}} =
+                   Mutations.issue_assign(%{
+                     args: %{issue_id: "CRY-1"},
+                     options: %{output: "json", assignee: nil, status: nil}
+                   })
+        end)
+
+      assert output == ""
     end
 
     test "--output json emits structured output" do
@@ -3566,6 +3672,32 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
   end
 
   describe "issue comment" do
+    test "JSON mode rejects an omitted comment before loading issues" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --comment or --body-file"}} =
+                   Mutations.issue_comment(%{
+                     unknown: ["CRY-1"],
+                     options: %{output: "json", comment: nil, body_file: nil}
+                   })
+        end)
+
+      assert output == ""
+    end
+
+    test "JSON mode rejects the editor sentinel before loading issues" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --comment text, not editor input"}} =
+                   Mutations.issue_comment(%{
+                     unknown: ["CRY-1"],
+                     options: %{output: "json", comment: "-", body_file: nil}
+                   })
+        end)
+
+      assert output == ""
+    end
+
     defp stub_lookup_and(pairs) do
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)

@@ -27,7 +27,10 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
   """
   def issue_list(%{flags: flags, options: options, unknown: ids}) do
     with {:ok, expanded_ids} <- Identifiers.expand_issue_ids(ids, output: options.output),
-         {:ok, input} <- Filter.build_input(flags, options, expanded_ids) do
+         {:ok, input} <-
+           Filter.build_input(flags, options, expanded_ids,
+             project_resolution: project_resolution(options)
+           ) do
       with {:ok, issues} <- Linear.issues(input) do
         Display.show(issues, %{
           output: options.output,
@@ -54,11 +57,14 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
 
   def issue_view(%{args: %{issue_id: issue_id}, flags: flags, options: options}, opts) do
     graph? = Map.get(flags, :graph, false)
-    web? = flags.web
+    web? = Map.get(flags, :web, false)
 
     cond do
       graph? && web? ->
         {:error, {:smells_bad, "--graph and --web cannot be used together"}}
+
+      web? && options.output == "json" ->
+        {:error, {:smells_bad, "JSON output cannot be used with --web"}}
 
       graph? ->
         with {:ok, expanded_id} <- Identifiers.expand_issue_id(issue_id, output: options.output),
@@ -80,4 +86,7 @@ defmodule LinearCli.CLI.Commands.Issues.Read do
         end
     end
   end
+
+  defp project_resolution(%{output: "json"}), do: :strict_non_interactive
+  defp project_resolution(_options), do: :permissive
 end

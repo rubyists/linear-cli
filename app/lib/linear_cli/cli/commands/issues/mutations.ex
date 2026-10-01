@@ -6,7 +6,7 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   """
 
   alias LinearCli.CLI.Commands.Issues.Filter
-  alias LinearCli.CLI.Display
+  alias LinearCli.CLI.{Display, Output, Projects}
   alias LinearCli.CLI.Issue.{Actions, Identifiers}
   alias LinearCli.CLI.Prompt
   alias LinearCli.CLI.WhatFor
@@ -33,13 +33,15 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   def issue_update(%{unknown: issue_ids, options: options, flags: flags}) do
     output = Map.get(options, :output, "text")
 
-    with :ok <- validate_issue_ids(issue_ids),
+    with :ok <- validate_json_update(options, flags),
+         :ok <- validate_issue_ids(issue_ids),
          :ok <- validate_body_file_exclusion(options, :description, "--description"),
          {:ok, description} <- resolve_body_from_file(options, :description),
          {:ok, priority} <- parse_priority(Map.get(options, :priority)),
          {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
          {:ok, issues} <-
-           Linear.issues(%{ids: expanded_ids}) do
+           Linear.issues(%{ids: expanded_ids}),
+         :ok <- preflight_update_projects(issues, options) do
       update_opts = [
         comment: options.comment,
         description: description,
@@ -49,15 +51,23 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
         reason: options.reason,
         status: Map.get(options, :status),
         trash: flags.trash,
-        priority: priority
+        priority: priority,
+        output: output
       ]
 
-      Enum.reduce_while(issues, :ok, fn issue, :ok ->
-        case Actions.update_issue(issue, update_opts) do
-          :ok -> {:cont, :ok}
-          {:error, reason} -> {:halt, {:error, reason}}
-        end
-      end)
+      case apply_issue_updates(issues, update_opts) do
+        :ok ->
+          Output.success(
+            "issue_update",
+            %{"issues" => Enum.map(issues, & &1.identifier)},
+            options
+          )
+
+          :ok
+
+        error ->
+          error
+      end
     end
   end
 
@@ -87,7 +97,8 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   def issue_comment(%{unknown: issue_ids, options: options}) do
     output = Map.get(options, :output, "text")
 
-    with :ok <- validate_issue_ids(issue_ids),
+    with :ok <- validate_json_comment(options),
+         :ok <- validate_issue_ids(issue_ids),
          :ok <- validate_body_file_exclusion(options, :comment, "--comment"),
          {:ok, comment_text} <- resolve_body_from_file(options, :comment),
          {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
@@ -121,12 +132,14 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
   def issue_status(%{unknown: issue_ids, options: options}) do
     output = Map.get(options, :output, "text")
 
-    with :ok <- validate_issue_ids(issue_ids),
+    with :ok <- validate_json_status(options),
+         :ok <- validate_issue_ids(issue_ids),
          {:ok, expanded_ids} <- Identifiers.expand_issue_ids(issue_ids, output: output),
          {:ok, issues} <-
            Linear.issues(%{ids: expanded_ids}),
          {:ok, planned_updates} <- plan_status_updates(issues, options.status),
-         {:ok, completed_updates} <- apply_status_updates(planned_updates, options.comment) do
+         {:ok, completed_updates} <-
+           apply_status_updates(planned_updates, options.comment, options) do
       show_status_updates(completed_updates, output)
     end
   end
@@ -165,7 +178,7 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
          {:ok, [issue]} <- Linear.issues(%{ids: [expanded_id]}),
          {:ok, members} <- Linear.team_members(issue.team.id),
          :ok <- guard_has_members(members, issue),
-         {:ok, target_member} <- resolve_target_member(members, options.assignee),
+         {:ok, target_member} <- resolve_target_member(members, options.assignee, options),
          {:ok, state_id} <- resolve_optional_status(issue, Map.get(options, :status)),
          {:ok, updated} <- Linear.assign_issue(issue, target_member.id, %{state_id: state_id}) do
       Display.show(updated, %{output: output})
@@ -423,13 +436,13 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     |> reverse_status_updates()
   end
 
-  defp apply_status_updates([], _comment), do: {:ok, []}
+  defp apply_status_updates([], _comment, _options), do: {:ok, []}
 
-  defp apply_status_updates(planned_updates, comment) do
+  defp apply_status_updates(planned_updates, comment, options) do
     planned_updates
     |> Task.async_stream(
       fn {issue, target_state} ->
-        apply_status_update(issue, target_state, comment)
+        apply_status_update(issue, target_state, comment, options)
       end,
       max_concurrency: min(length(planned_updates), @max_concurrent_issue_updates),
       ordered: true,
@@ -448,8 +461,8 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     |> reverse_status_updates()
   end
 
-  defp apply_status_update(issue, target_state, comment) do
-    with :ok <- maybe_add_status_comment(issue, comment),
+  defp apply_status_update(issue, target_state, comment, options) do
+    with :ok <- maybe_add_status_comment(issue, comment, options),
          {:ok, updated} <- Linear.set_issue_status(issue, target_state.id) do
       {:ok, {updated, target_state}}
     end
@@ -469,6 +482,100 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     end
 
     :ok
+  end
+
+  defp validate_json_comment(options) do
+    cond do
+      not json_output?(options) ->
+        :ok
+
+      is_nil(Map.get(options, :comment)) and is_nil(Map.get(options, :body_file)) ->
+        {:error, {:smells_bad, "JSON output requires --comment or --body-file"}}
+
+      Map.get(options, :comment) == "-" ->
+        {:error, {:smells_bad, "JSON output requires --comment text, not editor input"}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_json_status(options) do
+    cond do
+      not json_output?(options) ->
+        :ok
+
+      is_nil(Map.get(options, :status)) ->
+        {:error, {:smells_bad, "JSON output requires --status"}}
+
+      Map.get(options, :comment) == "-" ->
+        {:error, {:smells_bad, "JSON output requires --comment text, not editor input"}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_json_update(options, flags) do
+    if json_output?(options), do: validate_json_update_input(options, flags), else: :ok
+  end
+
+  defp validate_json_update_input(options, flags) do
+    cond do
+      close_or_cancel?(flags) and Map.get(options, :reason) in [nil, "-"] ->
+        {:error, {:smells_bad, "JSON output requires --reason for close or cancel"}}
+
+      close_or_cancel?(flags) and is_nil(Map.get(options, :status)) ->
+        {:error, {:smells_bad, "JSON output requires --status for close or cancel"}}
+
+      Map.get(options, :comment) == "-" ->
+        {:error, {:smells_bad, "JSON output requires --comment text, not editor input"}}
+
+      Map.get(options, :description) == "-" ->
+        {:error, {:smells_bad, "JSON output requires --description text, not editor input"}}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp close_or_cancel?(flags),
+    do: Map.get(flags, :close, false) or Map.get(flags, :cancel, false)
+
+  defp apply_issue_updates(issues, update_opts) do
+    Enum.reduce_while(issues, :ok, fn issue, :ok ->
+      case Actions.update_issue(issue, update_opts) do
+        :ok -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp preflight_update_projects(_issues, %{output: output}) when output != "json", do: :ok
+
+  defp preflight_update_projects(issues, options) do
+    case Map.get(options, :project) do
+      nil ->
+        :ok
+
+      search ->
+        Enum.reduce_while(issues, :ok, fn issue, :ok ->
+          with {:ok, projects} <-
+                 Linear.projects_by_team(issue.team.id, %{search: search}),
+               project when not is_nil(project) <- Projects.project_for_strict(projects, search) do
+            {:cont, :ok}
+          else
+            nil ->
+              {:halt,
+               {:error,
+                {:smells_bad,
+                 "JSON output requires an exact project match for #{inspect(search)}"}}}
+
+            {:error, reason} ->
+              {:halt, {:error, reason}}
+          end
+        end)
+    end
   end
 
   defp resolve_target_state(states, nil) do
@@ -503,10 +610,10 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
     {:error, {:smells_bad, "Ambiguous status #{inspect(name)}: matches #{ambiguous}"}}
   end
 
-  defp maybe_add_status_comment(_issue, nil), do: :ok
+  defp maybe_add_status_comment(_issue, nil, _options), do: :ok
 
-  defp maybe_add_status_comment(issue, comment) do
-    case Actions.issue_comment(issue, comment) do
+  defp maybe_add_status_comment(issue, comment, options) do
+    case Actions.issue_comment(issue, comment, options) do
       {:ok, _} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -528,12 +635,16 @@ defmodule LinearCli.CLI.Commands.Issues.Mutations do
 
   defp guard_has_members(_members, _issue), do: :ok
 
-  defp resolve_target_member(members, nil) do
-    choices = Enum.sort_by(members, & &1.name) |> Enum.map(&{&1.name, &1})
-    {:ok, Prompt.select("Choose an assignee", choices)}
+  defp resolve_target_member(members, nil, options) do
+    if json_output?(options) do
+      {:error, {:smells_bad, "JSON output requires --assignee"}}
+    else
+      choices = Enum.sort_by(members, & &1.name) |> Enum.map(&{&1.name, &1})
+      {:ok, Prompt.select("Choose an assignee", choices)}
+    end
   end
 
-  defp resolve_target_member(members, name) do
+  defp resolve_target_member(members, name, _options) do
     normalized = String.downcase(name)
 
     members

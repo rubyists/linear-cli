@@ -47,3 +47,45 @@ Text-mode expansion, full identifiers, and UUID identifiers are unchanged.
 
 This addendum applies to every command that uses the shared bare-number path.
 It does not change partial project or assignee resolution.
+
+== EXT-74 addendum: remaining interactive commands
+
+The same stdout rule applies to the remaining command-level prompt paths. JSON
+issue lists, updates, favorites, and project updates use exact project
+resolution. JSON issue assignment requires `--assignee`; JSON status changes
+require `--status`; JSON comments require `--comment` or `--body-file`; and
+JSON issue creation requires `--yes`. JSON issue PR creation requires an
+explicit title and description, and `issue view --web` is rejected because it
+has no JSON value to print. These checks happen before any mutation that could
+otherwise precede a prompt.
+
+Successful profile, favorite, development, and update commands write one
+JSON object. Informational status lines that remain useful are sent to stderr.
+Text-mode prompts and messages remain unchanged. This is a caller-level
+decision; it does not redesign the shared display layer.
+
+=== Prompt inventory
+
+The audited prompt inputs and their JSON behavior are:
+
+* `issue list --project`, `project favorite`, `project unfavorite`,
+  `project update`, and `issue update --project`: partial or `-` project
+  searches are rejected; text mode still selects a project.
+* `project favorite`, `project unfavorite`, and `project update`: an omitted
+  team is accepted only when an active profile or a single workspace team
+  resolves it; otherwise the command is rejected instead of asking for a team.
+* `issue assign`: an omitted `--assignee` is rejected; text mode still opens
+  the assignee menu.
+* `issue status`: an omitted `--status` or editor-style `--comment -` is
+  rejected; text mode still opens the state menu and editor.
+* `issue comment`: an omitted body or editor-style `--comment -` is rejected;
+  `--body-file` remains available for text and stdin input.
+* `issue create`: JSON requires `--yes`, which prevents title, description,
+  team, label, and project prompts; `--dev` is rejected in JSON mode.
+* `issue pr`: missing `--title` or `--description` is rejected before issue
+  assignment, checkout, or the `gh` command.
+* `issue update --close`/`--cancel`: `--reason` and `--status` are required,
+  and editor sentinels are rejected before any comment or issue mutation.
+* `issue view --web` is rejected with JSON because browser output has no JSON
+  value. `issue move` and `issue unassign` remain covered by EXT-70, and bare
+  number team resolution remains covered by its own follow-up.

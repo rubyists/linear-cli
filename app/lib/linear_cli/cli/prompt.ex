@@ -77,8 +77,8 @@ defmodule LinearCli.CLI.Prompt do
 
   Ported from `TTY::Prompt#ok`.
   """
-  @spec ok(Owl.Data.t()) :: :ok
-  def ok(message), do: Owl.IO.puts(Owl.Data.tag(message, :green))
+  @spec ok(Owl.Data.t(), IO.device()) :: :ok
+  def ok(message, device \\ :stdio), do: Owl.IO.puts(Owl.Data.tag(message, :green), device)
 
   @doc """
   Prints `message` as a warning line, in yellow.
@@ -93,8 +93,8 @@ defmodule LinearCli.CLI.Prompt do
 
   Ported from `TTY::Prompt#say`.
   """
-  @spec say(Owl.Data.t()) :: :ok
-  def say(message), do: Owl.IO.puts(message)
+  @spec say(Owl.Data.t(), IO.device()) :: :ok
+  def say(message, device \\ :stdio), do: Owl.IO.puts(message, device)
 
   @doc """
   Prompts for a free-text line, returning `opts[:default]` (`nil` unless

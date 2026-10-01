@@ -21,7 +21,7 @@ defmodule LinearCli.CLI.Issue.Assignment do
   """
 
   alias LinearCli.CLI.Issue.{Identifiers, WorkflowStates}
-  alias LinearCli.CLI.Prompt
+  alias LinearCli.CLI.Output
   alias LinearCli.Linear
 
   @doc """
@@ -48,7 +48,7 @@ defmodule LinearCli.CLI.Issue.Assignment do
          {:ok, me} <- resolve_me(opts),
          {:ok, [issue]} <- Linear.issues(%{ids: [issue_id]}),
          {:ok, state_id} <- resolve_status_for_issue(issue, status_opt) do
-      assign_or_confirm(issue, me, issue_id, state_id)
+      assign_or_confirm(issue, me, issue_id, state_id, opts)
     end
   end
 
@@ -71,13 +71,16 @@ defmodule LinearCli.CLI.Issue.Assignment do
     end
   end
 
-  defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id, nil) do
-    Prompt.say("You are already assigned #{issue_id}")
+  defp assign_or_confirm(%{assignee: %{id: id}} = issue, %{id: id}, issue_id, nil, opts) do
+    # The assignment lookup can be part of a JSON command. Keep this status
+    # line visible, but send it to stderr so it cannot corrupt the value that
+    # the caller writes to stdout.
+    Output.status(:say, "You are already assigned #{issue_id}", opts)
     {:ok, issue}
   end
 
-  defp assign_or_confirm(issue, me, issue_id, state_id) do
-    Prompt.say("Assigning issue #{issue_id} to ya")
+  defp assign_or_confirm(issue, me, issue_id, state_id, opts) do
+    Output.status(:say, "Assigning issue #{issue_id} to ya", opts)
     Linear.assign_issue(issue, me.id, %{state_id: state_id})
   end
 
