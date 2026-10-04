@@ -5,7 +5,7 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   pr.rb, and take.rb.
   """
 
-  alias LinearCli.CLI.{Display, Prompt}
+  alias LinearCli.CLI.{Display, Output}
   alias LinearCli.CLI.Issue.{Assignment, Identifiers, PullRequest}
   alias LinearCli.Git
 
@@ -26,8 +26,14 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   @spec issue_develop(Optimus.ParseResult.t(), keyword()) :: :ok | {:error, term()}
   def issue_develop(result, opts \\ [])
 
-  def issue_develop(%{args: %{issue_id: issue_id}} = result, opts),
-    do: run_develop(issue_id, maybe_put(opts, :output, result_output(result)))
+  def issue_develop(%{args: %{issue_id: issue_id}} = result, opts) do
+    opts = maybe_put(opts, :output, result_output(result))
+
+    with :ok <- run_develop(issue_id, opts) do
+      Output.success("issue_develop", %{"issue" => issue_id}, opts)
+      :ok
+    end
+  end
 
   @doc """
   Ported from commands/issue/pr.rb: resolves/self-assigns `issue_id`, checks
@@ -46,15 +52,19 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   def issue_pr(%{args: %{issue_id: issue_id}, options: options}, opts) do
     opts = maybe_put(opts, :output, Map.get(options, :output, "text"))
 
-    with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
+    with :ok <- validate_json_pr(options),
+         {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
-      Prompt.ok("Checked out branch #{issue.branch_name}")
+      Output.status(:ok, "Checked out branch #{issue.branch_name}", opts)
 
       pr_opts =
-        [title: options.title, description: options.description]
+        [title: options.title, description: options.description, output: opts[:output]]
         |> maybe_put(:runner, opts[:runner])
 
-      PullRequest.issue_pr(issue, pr_opts)
+      with :ok <- PullRequest.issue_pr(issue, pr_opts) do
+        Output.success("issue_pr", %{"issue" => issue.identifier}, opts)
+        :ok
+      end
     end
   end
 
@@ -82,7 +92,9 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
       |> maybe_put(:output, Map.get(options, :output, "text"))
 
     with {:ok, updates} <- take_issues(issue_ids, opts) do
-      Display.show(updates, %{output: Map.get(options, :output, "text")})
+      output = Map.get(options, :output, "text")
+      value = if output == "json", do: one_or_many(updates), else: updates
+      Display.show(value, %{output: output})
       :ok
     end
   end
@@ -90,7 +102,7 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   defp run_develop(issue_id, opts) do
     with {:ok, issue} <- Assignment.gimme_da_issue!(issue_id, opts),
          {:ok, _branch} <- Git.checkout_branch(issue.branch_name, opts) do
-      Prompt.ok("Checked out branch #{issue.branch_name}")
+      Output.status(:ok, "Checked out branch #{issue.branch_name}", opts)
       finish_pull_or_push(issue.branch_name, opts)
     end
   end
@@ -102,13 +114,18 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   defp finish_pull_or_push(branch_name, opts) do
     case Git.pull_or_push_new_branch!(branch_name, opts) do
       {:ok, {:pulled, _output}} ->
-        Prompt.ok("Ready to develop!")
+        Output.status(:ok, "Ready to develop!", opts)
         :ok
 
       {:ok, {:pushed_new_branch, _branch_name}} ->
-        Prompt.warn("Upstream branch not found, pushing local #{branch_name} to origin")
-        Prompt.ok("Set upstream to origin/#{branch_name}")
-        Prompt.ok("Ready to develop!")
+        Output.status(
+          :warn,
+          "Upstream branch not found, pushing local #{branch_name} to origin",
+          opts
+        )
+
+        Output.status(:ok, "Set upstream to origin/#{branch_name}", opts)
+        Output.status(:ok, "Ready to develop!", opts)
         :ok
 
       {:error, reason} ->
@@ -122,6 +139,23 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
   defp result_output(%{options: options}), do: Map.get(options, :output, "text")
   defp result_output(_result), do: "text"
 
+  defp validate_json_pr(options) do
+    if Map.get(options, :output, "text") != "json" do
+      :ok
+    else
+      cond do
+        is_nil(Map.get(options, :title)) ->
+          {:error, {:smells_bad, "JSON output requires --title for issue pr"}}
+
+        is_nil(Map.get(options, :description)) ->
+          {:error, {:smells_bad, "JSON output requires --description for issue pr"}}
+
+        true ->
+          :ok
+      end
+    end
+  end
+
   defp maybe_put_status(opts, nil), do: opts
   defp maybe_put_status(opts, status), do: Keyword.put(opts, :status, status)
 
@@ -134,7 +168,7 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
             {:cont, {:ok, [issue | acc]}}
 
           {:error, %Ash.Error.Unknown{errors: [%{value: [{:not_found, id}]} | _]}} ->
-            Prompt.warn("No issue found with id #{id}")
+            Output.status(:warn, "No issue found with id #{id}", opts)
             {:cont, {:ok, acc}}
 
           {:error, reason} ->
@@ -155,4 +189,7 @@ defmodule LinearCli.CLI.Commands.Issues.Development do
       {:ok, issue_ids}
     end
   end
+
+  defp one_or_many([one]), do: one
+  defp one_or_many(many), do: many
 end

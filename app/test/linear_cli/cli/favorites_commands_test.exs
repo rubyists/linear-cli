@@ -109,6 +109,17 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
   end
 
   describe "team favorite/unfavorite" do
+    test "JSON favorite emits one value without a confirmation line" do
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["team", "favorite", "ENG", "--output", "json"])
+        end)
+
+      assert %{"action" => "team_favorite", "status" => "ok", "team" => "ENG"} =
+               Jason.decode!(output)
+    end
+
     test "favorites a team by key" do
       assert capture_io(fn -> assert :ok = LinearCli.CLI.main(["team", "favorite", "ENG"]) end) =~
                "Favorited team ENG"
@@ -127,6 +138,76 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
   end
 
   describe "project favorite/unfavorite" do
+    test "JSON partial project input is rejected before favorite mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      {:ok, stderr} = StringIO.open("")
+
+      stdout =
+        capture_io(fn ->
+          LinearCli.CLI.main(
+            ["project", "favorite", "Platform", "--output", "json"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      {_input, stderr_text} = StringIO.contents(stderr)
+      StringIO.close(stderr)
+
+      assert stdout == ""
+      assert stderr_text =~ "exact project match"
+      assert_received {:halted, 22}
+      assert LinearCli.Favorites.list("project") == []
+    end
+
+    test "JSON partial project input is rejected before project update mutation" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      {:ok, stderr} = StringIO.open("")
+
+      stdout =
+        capture_io(fn ->
+          LinearCli.CLI.main(
+            [
+              "project",
+              "update",
+              "Platform",
+              "--team",
+              "ENG",
+              "--body",
+              "Update",
+              "--health",
+              "onTrack",
+              "--output",
+              "json"
+            ],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      {_input, stderr_text} = StringIO.contents(stderr)
+      StringIO.close(stderr)
+
+      assert stdout == ""
+      assert stderr_text =~ "exact project match"
+      assert_received {:halted, 22}
+    end
+
+    test "JSON favorite resolves exact project and emits one value" do
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["project", "favorite", "Manhattan", "--output", "json"])
+        end)
+
+      assert %{"action" => "project_favorite", "status" => "ok", "project" => "p1"} =
+               Jason.decode!(output)
+    end
+
     test "resolves the project by name and favorites its id" do
       assert capture_io(fn ->
                assert :ok = LinearCli.CLI.main(["project", "favorite", "Manhattan"])

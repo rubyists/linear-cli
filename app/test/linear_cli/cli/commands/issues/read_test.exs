@@ -142,6 +142,45 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
       assert_received {:filter, %{"project" => %{"id" => %{"eq" => "p2"}}}}
     end
 
+    test "--output json rejects a partial --project before writing issue output" do
+      test_pid = self()
+      halt = fn code -> send(test_pid, {:halted, code}) end
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        cond do
+          String.contains?(query, "projects(first: $first") ->
+            Req.Test.json(conn, all_projects([project_map("p1", "Roadmap First")]))
+
+          String.contains?(query, "issues(filter") ->
+            raise "partial JSON project input must be rejected before the issue query"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      {:ok, stderr} = StringIO.open("")
+
+      stdout =
+        capture_io(fn ->
+          LinearCli.CLI.main(
+            ["issue", "list", "--output", "json", "--project", "Roadmap"],
+            halt,
+            stderr: stderr
+          )
+        end)
+
+      {_input, stderr_text} = StringIO.contents(stderr)
+      StringIO.close(stderr)
+
+      assert stdout == ""
+      assert stderr_text =~ "exact project match"
+      assert_received {:halted, 22}
+    end
+
     test "--project with --team resolves against team-scoped projects only" do
       test_pid = self()
 
@@ -1183,37 +1222,20 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
       assert_received {:opened, "https://linear.app/the-rubyists/issue/CRY-1"}
     end
 
-    test "--web with --output json opens browser and prints nothing" do
-      test_pid = self()
-
-      Req.Test.stub(LinearCli.Api, fn conn ->
-        {:ok, body, conn} = Plug.Conn.read_body(conn)
-        %{"query" => _} = Jason.decode!(body)
-
-        Req.Test.json(conn, %{
-          "data" => %{
-            "issue" => issue_map(%{"url" => "https://linear.app/the-rubyists/issue/CRY-1"})
-          }
-        })
-      end)
-
+    test "--web with --output json is rejected before opening the browser" do
       output =
         capture_io(fn ->
-          assert :ok =
+          assert {:error, {:smells_bad, "JSON output cannot be used with --web"}} =
                    Read.issue_view(
                      %{
                        args: %{issue_id: "CRY-1"},
                        flags: %{web: true},
                        options: %{output: "json"}
                      },
-                     opener: fn url ->
-                       send(test_pid, {:opened, url})
-                       :ok
-                     end
+                     opener: fn _url -> flunk("the browser must not be opened") end
                    )
         end)
 
-      assert_received {:opened, "https://linear.app/the-rubyists/issue/CRY-1"}
       assert output == ""
     end
   end

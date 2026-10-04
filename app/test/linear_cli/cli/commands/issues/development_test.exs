@@ -7,6 +7,29 @@ defmodule LinearCli.CLI.Commands.Issues.DevelopmentTest do
   alias LinearCli.Linear.User
 
   describe "issue develop (Ruby: commands/issue/develop.rb)" do
+    test "--output json emits one value while keeping git status off stdout" do
+      repo = git_repo!()
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      stub_responses([
+        {"issue(id: $id)",
+         %{"data" => %{"issue" => issue_map(%{"branchName" => "main", "assignee" => me_map()})}}}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Development.issue_develop(
+                     %{args: %{issue_id: "CRY-1"}, options: %{output: "json"}},
+                     cwd: repo,
+                     me: me
+                   )
+        end)
+
+      assert %{"action" => "issue_develop", "issue" => "CRY-1", "status" => "ok"} =
+               Jason.decode!(output)
+    end
+
     test "resolves/self-assigns the issue, checks out its branch, and pulls" do
       repo = git_repo!()
       me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
@@ -58,6 +81,19 @@ defmodule LinearCli.CLI.Commands.Issues.DevelopmentTest do
   end
 
   describe "issue pr (Ruby: commands/issue/pr.rb)" do
+    test "JSON mode rejects missing PR fields before checkout" do
+      output =
+        capture_io(fn ->
+          assert {:error, {:smells_bad, "JSON output requires --title for issue pr"}} =
+                   Development.issue_pr(%{
+                     args: %{issue_id: "CRY-1"},
+                     options: %{output: "json", title: nil, description: "body"}
+                   })
+        end)
+
+      assert output == ""
+    end
+
     test "checks out the issue's branch (no pull/push) and opens a PR via the injectable runner" do
       repo = git_repo!()
       me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
@@ -119,6 +155,27 @@ defmodule LinearCli.CLI.Commands.Issues.DevelopmentTest do
       assert output =~ "Assigning issue CRY-1 to ya"
       assert output =~ "No issue found with id nope"
       assert output =~ "CRY-1"
+    end
+
+    test "--output json emits one value without assignment status on stdout" do
+      me = %User{id: "u1", name: "Ada", email: "ada@x.com"}
+
+      stub_responses([
+        {"issue(id: $id)", %{"data" => %{"issue" => issue_map(%{"assignee" => nil})}}},
+        {"issueUpdate",
+         %{"data" => %{"issueUpdate" => %{"issue" => issue_map(%{"assignee" => me_map()})}}}}
+      ])
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   Development.issue_take(
+                     %{unknown: ["CRY-1"], options: %{output: "json", status: nil}},
+                     me: me
+                   )
+        end)
+
+      assert %{"identifier" => "CRY-1"} = Jason.decode!(output)
     end
   end
 end

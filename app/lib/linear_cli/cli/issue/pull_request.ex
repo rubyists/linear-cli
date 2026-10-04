@@ -27,7 +27,7 @@ defmodule LinearCli.CLI.Issue.PullRequest do
   `LinearCli.Git`'s injectable `cwd:`.
   """
 
-  alias LinearCli.CLI.{Prompt, WhatFor}
+  alias LinearCli.CLI.{Output, WhatFor}
   alias LinearCli.Linear
 
   @doc """
@@ -74,7 +74,7 @@ defmodule LinearCli.CLI.Issue.PullRequest do
     body = opts[:description] || WhatFor.pr_description_for(issue)
     runner = Keyword.get(opts, :runner, &default_gh_runner/2)
 
-    Prompt.warn(create_pr!(title, body, runner))
+    Output.status(:warn, create_pr!(title, body, runner), opts)
     :ok
   end
 end
