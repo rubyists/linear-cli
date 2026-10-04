@@ -72,8 +72,9 @@ The audited prompt inputs and their JSON behavior are:
   `project update`, and `issue update --project`: partial or `-` project
   searches are rejected; text mode still selects a project.
 * `project favorite`, `project unfavorite`, and `project update`: an omitted
-  team is accepted only when an active profile or a single workspace team
-  resolves it; otherwise the command is rejected instead of asking for a team.
+  team is accepted only when an active profile supplies it or the team list for
+  the viewer contains exactly one team. Otherwise, the command is rejected
+  instead of asking for a team.
 * `issue assign`: an omitted `--assignee` is rejected; text mode still opens
   the assignee menu.
 * `issue status`: an omitted `--status` or editor-style `--comment -` is

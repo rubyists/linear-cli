@@ -138,10 +138,8 @@ defmodule LinearCli.CLI.Issue.Actions do
   Moves `issue` to the already-resolved `project`, calling
   `LinearCli.Linear.attach_issue_to_project/2` and printing a confirmation.
 
-  Unlike `attach_project/2`, this function takes a pre-resolved
-  `%LinearCli.Linear.Project{}` struct rather than a search string. Callers
-  that need to resolve a search string first should use `attach_project/2`,
-  which delegates here after resolution.
+  This function takes a pre-resolved `%LinearCli.Linear.Project{}` struct.
+  Callers that need to resolve a search string first use `attach_project/3`.
   """
   @spec move_issue(%Linear.Issue{}, %Linear.Project{}) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
@@ -157,18 +155,21 @@ defmodule LinearCli.CLI.Issue.Actions do
   end
 
   @doc """
-  Attaches `issue` to a project matched against `project_search` among its
-  team's projects (`LinearCli.CLI.Projects.project_for/2`, prompting to
-  disambiguate if needed).
+  Attaches `issue` to a project matched against `project_search` among the
+  projects for the team.
 
-  Ported from `CLI::Issue#attach_project`. Like Ruby, does not guard against
-  `project_search` matching nothing in an empty project list (`project_for`
-  returning `nil`) - the same faithfully-ported crash risk Ruby's own
-  `nil.id` would hit.
+  `opts` controls the output mode. JSON mode uses
+  `LinearCli.CLI.Projects.project_for_strict/2`, which returns a project only
+  for an exact match. Text mode uses `project_for/2`, which can prompt to
+  disambiguate a match.
 
-  Resolves the project from the search string, then delegates to `move_issue/2`.
+  If project resolution returns `nil`, this function returns a tagged error.
+  Otherwise, it calls `LinearCli.Linear.attach_issue_to_project/2` directly and
+  reports successful status through `LinearCli.CLI.Output.status/3`.
+
+  Ported from `CLI::Issue#attach_project`.
   """
-  @spec attach_project(%Linear.Issue{}, String.t() | nil) ::
+  @spec attach_project(%Linear.Issue{}, String.t() | nil, keyword()) ::
           {:ok, %Linear.Issue{}} | {:error, term()}
   def attach_project(issue, project_search, opts \\ []) do
     with {:ok, projects} <-
@@ -250,7 +251,7 @@ defmodule LinearCli.CLI.Issue.Actions do
     2. `:close` -> `close_issue/2`
     3. `:cancel` -> `cancel_issue/2`
     4. `:pr` -> `LinearCli.CLI.Issue.PullRequest.issue_pr/2`
-    5. `:project` -> `attach_project/2`
+    5. `:project` -> `attach_project/3`
     6. `:description` -> `update_description/2`
     7. `:priority` -> `set_priority/2`
     8. otherwise, if only `:comment` was given, stop silently

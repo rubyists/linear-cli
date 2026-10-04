@@ -109,6 +109,7 @@ LinearCli.CLI                        — Entry point; Optimus argument parsing a
   CLI.Issue.Identifiers              — issue ID expansion shared across subcommands
   CLI.WhatFor                        — Interactive prompts (team, project, label selection)
   CLI.Display                        — Output formatting helpers
+  CLI.Output                         — Command-level JSON detection, success values, and status routing
   CLI.Projects                       — Project-specific prompt/resolution helpers
   CLI.Prompt                         — Low-level readline-style prompt wrapper
 
