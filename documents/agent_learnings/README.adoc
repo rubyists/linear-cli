@@ -1,0 +1,44 @@
+= Agent learning entries
+
+This directory stores one source document for each active, actionable learning
+from an agent run. An implementation follow-up creates the entry for its owner
+issue.
+
+== Naming and ownership
+
+Name each entry `EXT-<number>_learned.adoc`. Use the owning Linear issue ID.
+The same change regenerates `../agent_learnings.adoc` from the active entries.
+Do not add entries to the aggregate without an owner issue.
+
+== Entry contents
+
+Each entry is a short technical-debt record. Include:
+
+* the repeatable fault or missing safeguard;
+* the evidence and workflow where it occurred;
+* the guardrail or the remaining remediation;
+* the owner issue and its status; and
+* a condition for retirement.
+
+Do not create an entry when there is no recurring fault, concrete guardrail, or
+owner issue.
+
+== Bounded aggregate
+
+`../agent_learnings.adoc` contains active operational learnings only. Keep at
+most 20 entries. Sort entries by risk first, then by recency.
+
+Remove a resolved entry from the aggregate. Keep its source file for issue and
+pull-request history. Retire, merge, or assign a follow-up to an entry that the
+20-entry limit displaces.
+
+== Regeneration process
+
+. Read every `*_learned.adoc` file in this directory.
+. Keep only entries with an active status.
+. Sort active entries by risk and then by the newest evidence date.
+. Write the aggregate header and one `include::agent_learnings/<entry>[]` line per entry.
+. Verify that the aggregate has no more than 20 entries.
+
+The aggregate is generated output. Edit the source entry or this contract when
+the content or the process changes.

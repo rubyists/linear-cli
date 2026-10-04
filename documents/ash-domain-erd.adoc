@@ -312,7 +312,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:by_team_for_lookup`
 | read
 | `Linear.User.Read.ByTeamForLookup`
-| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page for workspace-wide matching
+| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page through `Paginate` for workspace-wide matching
 
 | `Team`
 | `teams`
@@ -595,7 +595,10 @@ Provides `all/5`: fetches cursor-paginated GraphQL connections
 until `max` records are collected or the API signals no more pages. It returns
 an error for a repeated continuation cursor instead of looping forever.
 `all_pages/4` follows every page without a record limit. Lookup-only actions use
-this variant. The bounded `all/5` path remains unchanged for issue operations.
+this variant. It accepts a top-level field name or a nested response path. It
+tracks every continuation cursor. It returns `{:non_advancing_cursor, cursor}`
+when a continuation cursor is null or repeats. The bounded `all/5` path remains
+unchanged for issue operations.
 `first_page/4` fetches one page, returns its `hasNextPage` value, and never
 follows a continuation cursor.
 Used by:
@@ -609,8 +612,9 @@ Used by:
 * `Issue.Actions.ListFirstPage` — wraps `Issue.Read.List.first_page/1` in an
   Ash generic action for the filter-only unassign path
 
-`User.Read.ByTeamForLookup` follows the nested member connection with the same
-cursor advancement guard. It returns every member for one team before the CLI
+`User.Read.ByTeamForLookup` passes the nested `team.members` path to
+`Paginate.all_pages/4`. The shared paginator validates the connection and its
+cursor sequence. The action returns every member for one team before the CLI
 deduplicates the workspace-wide candidate set.
 
 == Maintenance contract

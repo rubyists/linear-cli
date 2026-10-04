@@ -16,6 +16,19 @@ defmodule LinearCli.Linear.PaginateTest do
 
   defp variables_fun(after_cursor), do: %{"after" => after_cursor}
 
+  defp nested_response(ids, has_next_page, end_cursor) do
+    %{
+      "data" => %{
+        "team" => %{
+          "members" => %{
+            "edges" => Enum.map(ids, &%{"node" => %{"id" => &1}, "cursor" => "row-#{&1}"}),
+            "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+          }
+        }
+      }
+    }
+  end
+
   test "uses the default 100-record limit" do
     test_pid = self()
 
@@ -80,6 +93,109 @@ defmodule LinearCli.Linear.PaginateTest do
 
     assert {:error, {:http_error, 502}} =
              Paginate.all_pages("query", "issues", &variables_fun/1, & &1["id"])
+  end
+
+  test "all_pages rejects a cursor that appeared on an earlier page" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+      send(test_pid, {:cursor, cursor})
+
+      response =
+        case cursor do
+          nil -> response([1], true, "c1")
+          "c1" -> response([2], true, "c2")
+          "c2" -> response([3], true, "c1")
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:error, {:non_advancing_cursor, "c1"}} =
+             Paginate.all_pages("query", "issues", &variables_fun/1, & &1["id"])
+
+    assert_receive {:cursor, nil}
+    assert_receive {:cursor, "c1"}
+    assert_receive {:cursor, "c2"}
+    refute_receive {:cursor, "c1"}
+  end
+
+  test "all_pages rejects a null continuation cursor" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+      send(test_pid, {:cursor, cursor})
+
+      response =
+        case cursor do
+          nil -> response([1], true, "c1")
+          "c1" -> response([2], true, nil)
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:error, {:non_advancing_cursor, nil}} =
+             Paginate.all_pages("query", "issues", &variables_fun/1, & &1["id"])
+
+    assert_receive {:cursor, nil}
+    assert_receive {:cursor, "c1"}
+    refute_receive {:cursor, nil}
+  end
+
+  test "all_pages reads a nested connection path" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+
+      response =
+        case cursor do
+          nil -> nested_response([1], true, "c1")
+          "c1" -> nested_response([2], false, "c2")
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:ok, [1, 2]} =
+             Paginate.all_pages(
+               "query",
+               ["team", "members"],
+               &variables_fun/1,
+               & &1["id"]
+             )
+  end
+
+  test "bounded all preserves its limit when cursors cycle" do
+    test_pid = self()
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      cursor = Jason.decode!(body)["variables"]["after"]
+      send(test_pid, {:cursor, cursor})
+
+      response =
+        case cursor do
+          nil -> response(1..20, true, "c1")
+          "c1" -> response(21..40, true, "c2")
+          "c2" -> response(41..60, true, "c1")
+        end
+
+      Req.Test.json(conn, response)
+    end)
+
+    assert {:ok, values} = Paginate.all("query", "issues", &variables_fun/1, & &1["id"], 100)
+    assert length(values) == 100
+    assert_receive {:cursor, nil}
+    assert_receive {:cursor, "c1"}
+    assert_receive {:cursor, "c2"}
+    assert_receive {:cursor, "c1"}
+    assert_receive {:cursor, "c2"}
+    refute_receive {:cursor, "c1"}
   end
 
   test "returns the first page and reports more records without following the cursor" do
