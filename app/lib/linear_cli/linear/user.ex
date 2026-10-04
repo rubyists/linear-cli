@@ -82,25 +82,8 @@ defmodule LinearCli.Linear.User.Read.ByTeam do
   @moduledoc false
   use Ash.Resource.ManualRead
 
-  alias LinearCli.Api
-  alias LinearCli.Linear.User
-
-  def read(query, _ecto_query, _opts, _context) do
-    team_id = query.arguments.team_id
-
-    document =
-      "query($id: String!) { team(id: $id) { members(first: 50) { nodes { #{User.base_fields()} } } } }"
-
-    case Api.call(document, %{"id" => team_id}) do
-      {:ok, %{"team" => %{"members" => %{"nodes" => nodes}}}} ->
-        {:ok, Enum.map(nodes, &User.from_map/1)}
-
-      {:ok, _} ->
-        {:ok, []}
-
-      error ->
-        error
-    end
+  def read(query, ecto_query, opts, context) do
+    LinearCli.Linear.User.Read.ByTeamForLookup.read(query, ecto_query, opts, context)
   end
 end
 
