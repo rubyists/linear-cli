@@ -45,6 +45,19 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   defp team_projects(projects),
     do: %{"data" => %{"team" => %{"projects" => %{"nodes" => projects}}}}
 
+  defp team_members_page(members, has_next_page \\ false, end_cursor \\ nil) do
+    %{
+      "data" => %{
+        "team" => %{
+          "members" => %{
+            "edges" => Enum.map(members, &%{"node" => &1, "cursor" => &1["id"]}),
+            "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+          }
+        }
+      }
+    }
+  end
+
   defp label_response(names) do
     %{
       "data" => %{
@@ -457,18 +470,10 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         query = decoded["query"]
 
         cond do
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
-              %{
-                "data" => %{
-                  "team" => %{
-                    "members" => %{
-                      "nodes" => [%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}]
-                    }
-                  }
-                }
-              }
+              team_members_page([%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}])
             )
 
           String.contains?(query, "team(id: $id)") ->

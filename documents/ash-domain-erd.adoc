@@ -305,7 +305,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:by_team`
 | read
 | `Linear.User.Read.ByTeam`
-| `team(id: $id) { members(first: 50) { ... } }` — one page for team-scoped assignment
+| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page for team-scoped assignment and filtering
 
 | `User`
 | `workspace_team_members`
@@ -584,7 +584,8 @@ helper, which caps the batch at 100 and reports more matches. Ordinary issue
 listing keeps the existing permissive project resolution and 100-record cap.
 Workspace project lookup uses `Project.workspace_projects`. Workspace assignee
 lookup follows every page of every accessible team and deduplicates members by
-user ID. Team-scoped lookup keeps the existing one-page member action.
+user ID. Team-scoped lookup follows every member page for assignment and
+assignee filtering.
 
 === `LinearCli.Linear.Paginate`
 
