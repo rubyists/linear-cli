@@ -82,8 +82,61 @@ defmodule LinearCli.Linear.User.Read.ByTeam do
   @moduledoc false
   use Ash.Resource.ManualRead
 
-  def read(query, ecto_query, opts, context) do
-    LinearCli.Linear.User.Read.ByTeamForLookup.read(query, ecto_query, opts, context)
+  alias LinearCli.Api
+  alias LinearCli.Linear.User
+
+  # Keep the team-scoped action separate from the strict workspace lookup path.
+  # EXT-75 owns this action's response behavior.
+  @document """
+  query($id: String!, $after: String) {
+    team(id: $id) {
+      members(first: 50, after: $after) {
+        edges { node { #{User.base_fields()} } cursor }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  """
+
+  def read(query, _ecto_query, _opts, _context) do
+    page(query.arguments.team_id, nil, [])
+  end
+
+  defp page(team_id, after_cursor, acc) do
+    case Api.call(@document, %{"id" => team_id, "after" => after_cursor}) do
+      {:ok, %{"team" => %{"members" => members}}} when is_map(members) ->
+        continue_page(members, team_id, after_cursor, acc)
+
+      {:ok, _response} when is_nil(after_cursor) ->
+        {:ok, acc}
+
+      {:ok, response} ->
+        {:error, {:unexpected_response, response}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      error ->
+        error
+    end
+  end
+
+  defp continue_page(members, team_id, after_cursor, acc) do
+    nodes = Enum.map(members["edges"] || [], &User.from_map(&1["node"]))
+    acc = acc ++ nodes
+    page_info = members["pageInfo"] || %{}
+
+    if page_info["hasNextPage"] == true do
+      next_cursor = page_info["endCursor"]
+
+      if next_cursor == after_cursor do
+        {:error, {:non_advancing_cursor, next_cursor}}
+      else
+        page(team_id, next_cursor, acc)
+      end
+    else
+      {:ok, acc}
+    end
   end
 end
 
