@@ -11,7 +11,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
   end
 
   defp assignee_members_response(members) do
-    %{"data" => %{"team" => %{"members" => %{"nodes" => members}}}}
+    workspace_members_page(members, false, nil)
   end
 
   defp workspace_teams_response(teams) do
@@ -90,6 +90,50 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         stderr: stderr
       )
     end)
+  end
+
+  defp run_team_member_lookup_error(status, mode, test_pid) do
+    halt = fn code -> send(test_pid, {:halted, code}) end
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      decoded = Jason.decode!(body)
+      query = decoded["query"]
+
+      cond do
+        mode == :assign and String.contains?(query, "issue(id: $id)") ->
+          Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+        String.contains?(query, "members(first: 50, after: $after)") ->
+          Plug.Conn.resp(conn, status, "upstream unavailable")
+
+        mode == :filter and String.contains?(query, "team(id: $id)") ->
+          Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+        true ->
+          raise "a team member lookup error must stop before later API calls"
+      end
+    end)
+
+    args =
+      case mode do
+        :assign ->
+          ["issue", "assign", "--assignee", "Ada", "CRY-1"]
+
+        :filter ->
+          [
+            "issue",
+            "unassign",
+            "--no-profile",
+            "--team",
+            "ENG",
+            "--assignee",
+            "Ada",
+            "--yes"
+          ]
+      end
+
+    capture_stderr(fn stderr -> LinearCli.CLI.main(args, halt, stderr: stderr) end)
   end
 
   describe "issue unassign edge cases" do
@@ -230,18 +274,14 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         query = decoded["query"]
 
         cond do
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
-              %{
-                "data" => %{
-                  "team" => %{
-                    "members" => %{
-                      "nodes" => [%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}]
-                    }
-                  }
-                }
-              }
+              workspace_members_page(
+                [%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}],
+                false,
+                nil
+              )
             )
 
           String.contains?(query, "team(id: $id)") ->
@@ -281,6 +321,79 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert_received {:unassign_input, %{"assigneeId" => nil}}
       refute output =~ "Unassign 1 issue(s)?"
       assert output =~ "CRY-1 unassigned"
+    end
+
+    test "team-scoped assignee lookup follows later member pages" do
+      test_pid = self()
+      first_page_members = Enum.map(1..50, &%{"id" => "u#{&1}", "name" => "Member #{&1}"})
+      late_member = %{"id" => "u-late", "name" => "Late Member"}
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
+
+              "member-50" ->
+                Req.Test.json(conn, workspace_members_page([late_member], false, "member-51"))
+            end
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
+
+          String.contains?(query, "issues(filter:") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([]))
+
+          String.contains?(query, "issueUpdate") ->
+            raise "a dry-run lookup must not mutate"
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main([
+                     "issue",
+                     "unassign",
+                     "--no-profile",
+                     "--team",
+                     "ENG",
+                     "--assignee",
+                     "Late Member",
+                     "--dry-run"
+                   ])
+        end)
+
+      assert output =~ "No issues matched."
+      assert_received {:filter, %{"assignee" => %{"id" => %{"eq" => "u-late"}}}}
+    end
+
+    test "a team-scoped member HTTP error uses the API handler" do
+      output = run_team_member_lookup_error(502, :filter, self())
+
+      assert_received {:halted, 88}
+      assert output =~ "Linear API returned HTTP 502."
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
+    end
+
+    test "a team-scoped member authentication error uses the auth handler" do
+      output = run_team_member_lookup_error(401, :filter, self())
+
+      assert_received {:halted, 77}
+      assert output =~ "Linear API authentication failed (HTTP 401)."
+      assert output =~ "Authentication error, cannot continue"
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
     end
 
     test "workspace-wide assignee lookup follows later member pages" do
@@ -895,7 +1008,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         query = decoded["query"]
 
         cond do
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               assignee_members_response([
@@ -1110,7 +1223,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         %{"query" => query} = Jason.decode!(body)
 
         cond do
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               assignee_members_response([
@@ -1435,7 +1548,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
         %{"query" => query} = decoded = Jason.decode!(body)
 
         cond do
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               assignee_members_response([
@@ -2728,7 +2841,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
     end
 
     defp members_response(members) do
-      %{"data" => %{"team" => %{"members" => %{"nodes" => members}}}}
+      workspace_members_page(members, false, nil)
     end
 
     defp issue_assigned(assignee_map) do
@@ -2747,7 +2860,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
@@ -2783,7 +2896,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
@@ -2807,6 +2920,67 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
       assert output =~ "assigned to Alice"
     end
 
+    test "--assignee resolves a member after the first page" do
+      test_pid = self()
+      first_page_members = Enum.map(1..50, &member_map("u#{&1}", "Member #{&1}"))
+      late_member = member_map("u-late", "Late Member")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
+
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            case decoded["variables"]["after"] do
+              nil ->
+                Req.Test.json(conn, workspace_members_page(first_page_members, true, "member-50"))
+
+              "member-50" ->
+                Req.Test.json(conn, workspace_members_page([late_member], false, "member-51"))
+            end
+
+          String.contains?(query, "issueUpdate") ->
+            send(test_pid, {:assignee_id, decoded["variables"]["input"]["assigneeId"]})
+            Req.Test.json(conn, issue_assigned(late_member))
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["issue", "assign", "--assignee", "Late Member", "CRY-1"])
+        end)
+
+      assert_received {:assignee_id, "u-late"}
+      assert output =~ "assigned to Late Member"
+    end
+
+    test "a team-scoped assignment member HTTP error uses the API handler" do
+      output = run_team_member_lookup_error(502, :assign, self())
+
+      assert_received {:halted, 88}
+      assert output =~ "Linear API returned HTTP 502."
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
+    end
+
+    test "a team-scoped assignment authentication error uses the auth handler" do
+      output = run_team_member_lookup_error(401, :assign, self())
+
+      assert_received {:halted, 77}
+      assert output =~ "Linear API authentication failed (HTTP 401)."
+      assert output =~ "Authentication error, cannot continue"
+      refute output =~ "What the heck is this?"
+      refute output =~ "upstream unavailable"
+    end
+
     test "--assignee with unknown name exits 22 (smells bad)" do
       test_pid = self()
       halt = fn code -> send(test_pid, {:halted, code}) end
@@ -2819,7 +2993,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
@@ -2856,7 +3030,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               members_response([member_map("u2", "Bob"), member_map("u3", "Bobby")])
@@ -2890,7 +3064,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(
               conn,
               members_response([member_map("u2", "Bob"), member_map("u3", "Alice")])
@@ -2923,7 +3097,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "issueUpdate") ->
@@ -2955,7 +3129,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "issueUpdate") ->
@@ -2995,7 +3169,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "issueUpdate") ->
@@ -3026,7 +3200,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([]))
 
           true ->
@@ -3056,7 +3230,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
@@ -3117,7 +3291,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
@@ -3153,7 +3327,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
@@ -3189,7 +3363,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
@@ -3230,7 +3404,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "issueUpdate") ->
@@ -3260,7 +3434,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
@@ -3314,7 +3488,7 @@ defmodule LinearCli.CLI.Commands.Issues.MutationsTest do
           String.contains?(query, "issue(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"issue" => issue_map()}})
 
-          String.contains?(query, "members(first: 50)") ->
+          String.contains?(query, "members(first: 50, after: $after)") ->
             Req.Test.json(conn, members_response([member_map("u2", "Bob")]))
 
           String.contains?(query, "states {") ->
