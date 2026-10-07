@@ -82,18 +82,11 @@ defmodule LinearCli.Linear.User.Read.ByTeam do
   @moduledoc false
   use Ash.Resource.ManualRead
 
-  def read(query, ecto_query, opts, context) do
-    LinearCli.Linear.User.Read.ByTeamForLookup.read(query, ecto_query, opts, context)
-  end
-end
-
-defmodule LinearCli.Linear.User.Read.ByTeamForLookup do
-  @moduledoc false
-  use Ash.Resource.ManualRead
-
   alias LinearCli.Api
   alias LinearCli.Linear.User
 
+  # Keep the team-scoped action separate from the strict workspace lookup path.
+  # EXT-75 owns this action's response behavior.
   @document """
   query($id: String!, $after: String) {
     team(id: $id) {
@@ -144,5 +137,35 @@ defmodule LinearCli.Linear.User.Read.ByTeamForLookup do
     else
       {:ok, acc}
     end
+  end
+end
+
+defmodule LinearCli.Linear.User.Read.ByTeamForLookup do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Linear.Paginate
+  alias LinearCli.Linear.User
+
+  @document """
+  query($id: String!, $after: String) {
+    team(id: $id) {
+      members(first: 50, after: $after) {
+        edges { node { #{User.base_fields()} } cursor }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+  """
+
+  def read(query, _ecto_query, _opts, _context) do
+    team_id = query.arguments.team_id
+
+    Paginate.all_pages(
+      @document,
+      ["team", "members"],
+      fn after_cursor -> %{"id" => team_id, "after" => after_cursor} end,
+      &User.from_map/1
+    )
   end
 end

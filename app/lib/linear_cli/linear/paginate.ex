@@ -14,12 +14,18 @@ defmodule LinearCli.Linear.Paginate do
   `max` records are collected or the API reports no more pages, decoding each raw
   node through `decode_fun`.
 
-  `field_name` is the top-level response key (e.g. `"teams"`) holding
-  `edges`/`pageInfo`. `variables_fun` receives the current `after` cursor
-  (`nil` on the first page) and returns the GraphQL variables map.
+  `field_name` is the response key holding `edges`/`pageInfo`. Pass a list of
+  keys for a nested connection, such as `["team", "members"]`.
+  `variables_fun` receives the current `after` cursor (`nil` on the first page)
+  and returns the GraphQL variables map.
   """
   def all(document, field_name, variables_fun, decode_fun, max \\ 100) do
-    do_all(document, field_name, variables_fun, decode_fun, nil, max, [])
+    do_all(document, field_name, variables_fun, decode_fun, %{
+      after_cursor: nil,
+      max: max,
+      acc: [],
+      seen_cursors: :bounded
+    })
   end
 
   @doc """
@@ -27,9 +33,22 @@ defmodule LinearCli.Linear.Paginate do
 
   This variant has no record limit. Use it only for lookup candidate sets that
   must be complete before matching, rather than for bounded issue operations.
+  It rejects a null continuation cursor and every continuation cursor that it
+  has already used.
   """
   def all_pages(document, field_name, variables_fun, decode_fun) do
-    do_all(document, field_name, variables_fun, decode_fun, nil, :unbounded, [])
+    do_all(
+      document,
+      field_name,
+      variables_fun,
+      decode_fun,
+      %{
+        after_cursor: nil,
+        max: :unbounded,
+        acc: [],
+        seen_cursors: MapSet.new([nil])
+      }
+    )
   end
 
   @doc """
@@ -51,26 +70,68 @@ defmodule LinearCli.Linear.Paginate do
     end
   end
 
-  defp do_all(document, field_name, variables_fun, decode_fun, after_cursor, max, acc) do
-    with {:ok, data} <- Api.call(document, variables_fun.(after_cursor)),
+  defp do_all(document, field_name, variables_fun, decode_fun, state) do
+    with {:ok, data} <- Api.call(document, variables_fun.(state.after_cursor)),
          {:ok, %{"edges" => edges, "pageInfo" => page_info}} <-
            fetch_connection(data, field_name) do
-      acc = acc ++ Enum.map(edges, &decode_fun.(&1["node"]))
+      state = %{state | acc: state.acc ++ Enum.map(edges, &decode_fun.(&1["node"]))}
 
-      if reached_limit?(acc, max) or !page_info["hasNextPage"] do
-        {:ok, take_max(acc, max)}
+      if reached_limit?(state.acc, state.max) or !page_info["hasNextPage"] do
+        {:ok, take_max(state.acc, state.max)}
       else
         next_cursor = page_info["endCursor"]
-
-        if next_cursor == after_cursor do
-          {:error, {:non_advancing_cursor, next_cursor}}
-        else
-          do_all(document, field_name, variables_fun, decode_fun, next_cursor, max, acc)
-        end
+        continue(document, field_name, variables_fun, decode_fun, state, next_cursor)
       end
     else
       {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
       {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp continue(
+         document,
+         field_name,
+         variables_fun,
+         decode_fun,
+         %{after_cursor: after_cursor, seen_cursors: :bounded} = state,
+         next_cursor
+       ) do
+    if next_cursor == after_cursor do
+      {:error, {:non_advancing_cursor, next_cursor}}
+    else
+      do_all(document, field_name, variables_fun, decode_fun, %{state | after_cursor: next_cursor})
+    end
+  end
+
+  defp continue(
+         _document,
+         _field_name,
+         _variables_fun,
+         _decode_fun,
+         %{seen_cursors: _},
+         nil
+       ) do
+    {:error, {:non_advancing_cursor, nil}}
+  end
+
+  defp continue(
+         document,
+         field_name,
+         variables_fun,
+         decode_fun,
+         %{seen_cursors: seen_cursors} = state,
+         next_cursor
+       ) do
+    if MapSet.member?(seen_cursors, next_cursor) do
+      {:error, {:non_advancing_cursor, next_cursor}}
+    else
+      state = %{
+        state
+        | after_cursor: next_cursor,
+          seen_cursors: MapSet.put(seen_cursors, next_cursor)
+      }
+
+      do_all(document, field_name, variables_fun, decode_fun, state)
     end
   end
 
@@ -83,7 +144,11 @@ defmodule LinearCli.Linear.Paginate do
   # Safely extracts the named connection from the response data. Returns
   # {:error, {:unexpected_response, ...}} instead of crashing with KeyError
   # when the field is absent or not the expected connection shape.
-  defp fetch_connection(data, field_name) do
+  defp fetch_connection(data, field_name) when is_binary(field_name) do
+    fetch_connection(data, [field_name])
+  end
+
+  defp fetch_connection(data, [field_name]) do
     case data do
       %{^field_name => %{"edges" => _, "pageInfo" => _} = connection} ->
         {:ok, connection}
@@ -93,6 +158,13 @@ defmodule LinearCli.Linear.Paginate do
 
       _ ->
         {:error, {:unexpected_response, data}}
+    end
+  end
+
+  defp fetch_connection(data, [field_name | rest]) do
+    case data do
+      %{^field_name => nested} -> fetch_connection(nested, rest)
+      _ -> {:error, {:unexpected_response, data}}
     end
   end
 end
