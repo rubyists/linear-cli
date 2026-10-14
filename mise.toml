@@ -1,15 +1,15 @@
 [tools]
-# Pinned to match .github/workflows/*.yaml's erlef/setup-beam@v1 exactly -
-# Burrito's precompiled-ERTS catalog lags bleeding-edge OTP patches, so
-# floating on "latest" (as this used to) drifts local builds away from what
-# Burrito can actually fetch, breaking `mix release` locally while CI still
-# works. See documents/phase-8-plan.adoc.
-erlang = "29.0.3"
-elixir = "1.20.3"
-python = "3.14.7"
-uv = "0.12.18"
-codex = "0.161.0"
-claude = "2.1.292"
+# Exact pins, on purpose: Burrito's precompiled-ERTS catalog lags bleeding-edge
+# OTP patches, so floating on "latest" breaks `mix release` locally. This file
+# is the single source of truth - the CI workflows read it through
+# erlef/setup-beam's `version-file`, so bump erlang/elixir here only.
+# See documents/phase-8-plan.adoc.
+erlang = "29.1"
+elixir = "1.20.4"
+python = "3.15.0"
+uv = "0.13.0"
+codex = "0.162.1"
+claude = "2.1.299"
 [env]
 #ANTHROPIC_BASE_URL = "http://127.0.0.1:13305"
 #ANTHROPIC_AUTH_TOKEN = "lemonade"

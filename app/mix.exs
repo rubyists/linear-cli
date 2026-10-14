@@ -81,6 +81,9 @@ defmodule LinearCli.MixProject do
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:sbom, "~> 0.10", only: :dev, runtime: false},
+      # sbom pins hex_core ~> 0.19.0, which carries EEF-CVE-2026-103502 and
+      # EEF-CVE-2026-105274; override until sbom allows 0.20.
+      {:hex_core, "~> 0.20.0", only: :dev, runtime: false, override: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
       # {:dep_from_hexpm, "~> 0.3.0"},

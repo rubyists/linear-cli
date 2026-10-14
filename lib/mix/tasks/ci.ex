@@ -54,7 +54,6 @@ defmodule Mix.Tasks.Ci do
 
   @doc false
   def run([], shell) do
-    Mix.Tasks.Toolchain.Check.run([])
     shell.("mix", ["deps.get"], [])
     shell.("mix", ["deps.get"], cd: "app")
     shell.("./ci/validate_pull_request_title.sh", [], [])
