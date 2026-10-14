@@ -10,6 +10,14 @@ defmodule LinearCli.MixProject do
       version: "2.11.1",
       # x-release-please-end
       elixir: "~> 1.20",
+      hex: [
+        ignore_advisories: [
+          # TLS bypass on OTP 24/25
+          "GHSA-p26c-h8c2-rwqj",
+          # Uncapped zlib registry decompression
+          "GHSA-7c4r-cgf9-9jmq"
+        ]
+      ],
       start_permanent: Mix.env() == :prod,
       elixirc_options: [warnings_as_errors: Mix.env() == :test],
       elixirc_paths: elixirc_paths(Mix.env()),
