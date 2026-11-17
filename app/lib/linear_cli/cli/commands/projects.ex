@@ -9,11 +9,9 @@ defmodule LinearCli.CLI.Commands.Projects do
 
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
-    with {:ok, projects} <- projects_for(flags, options) do
-      Display.show(filter_favorites(projects, flags.all, "project", & &1.id), %{
-        output: options.output
-      })
-
+    with {:ok, cached} <- Favorites.records("project", flags.all),
+         {:ok, projects} <- listed_projects(cached, flags, options) do
+      Display.show(projects, %{output: options.output})
       :ok
     end
   end
@@ -28,8 +26,9 @@ defmodule LinearCli.CLI.Commands.Projects do
   def project_favorite(%{args: %{project: search}, options: options}) do
     with {:ok, team} <- resolve_team(options),
          {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         {:ok, project} <- resolve_project(projects, search, options) do
-      Favorites.add("project", project.id)
+         {:ok, project} <- resolve_project(projects, search, options),
+         {:ok, project} <- Linear.find_project(project.id) do
+      :ok = Favorites.save("project", project)
 
       if Output.json?(options) do
         Output.success("project_favorite", %{"project" => project.id}, options)
@@ -127,6 +126,25 @@ defmodule LinearCli.CLI.Commands.Projects do
     end
   end
 
+  defp listed_projects(nil, flags, options), do: projects_for(flags, options)
+
+  defp listed_projects(projects, _flags, %{team: key}) when is_binary(key) do
+    {:ok, Enum.filter(projects, &Enum.any?(&1.teams, fn team -> team_matches?(team, key) end))}
+  end
+
+  defp listed_projects(projects, %{mine: true}, _options) do
+    with {:ok, teams} <- Linear.my_teams() do
+      ids = Enum.map(teams, & &1.id)
+      {:ok, Enum.filter(projects, &Enum.any?(&1.teams, fn team -> team.id in ids end))}
+    end
+  end
+
+  defp listed_projects(projects, _flags, _options), do: {:ok, projects}
+
+  defp team_matches?(team, key) do
+    Enum.any?([team.id, team.key], &(String.downcase(&1 || "") == String.downcase(key)))
+  end
+
   defp projects_for(_flags, %{team: team_key}) when is_binary(team_key) do
     with {:ok, team} <- Linear.find_team(team_key) do
       Linear.projects_by_team(team.id)
@@ -135,18 +153,4 @@ defmodule LinearCli.CLI.Commands.Projects do
 
   defp projects_for(%{mine: true}, _options), do: Linear.my_projects()
   defp projects_for(_flags, _options), do: Linear.projects()
-
-  # Once any favorite of `kind` exists, narrows `records` down to just
-  # those (matched via `key_fun`) - invisible to anyone who's never
-  # favorited anything, since an empty favorites list leaves `records`
-  # untouched. `all?` (the new `--all` flag) always shows everything,
-  # bypassing the favorites lookup entirely.
-  defp filter_favorites(records, true, _kind, _key_fun), do: records
-
-  defp filter_favorites(records, _all?, kind, key_fun) do
-    case Favorites.list(kind) do
-      [] -> records
-      favorite_values -> Enum.filter(records, &(key_fun.(&1) in favorite_values))
-    end
-  end
 end

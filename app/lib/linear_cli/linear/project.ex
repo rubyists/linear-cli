@@ -6,6 +6,12 @@ defmodule LinearCli.Linear.Project do
   use Ash.Resource, domain: LinearCli.Linear
 
   actions do
+    read :find do
+      argument :id, :string, allow_nil?: false
+      get? true
+      manual LinearCli.Linear.Project.Read.Find
+    end
+
     read :all do
       manual LinearCli.Linear.Project.Read.All
     end
@@ -148,6 +154,26 @@ defmodule LinearCli.Linear.Project do
 
   defp description_contains?(project, string) do
     String.contains?(String.downcase(project.description || ""), String.downcase(string))
+  end
+end
+
+defmodule LinearCli.Linear.Project.Read.Find do
+  @moduledoc false
+  use Ash.Resource.ManualRead
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Project
+
+  def read(query, _ecto_query, _opts, _context) do
+    document = "query($id: String!) { project(id: $id) { #{Project.fields_with_teams()} } }"
+
+    case Api.call(document, %{"id" => query.arguments.id}) do
+      {:ok, %{"project" => nil}} -> {:ok, []}
+      {:ok, %{"project" => project}} when is_map(project) -> {:ok, [Project.from_map(project)]}
+      {:ok, other} -> {:error, {:unexpected_response, other}}
+      {:error, {:http_error, status, _body}} -> {:error, {:http_error, status}}
+      {:error, reason} -> {:error, reason}
+    end
   end
 end
 

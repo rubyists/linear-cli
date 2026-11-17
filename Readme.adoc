@@ -535,10 +535,18 @@ belong to.
 
 Not in Ruby's `linear-cli` - favorite the teams/projects you actually
 care about, and once any exist, `team list`/`project list` default to
-showing just favorites of that kind. `--all` bypasses the favorites
-filter only - it doesn't change `team list`'s `--no-mine` or `project
-list`'s `--mine`/`--team` scope, it just shows everything within
-whatever scope you already asked for.
+showing just favorites of that kind. `--all` fetches the live list instead.
+For live team lists, the default is your teams; `--no-mine` includes other
+teams too. Project lists respect `--mine`/`--team` with or without `--all`.
+
+Favorites save display details locally. Once favorites exist, ordinary
+`team list` and `project list` read SQLite without calling Linear. Saved
+team favorites display regardless of your current team membership.
+`project list --team PAY` filters saved team memberships locally;
+`--mine` checks your current teams with Linear. `--all` fetches live
+results. Favorite an item again to refresh its saved details after a
+rename or team change. Older favorites containing only identifiers are
+looked up individually once to populate their saved details.
 
 [source,sh]
 ----

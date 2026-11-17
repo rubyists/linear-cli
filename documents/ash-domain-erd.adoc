@@ -350,6 +350,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `projects(first:, after:)` — paginated with `Project.base_fields/0`
 
 | `Project`
+| `find_project`
+| `:find`
+| read (`get?: true`)
+| `Linear.Project.Read.Find`
+| `project(id: $id)` with `Project.fields_with_teams/0` — exact lookup for saving or hydrating favorite snapshots
+
+| `Project`
 | `workspace_projects`
 | `:all_for_lookup`
 | read

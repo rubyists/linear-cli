@@ -9,20 +9,43 @@ defmodule LinearCli.Favorites do
   this stays its own module against the same file instead of a change to
   `LinearCli.Profiles` itself.
 
-  `list/1`, once non-empty for a given `kind`, is what
-  `LinearCli.CLI.Commands.Teams.team_list/1`/`LinearCli.CLI.Commands.Projects.project_list/1`
-  filter their results down to by default (a new `--all` flag opts back out).
+  `list/1` returns identifiers for default resolution. `entries/1` also
+  returns saved display details, allowing list commands to work offline.
+  Older identifier-only entries have nil details until hydrated once.
 
   New in this port - Ruby has no equivalent.
   """
 
   alias Exqlite.Sqlite3
+  alias LinearCli.Linear
 
-  @doc ~s[Favorites `value` under `kind` (`"team"` or `"project"`). A no-op if already favorited.]
-  @spec add(String.t(), String.t()) :: :ok
-  def add(kind, value) do
+  @doc """
+  Favorites `value` under `kind` (`"team"` or `"project"`). Supplying
+  details refreshes the saved snapshot; omitting them preserves existing details.
+  """
+  @spec add(String.t(), String.t(), map() | nil) :: :ok
+  def add(kind, value, details \\ nil) do
     with_db(fn conn ->
-      exec(conn, "INSERT OR IGNORE INTO favorites (kind, value) VALUES (?, ?)", [kind, value])
+      exec(
+        conn,
+        """
+        INSERT INTO favorites (kind, value, details) VALUES (?, ?, ?)
+        ON CONFLICT(kind, value) DO UPDATE SET details = COALESCE(excluded.details, favorites.details)
+        """,
+        [kind, value, if(details, do: Jason.encode!(details))]
+      )
+    end)
+  end
+
+  @doc "Saved favorites and their JSON display details, ordered by value."
+  @spec entries(String.t()) :: [%{value: String.t(), details: map() | nil}]
+  def entries(kind) do
+    with_db(fn conn ->
+      conn
+      |> query("SELECT value, details FROM favorites WHERE kind = ? ORDER BY value", [kind])
+      |> Enum.map(fn [value, details] ->
+        %{value: value, details: if(details, do: Jason.decode!(details))}
+      end)
     end)
   end
 
@@ -43,6 +66,63 @@ defmodule LinearCli.Favorites do
       |> Enum.map(fn [value] -> value end)
     end)
   end
+
+  def records(_kind, true), do: {:ok, nil}
+
+  def records(kind, _all?) do
+    case entries(kind) do
+      [] ->
+        {:ok, nil}
+
+      entries ->
+        Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, records} ->
+          case favorite_record(kind, entry) do
+            {:ok, record} -> {:cont, {:ok, [record | records]}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+        |> case do
+          {:ok, records} -> {:ok, Enum.reverse(records)}
+          error -> error
+        end
+    end
+  end
+
+  # Older databases have only identifiers. Resolve each missing snapshot
+  # directly once, without fetching a workspace-wide list.
+  defp favorite_record(kind, %{value: value, details: nil}) do
+    result = if kind == "team", do: Linear.find_team(value), else: Linear.find_project(value)
+
+    with {:ok, record} <- result do
+      :ok = save(kind, record)
+      {:ok, record}
+    end
+  end
+
+  defp favorite_record("team", %{details: details}), do: {:ok, Linear.Team.from_map(details)}
+
+  defp favorite_record("project", %{details: details}),
+    do: {:ok, Linear.Project.from_map(details)}
+
+  def save("team", team) do
+    add("team", team.key, team_details(team))
+  end
+
+  def save("project", project) do
+    details = %{
+      "id" => project.id,
+      "name" => project.name,
+      "url" => project.url,
+      "slugId" => project.slug_id,
+      "description" => project.description,
+      "content" => project.content,
+      "teams" => %{"nodes" => Enum.map(project.teams, &team_details/1)}
+    }
+
+    add("project", project.id, details)
+  end
+
+  defp team_details(team), do: Map.take(team, [:id, :key, :name, :description])
 
   defp with_db(fun) do
     path = db_path()
@@ -66,11 +146,18 @@ defmodule LinearCli.Favorites do
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           kind TEXT NOT NULL,
           value TEXT NOT NULL,
+          details TEXT,
           UNIQUE(kind, value)
         )
         """,
         []
       )
+
+    unless Enum.any?(query(conn, "PRAGMA table_info(favorites)", []), fn row ->
+             Enum.at(row, 1) == "details"
+           end) do
+      :ok = exec(conn, "ALTER TABLE favorites ADD COLUMN details TEXT", [])
+    end
   end
 
   defp exec(conn, sql, []), do: Sqlite3.execute(conn, sql)

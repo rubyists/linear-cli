@@ -1452,6 +1452,9 @@ Prefer to use the `strict?` option when loading to only load necessary fields on
 ```elixir
 MyApp.Post
 |> Ash.Query.load([comments: [:title]], strict?: true)
+
+# Create, update and destroy actions accept it alongside `load` as well
+Ash.create!(MyApp.Comment, %{body: "Nice"}, load: [post: [:title]], strict?: true)
 ```
 
 ## Managing Relationships
@@ -1585,6 +1588,7 @@ end
 - `emit` runs in its place among the action's changes, and is checked at compile time.
 - An update or destroy that emits a `:before_action` or `:after_transaction` signal, or uses `previous/1`, can't be atomic and needs `require_atomic? false`. `:after_action` signals don't need it.
 - `fields` only reads attributes. When the signal needs a calculation, an aggregate, related data or any other transformation, emit it from your own code: declare it with `emit MyApp.Shop.Signals, :order_placed, dynamic?: true`, and call `Ash.Signals.emit/5` from a change during the signal's phase, or `Ash.Signals.emit_many/5` from `after_batch/3`. Emitting a signal the action doesn't declare raises an error.
+- Give dynamic emits a `description` saying when they're emitted, since the action can't show it: `emit MyApp.Shop.Signals, :order_paid, dynamic?: true, description: "When the payment covers the rest of the order's total."`
 
 ## Listening to Signals
 
@@ -1621,11 +1625,13 @@ end
 - Add the `:ash_signals` compiler to the project: `compilers: [:ash_signals] ++ Mix.compilers()`. Without it, listeners are searched for every time a signal is emitted, which is much slower.
 - With the Phoenix code reloader, add `:ash_signals` to the endpoint's `reloadable_compilers` too.
 - Listeners defined after compilation, like resources defined inside tests, aren't found when signals are consolidated. If tests define listeners, set `ash: [consolidate_signals: Mix.env() != :test]` in the project config.
+- To see what emits and listens to each signal, run `mix ash.signals`, optionally with signal modules to limit it to, or `--format mermaid` for a flowchart.
 
 ## Testing
 
 - Use `Ash.Signals.Test`. `assert_emits_signal/4` and `refute_emits_signal/4` run a function, check the signals it emitted, and return its result.
 - `assert_signal_emitted/4` and `refute_signal_emitted/4` check the signals emitted so far, after `setup :capture_signals`.
+- Test a listener without the action that emits its signal with `react_to_signal/4`, which delivers a signal to the listeners as if it had been emitted: `react_to_signal(MyApp.Shop.Signals, :order_placed, %{order_id: id, customer_id: customer_id}, only: MyApp.Loyalty.Account)`. Listeners receive it through their own delivery, so one that runs in a job only enqueues it; pass `inline?: true` to run them all immediately.
 
 ```elixir
 import Ash.Signals.Test
@@ -1692,6 +1698,7 @@ MyApp.Subscription
 - A **create** opens `[as_of, ∞)`. You can't create a record if any later version of it already exists.
 - An **update** splits the version valid at `as_of`. The new values run from `as_of` to wherever that version ended. To schedule a future change, write an update with a future `as_of`, not a create.
 - A **destroy** closes the version valid at `as_of` down to `[from, as_of)`. It doesn't delete history.
+- A record keeps the instant it was read or written at, and `Ash.load`/`Ash.reload` reuse it. Writes don't. An update or destroy given a record, without `as_of`, happens now, on the version valid now, even if the record is an older version. To write at the record's instant, pass `as_of: record.__metadata__.as_of`.
 - An update or destroy with no version valid at `as_of` (because the history ended, the record hasn't started yet, or `as_of` falls in a gap) fails as a stale record. To bring back a record whose history has ended, **create** it again rather than updating it.
 - On Postgres, concurrent writes to the same record are retried automatically, up to 25 conflicts, after which `AshPostgres.Temporal.WriteConflict` is raised. It's safe to retry. Under `REPEATABLE READ`/`SERIALIZABLE` you get a serialization failure instead, and retrying is up to you.
 

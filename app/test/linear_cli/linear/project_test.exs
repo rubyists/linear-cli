@@ -3,6 +3,46 @@ defmodule LinearCli.Linear.ProjectTest do
 
   alias LinearCli.Linear
 
+  test "find_project/1 fetches an exact project with all its team memberships" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query, "variables" => variables} = Jason.decode!(body)
+      assert query =~ "project(id: $id)"
+      assert query =~ "teams { nodes"
+      assert variables == %{"id" => "p1"}
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "project" => %{
+            "id" => "p1",
+            "name" => "Wallet Service Extraction",
+            "teams" => %{
+              "nodes" => [
+                %{"id" => "t1", "key" => "PAY", "name" => "Payments"},
+                %{"id" => "t2", "key" => "OPS", "name" => "Operations"}
+              ]
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, project} = Linear.find_project("p1")
+    assert project.name == "Wallet Service Extraction"
+    assert Enum.map(project.teams, & &1.key) == ["PAY", "OPS"]
+  end
+
+  test "find_project/1 reports missing projects and API errors" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      Req.Test.json(conn, %{"data" => %{"project" => nil}})
+    end)
+
+    assert {:error, %Ash.Error.Invalid{}} = Linear.find_project("missing")
+
+    Req.Test.stub(LinearCli.Api, fn conn -> Plug.Conn.send_resp(conn, 503, "unavailable") end)
+    assert {:error, _error} = Linear.find_project("p1")
+  end
+
   test "projects/0 fetches a page of all projects" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       Req.Test.json(conn, %{

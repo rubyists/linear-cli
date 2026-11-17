@@ -55,4 +55,38 @@ defmodule LinearCli.FavoritesTest do
       assert :ok = Favorites.remove("team", "nope")
     end
   end
+
+  test "details survive repeated adds and can be refreshed" do
+    :ok = Favorites.add("project", "p1", %{"name" => "Wallet Service Extraction"})
+    :ok = Favorites.add("project", "p1")
+
+    assert [%{value: "p1", details: %{"name" => "Wallet Service Extraction"}}] =
+             Favorites.entries("project")
+
+    :ok = Favorites.add("project", "p1", %{"name" => "Renamed"})
+    assert [%{value: "p1", details: %{"name" => "Renamed"}}] = Favorites.entries("project")
+  end
+
+  test "upgrades an identifier-only database without losing favorites" do
+    path = Application.fetch_env!(:linear_cli, :profiles_db_path)
+    {:ok, conn} = Exqlite.Sqlite3.open(path)
+
+    :ok =
+      Exqlite.Sqlite3.execute(conn, """
+      CREATE TABLE favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        value TEXT NOT NULL,
+        UNIQUE(kind, value)
+      );
+      INSERT INTO favorites (kind, value) VALUES ('project', 'p1');
+      """)
+
+    :ok = Exqlite.Sqlite3.close(conn)
+
+    assert [%{value: "p1", details: nil}] = Favorites.entries("project")
+    :ok = Favorites.add("project", "p1", %{"name" => "Wallet Service Extraction"})
+    assert Favorites.list("project") == ["p1"]
+    assert [%{details: %{"name" => "Wallet Service Extraction"}}] = Favorites.entries("project")
+  end
 end
