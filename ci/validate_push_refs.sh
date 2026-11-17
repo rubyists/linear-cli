@@ -6,6 +6,7 @@
 # Deletions (local SHA is all zeros) are skipped. For new branches (remote
 # SHA is all zeros) the base is the merge base with origin/main or main.
 # For existing remote branches the exact remote SHA is used as the base.
+# History already accepted on origin/main is excluded from either range.
 #
 # Activated automatically by git-hooks/pre-push. May also be invoked
 # directly for testing or manual audits with push-ref lines on stdin.
@@ -22,8 +23,16 @@ fi
 zero_sha="0000000000000000000000000000000000000000"
 github_merge_pattern="^Merge branch '[^']+' into .+"
 validation_status=0
+accepted_history=()
 
-while read -r local_ref local_sha remote_ref remote_sha
+# Only the remote-tracking branch proves the history was already accepted.
+# Local main may contain unpublished commits that still need validation.
+if git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null
+then
+    accepted_history+=("^refs/remotes/origin/main")
+fi
+
+while read -r local_ref local_sha _remote_ref remote_sha
 do
     [ "$local_sha" = "$zero_sha" ] && continue
 
@@ -46,8 +55,7 @@ do
             continue
         fi
 
-        base_sha=$(git merge-base "$local_sha" "$base_ref" 2>&1)
-        if [ $? -ne 0 ]
+        if ! base_sha=$(git merge-base "$local_sha" "$base_ref" 2>&1)
         then
             printf "ERROR: git merge-base %s %s failed: %s\n" "$local_sha" "$base_ref" "$base_sha" >&2
             validation_status=1
@@ -84,7 +92,7 @@ do
         then
             validation_status=$status
         fi
-    done < <(git log -z --format='%P%x01%cn%x01%ce%x01%s' "$base_sha..$local_sha")
+    done < <(git log -z --format='%P%x01%cn%x01%ce%x01%s' "$base_sha..$local_sha" "${accepted_history[@]}")
 done
 
 exit "$validation_status"

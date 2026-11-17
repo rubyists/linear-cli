@@ -249,6 +249,52 @@ defmodule GitHooksTest do
     assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
   end
 
+  test "the push_refs guard excludes legacy commits merged from published main" do
+    {worktree, base_sha, head_sha} = merge_legacy_main!()
+    stdin = "refs/heads/feature #{head_sha} refs/heads/feature #{base_sha}\n"
+
+    assert {"", 0} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+  end
+
+  test "the push_refs guard still rejects new invalid commits after merging main" do
+    {worktree, base_sha, _head_sha} = merge_legacy_main!()
+    git!(worktree, ["commit", "--allow-empty", "-m", "new invalid branch commit"])
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    stdin = "refs/heads/feature #{String.trim(head_sha)} refs/heads/feature #{base_sha}\n"
+
+    assert {output, 1} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+    assert output =~ "new invalid branch commit"
+    refute output =~ "legacy main commit"
+  end
+
+  test "the push_refs guard does not exempt unpublished local main history" do
+    {worktree, base_sha, head_sha} = merge_legacy_main!(publish?: false)
+    stdin = "refs/heads/feature #{head_sha} refs/heads/feature #{base_sha}\n"
+
+    assert {output, 1} = run_with_stdin(@push_refs_guard, stdin, cd: worktree)
+    assert output =~ "legacy main commit"
+  end
+
+  defp merge_legacy_main!(opts \\ []) do
+    {worktree, _ci_dir} = setup_ci_worktree!()
+    git!(worktree, ["checkout", "-b", "feature"])
+    git!(worktree, ["commit", "--allow-empty", "-m", "feat: add feature"])
+    git!(worktree, ["push", "origin", "feature"])
+    {base_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+
+    git!(worktree, ["checkout", "main"])
+    git!(worktree, ["commit", "--allow-empty", "-m", "legacy main commit"])
+
+    if Keyword.get(opts, :publish?, true) do
+      git!(worktree, ["push", "origin", "main"])
+    end
+
+    git!(worktree, ["checkout", "feature"])
+    git!(worktree, ["merge", "-m", "chore: merge main into feature", "main"])
+    {head_sha, 0} = System.cmd("git", ["rev-parse", "HEAD"], cd: worktree)
+    {worktree, String.trim(base_sha), String.trim(head_sha)}
+  end
+
   test "git-hooks/ directory contains the pre-commit, commit-msg, and pre-push adapters" do
     hooks_dir = Path.expand("../git-hooks", __DIR__)
     entries = File.ls!(hooks_dir) |> Enum.sort()
