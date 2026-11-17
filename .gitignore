@@ -7,3 +7,6 @@
 # see RepoTasks.MixProject) - app/'s own equivalents are in app/.gitignore.
 /_build/
 /deps/
+
+# Stokowski
+.stokowski/

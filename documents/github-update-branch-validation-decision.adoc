@@ -1,0 +1,78 @@
+= GitHub "Update branch" Merge Commit Validation Exception
+:toc:
+:toc-placement: preamble
+
+== Context
+
+When a contributor clicks GitHub's **Update branch** button on a pull request,
+GitHub creates an automatic merge commit that incorporates the latest commits
+from the base branch into the PR branch.  This merge commit has a
+non-Conventional-Commit subject:
+
+----
+Merge branch 'main' into <feature-branch>
+----
+
+The `git-hooks/validate-commit-range` script validates every commit subject in
+the PR range against the Conventional Commits specification.  Without a
+targeted exception, GitHub's auto-generated merge commit causes CI to fail and
+blocks PRs that would otherwise be mergeable.
+
+This issue was first introduced by EXT-29 (PR #218), which replaced a
+metadata-aware validator with a subject-only traversal, removing the exception
+that had previously been in place.
+
+== Decision
+
+Restore a narrowly scoped exception inside `validate-commit-range`.  A commit
+is skipped **only when all three conditions hold simultaneously**:
+
+1. *Exactly two parents* — the commit is a merge commit (not a regular commit
+   disguised with a merge-style subject).
+
+2. *Committer is `GitHub <noreply@github.com>`* — the commit was produced by
+   the trusted GitHub bot, not by a contributor.
+
+3. *Subject matches `^Merge branch '[^']+' into .+`* — the subject is
+   GitHub's canonical "Update branch" format, with the base branch name
+   enclosed in single quotes.
+
+If any predicate does not match, the commit subject is validated normally.
+
+== Implementation
+
+`git log` is invoked with `--format='%P%x01%cn%x01%ce%x01%s'` so that parent
+hashes, committer name, committer email, and the subject are all available
+within the validation loop.  Records are NUL-delimited (`-z`); fields within
+each record are separated by SOH (ASCII 0x01), a character that cannot appear
+in committer metadata or commit subjects in practice.
+
+== Rationale for each predicate
+
+*Parent count* prevents a regular commit from bypassing validation simply by
+having a subject that starts with `Merge branch '`.  The contributor subject
+guard in `validate-conventional-subject` already catches this pattern and
+rejects it with a helpful remediation hint; the exception must not interfere
+with that guidance.
+
+*Committer identity* binds the exception to the specific GitHub bot account
+that creates "Update branch" commits.  Contributor-authored merge commits
+(e.g., `git merge --no-ff`) use the contributor's own identity and are
+therefore still validated.
+
+*Subject pattern* ensures only the exact auto-generated format is exempted.
+A two-parent commit from the GitHub committer with a different subject (e.g.,
+a revert, or a merge of a submodule) still goes through validation.
+
+== Alternatives considered
+
+*Exempt all merge commits* — rejected.  Contributors can create merge commits
+with arbitrary subjects; blanket exemption would create a loophole.
+
+*Reword the commit before pushing* — not feasible.  The commit is created by
+GitHub's server-side automation after the PR branch is pushed; there is no
+hook opportunity to intercept or rewrite it before it lands.
+
+*Allow `Merge branch '...' into ...'` as a valid Conventional Commits type* —
+rejected.  This would widen the allowed format for all contributors rather than
+targeting the specific trusted-bot case.

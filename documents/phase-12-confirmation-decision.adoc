@@ -1,0 +1,38 @@
+= Phase 12 confirmation behavior: fail closed for destructive commands
+:revdate: Sep 27, 2026
+:icons: font
+:toc:
+
+== Status
+
+This note supersedes the confirmation rule in Phase 12, decision 7, only.
+The accepted Phase 12 plan remains unchanged.
+
+== Decision
+
+Destructive bulk commands require an explicit affirmative answer unless the
+caller passes `--yes`.
+
+* Filter-only `issue unassign` uses `Prompt.confirm_destructive?/1`.
+* Both `issue move` confirmation paths use `Prompt.confirm_destructive?/1`.
+* The helper calls `Owl.IO.confirm/1` with `default: false`.
+* EOF, blank input, and an exhausted stream after invalid input return `false` and send no mutation.
+* `y` and `yes` return `true` from a terminal or a usable pipe.
+* `--yes` bypasses the prompt.
+
+`Prompt.yes?/1` keeps its affirmative default. Non-destructive prompts, such as
+the issue-create self-assignment prompt, keep their existing behavior.
+
+== Reason
+
+Owl maps EOF and blank input to its configured default. A destructive prompt
+with `default: true` can therefore authorize a mutation without an explicit
+affirmative answer. A separate helper limits the fail-closed behavior to the
+three destructive confirmation paths.
+
+== Verification
+
+Prompt tests cover EOF, blank input, `y`, `yes`, and `n`. Command tests prove
+that closed stdin sends no `issueUpdate` request for filter-only unassign,
+explicit-ID move, and project-to-project move. Existing `--yes` and explicit
+answer tests remain in place.

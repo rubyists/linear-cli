@@ -1,5 +1,101 @@
 # Changelog
 
+## [2.11.2](https://github.com/rubyists/linear-cli/compare/v2.11.1...v2.11.2) (2026-10-14)
+
+
+### Bug Fixes
+
+* **cli:** fail closed on destructive confirmations [EXT-69] ([#292](https://github.com/rubyists/linear-cli/issues/292)) ([d5ee641](https://github.com/rubyists/linear-cli/commit/d5ee641578461d35cf7ee86e4b4afbebc8a44782))
+* **cli:** keep bulk JSON output parseable ([#293](https://github.com/rubyists/linear-cli/issues/293)) ([d03b838](https://github.com/rubyists/linear-cli/commit/d03b838bf120778fc583ef9e41345c2cda6a2e92))
+* **cli:** keep remaining JSON output parseable ([#299](https://github.com/rubyists/linear-cli/issues/299)) ([0c049a9](https://github.com/rubyists/linear-cli/commit/0c049a921a194ff34635db35e996be1eafd9cea0))
+* **cli:** reject ambiguous bare IDs in JSON mode ([#298](https://github.com/rubyists/linear-cli/issues/298)) ([da83866](https://github.com/rubyists/linear-cli/commit/da83866be5309b794762e2aae5f2cc87db511219))
+* **deps:** update ash, protobuf, and exclude false positive hex audit for otp &gt; 26 ([#305](https://github.com/rubyists/linear-cli/issues/305)) ([6c75caf](https://github.com/rubyists/linear-cli/commit/6c75cafb2ee0a7c894f7b5a280399556aba8aaf7))
+* **issues:** clarify JSON project diagnostics ([#297](https://github.com/rubyists/linear-cli/issues/297)) ([ebe18b9](https://github.com/rubyists/linear-cli/commit/ebe18b939e5f6fa38a25e12ebec7159659fa5064))
+* **issues:** paginate team member lookup ([#301](https://github.com/rubyists/linear-cli/issues/301)) ([76a3cf6](https://github.com/rubyists/linear-cli/commit/76a3cf669ec8308ccc6678806f4c35d36f4206ae))
+* **issues:** paginate workspace lookup candidates ([#295](https://github.com/rubyists/linear-cli/issues/295)) ([077f10b](https://github.com/rubyists/linear-cli/commit/077f10bbf2eee7e4a9d8101be8f37c70f526ed75))
+* **pagination:** guard unbounded lookup cursor cycles ([#302](https://github.com/rubyists/linear-cli/issues/302)) ([94a148a](https://github.com/rubyists/linear-cli/commit/94a148a8d06acd2851fce2dec0096af128e9cb63))
+
+## [2.11.1](https://github.com/rubyists/linear-cli/compare/v2.11.0...v2.11.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **ci:** recover a release whose release-PR merge run failed ([#289](https://github.com/rubyists/linear-cli/issues/289)) ([4a35c55](https://github.com/rubyists/linear-cli/commit/4a35c5566658d7cb533b06d4a2a574166b50e510))
+* **stokowski:** keep PR branches intact and accept "Accept" approvals ([#290](https://github.com/rubyists/linear-cli/issues/290)) ([d1788ed](https://github.com/rubyists/linear-cli/commit/d1788ed48ead7c46a2f9671bc91272eb727d78b0))
+
+## [2.11.0](https://github.com/rubyists/linear-cli/compare/v2.10.0...v2.11.0) (2026-09-14)
+
+
+### Features
+
+* **issue:** add --priority flag to lc issue create ([#277](https://github.com/rubyists/linear-cli/issues/277)) ([60d8734](https://github.com/rubyists/linear-cli/commit/60d873433286cf2733197e5974da929116807f84))
+* **issue:** add --priority flag to lc issue update ([#278](https://github.com/rubyists/linear-cli/issues/278)) ([d967a0f](https://github.com/rubyists/linear-cli/commit/d967a0fb4c37c1ce2ceac536b6e35b33b4577e7c))
+* **linear:** expose issue priority and timestamps in JSON output ([#275](https://github.com/rubyists/linear-cli/issues/275)) ([7539e03](https://github.com/rubyists/linear-cli/commit/7539e03fd7b15fc696276dd62be2f4d890c72a4f))
+
+## [2.10.0](https://github.com/rubyists/linear-cli/compare/v2.9.0...v2.10.0) (2026-09-13)
+
+
+### Features
+
+* **issues:** add --graph flag to issue view for transitive dependency graph ([#273](https://github.com/rubyists/linear-cli/issues/273)) ([95035b1](https://github.com/rubyists/linear-cli/commit/95035b14dbb295d53e2e02bf04e2406696d6fafd))
+
+## [2.9.0](https://github.com/rubyists/linear-cli/compare/v2.8.0...v2.9.0) (2026-09-07)
+
+
+### Features
+
+* **issue-list:** add -i/--include-labels flag and fix --labels parser hole ([#259](https://github.com/rubyists/linear-cli/issues/259)) ([7dd4bd0](https://github.com/rubyists/linear-cli/commit/7dd4bd0abd08bd6f4bf09f7d8c387d8a090950de))
+
+
+### Bug Fixes
+
+* run local gate before push audit ([#256](https://github.com/rubyists/linear-cli/issues/256)) ([30b3963](https://github.com/rubyists/linear-cli/commit/30b3963fdb0f64124145781b6f6067398ea64dea))
+
+## [2.8.0](https://github.com/rubyists/linear-cli/compare/v2.7.0...v2.8.0) (2026-09-06)
+
+
+### Features
+
+* **issue-list:** show labels in compact output when filtering by --labels ([#211](https://github.com/rubyists/linear-cli/issues/211)) ([8073f9a](https://github.com/rubyists/linear-cli/commit/8073f9a27e8e35cb991dc0e88676b69986b4fb96))
+* **issue-update:** add --body-file to lc issue update ([#227](https://github.com/rubyists/linear-cli/issues/227)) ([3933891](https://github.com/rubyists/linear-cli/commit/39338913bdf5fc50b40f46bc3a40b3806dfb256e))
+* **issue:** add IssueRelation resource and lc issue relation list command (EXT-40) ([#239](https://github.com/rubyists/linear-cli/issues/239)) ([d2f278c](https://github.com/rubyists/linear-cli/commit/d2f278c056833a4dd33d8f81adb0c46a6dacc522))
+* **precommit:** make mix precommit the canonical repository quality gate ([#225](https://github.com/rubyists/linear-cli/issues/225)) ([5dc5ad8](https://github.com/rubyists/linear-cli/commit/5dc5ad81cedf1ff2055c464aa3eb66614d38f0e7))
+* **relations:** add multi-target issue relation creation ([#252](https://github.com/rubyists/linear-cli/issues/252)) ([a60a52e](https://github.com/rubyists/linear-cli/commit/a60a52e280feba4547788c34d8442685758f2c9e))
+* **relations:** add multi-target issue relation removal ([#254](https://github.com/rubyists/linear-cli/issues/254)) ([cbeff42](https://github.com/rubyists/linear-cli/commit/cbeff42ec3d3c1a7abc45d6dad0ea718d285d8eb))
+* **tasks:** split precommit and ci into distinct quality gates (EXT-38) ([#237](https://github.com/rubyists/linear-cli/issues/237)) ([7cd896c](https://github.com/rubyists/linear-cli/commit/7cd896c9fb386878f530795df20110abdc5b5fee))
+
+
+### Bug Fixes
+
+* **ci:** preserve GitHub Update branch merge exception ([#220](https://github.com/rubyists/linear-cli/issues/220)) ([044459e](https://github.com/rubyists/linear-cli/commit/044459e2c82b72faddd533b9eb3ee00e20596d53))
+* **pager:** fix pagers that use stdio ([#214](https://github.com/rubyists/linear-cli/issues/214)) ([6d56882](https://github.com/rubyists/linear-cli/commit/6d56882830dac501e2e7749354446aaa4a0c0a8c))
+
+## [2.7.0](https://github.com/rubyists/linear-cli/compare/v2.6.0...v2.7.0) (2026-09-04)
+
+
+### Features
+
+* **display:** route long output through \$PAGER ([#203](https://github.com/rubyists/linear-cli/issues/203)) ([c8f42da](https://github.com/rubyists/linear-cli/commit/c8f42da8fd8e43ea10467013270a77d4aed22efc))
+* **issue-comment:** accept multiple ISSUE_IDs ([#208](https://github.com/rubyists/linear-cli/issues/208)) ([1ae4fba](https://github.com/rubyists/linear-cli/commit/1ae4fbae0e1eece717b2f911efa9c21d8024ed64))
+* **issue-create:** add -y/--yes to skip interactive prompts ([#205](https://github.com/rubyists/linear-cli/issues/205)) ([f798546](https://github.com/rubyists/linear-cli/commit/f798546a9f5f6a2844f7636fdb3ae6f74dbb0ee9))
+* **issue:** add --labels filter to lc issue list ([#206](https://github.com/rubyists/linear-cli/issues/206)) ([f966f14](https://github.com/rubyists/linear-cli/commit/f966f14acdaf5690ac6254b24895f44c0a203110))
+* **issue:** add -w/--web flag to lc issue view ([#204](https://github.com/rubyists/linear-cli/issues/204)) ([f26757e](https://github.com/rubyists/linear-cli/commit/f26757e2abb5626c4b188994dbcc7268088fb3c6))
+* **issue:** include labels in Issue.full_fields and display ([#210](https://github.com/rubyists/linear-cli/issues/210)) ([df13fd8](https://github.com/rubyists/linear-cli/commit/df13fd81c99eb4b787cc66aeaed9fe87cd57500e))
+
+## [2.6.0](https://github.com/rubyists/linear-cli/compare/v2.5.1...v2.6.0) (2026-09-03)
+
+
+### Features
+
+* add --body-file to lc issue create for --description ([#198](https://github.com/rubyists/linear-cli/issues/198)) ([7fe4db7](https://github.com/rubyists/linear-cli/commit/7fe4db7606ae48d6c5049f4a79905e80ea95afb0))
+
+## [2.5.1](https://github.com/rubyists/linear-cli/compare/v2.5.0...v2.5.1) (2026-09-03)
+
+
+### Bug Fixes
+
+* repair stokowski submodule reference ([#199](https://github.com/rubyists/linear-cli/issues/199)) ([a7aad55](https://github.com/rubyists/linear-cli/commit/a7aad55a726e22db5115ece5dea996d9b2dcba08))
+
 ## [2.5.0](https://github.com/rubyists/linear-cli/compare/v2.4.0...v2.5.0) (2026-08-24)
 
 

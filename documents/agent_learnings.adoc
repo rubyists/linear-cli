@@ -1,0 +1,8 @@
+= Active agent learnings
+:generated: true
+
+// GENERATED from documents/agent_learnings/*.adoc. Do not edit by hand.
+// The aggregate contains at most 20 active, actionable learnings. See
+// documents/agent_learnings/README.adoc for the entry and retirement contract.
+
+include::agent_learnings/EXT-76_learned.adoc[]

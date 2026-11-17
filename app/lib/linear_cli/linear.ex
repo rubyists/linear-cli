@@ -14,10 +14,12 @@ defmodule LinearCli.Linear do
     resource LinearCli.Linear.User do
       define :me, action: :me, get?: true
       define :team_members, action: :by_team, args: [:team_id]
+      define :workspace_team_members, action: :by_team_for_lookup, args: [:team_id]
     end
 
     resource LinearCli.Linear.Team do
       define :teams, action: :all
+      define :workspace_teams, action: :all_for_lookup
       define :my_teams, action: :mine
       define :find_team, action: :find, args: [:id], get?: true
     end
@@ -25,6 +27,7 @@ defmodule LinearCli.Linear do
     resource LinearCli.Linear.Project do
       define :projects, action: :all
       define :find_project, action: :find, args: [:id], get?: true
+      define :workspace_projects, action: :all_for_lookup
       define :my_projects, action: :mine
       define :projects_by_team, action: :by_team, args: [:team_id]
       define :create_project, action: :create, args: [:name, :team_id]
@@ -33,12 +36,15 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.Issue do
       define :issues, action: :list
+      define :issues_first_page, action: :list_first_page, args: [:input]
       define :create_issue, action: :create, args: [:title, :description, :team_id]
       define :assign_issue, action: :assign, args: [:assignee_id]
+      define :unassign_issue, action: :unassign
       define :attach_issue_to_project, action: :attach_to_project, args: [:project_id]
       define :close_issue, action: :close, args: [:state_id]
       define :set_issue_status, action: :set_status, args: [:state_id]
       define :update_issue_description, action: :update_description, args: [:description]
+      define :set_issue_priority, action: :set_priority, args: [:priority]
     end
 
     resource LinearCli.Linear.Label do
@@ -56,6 +62,12 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.ProjectUpdate do
       define :post_project_update, action: :create, args: [:project_id, :body]
+    end
+
+    resource LinearCli.Linear.IssueRelation do
+      define :issue_relations, action: :list, args: [:issue_id]
+      define :create_issue_relation, action: :create, args: [:issue_id, :related_issue_id, :type]
+      define :delete_issue_relation, action: :destroy
     end
   end
 end

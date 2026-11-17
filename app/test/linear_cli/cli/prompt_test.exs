@@ -15,6 +15,11 @@ defmodule LinearCli.CLI.PromptTest do
       assert capture_io(fn -> Prompt.warn("Careful now") end) ==
                "\e[33mCareful now\e[39m\e[0m\n"
     end
+
+    test "can print the message to stderr" do
+      assert capture_io(:stderr, fn -> Prompt.warn("Careful now", :stderr) end) ==
+               "\e[33mCareful now\e[39m\e[0m\n"
+    end
   end
 
   describe "say/1" do
@@ -66,6 +71,42 @@ defmodule LinearCli.CLI.PromptTest do
       assert capture_io([input: "n\n"], fn ->
                refute Prompt.yes?("Continue?")
              end)
+    end
+  end
+
+  describe "confirm_destructive?/1" do
+    test "defaults to false on EOF" do
+      assert capture_io([input: ""], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "defaults to false on a blank answer" do
+      assert capture_io([input: "\n"], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "returns false when invalid input is followed by EOF" do
+      output =
+        capture_io([input: "invalid\n"], fn ->
+          refute Prompt.confirm_destructive?("Proceed?")
+        end)
+
+      assert output =~ "unknown answer"
+      assert output =~ "[yN]"
+    end
+
+    test "an explicit yes answer returns true" do
+      assert capture_io([input: "yes\n"], fn ->
+               assert Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
+    end
+
+    test "an explicit no answer returns false" do
+      assert capture_io([input: "n\n"], fn ->
+               refute Prompt.confirm_destructive?("Proceed?")
+             end) =~ "[yN]"
     end
   end
 

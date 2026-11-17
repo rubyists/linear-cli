@@ -7,7 +7,8 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   use ExUnit.Case, async: false
   import ExUnit.CaptureIO
 
-  alias LinearCli.CLI.{Commands, IssueHelpers}
+  alias LinearCli.CLI.Commands.Issues.{Development, Mutations, Read}
+  alias LinearCli.CLI.Issue.Creation
   alias LinearCli.Linear.User
   alias LinearCli.Profiles
 
@@ -43,6 +44,19 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
   defp team_projects(projects),
     do: %{"data" => %{"team" => %{"projects" => %{"nodes" => projects}}}}
+
+  defp team_members_page(members, has_next_page \\ false, end_cursor \\ nil) do
+    %{
+      "data" => %{
+        "team" => %{
+          "members" => %{
+            "edges" => Enum.map(members, &%{"node" => &1, "cursor" => &1["id"]}),
+            "pageInfo" => %{"hasNextPage" => has_next_page, "endCursor" => end_cursor}
+          }
+        }
+      }
+    }
+  end
 
   defp label_response(names) do
     %{
@@ -110,12 +124,10 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
   # `System.tmp_dir!()` - never the real project working directory. See
   # `LinearCli.CLI.IssueCommandsTest`'s own identical setup.
   defp git_repo! do
-    origin_path = tmp_path("origin")
-    File.mkdir_p!(origin_path)
+    origin_path = tmp_dir!("origin")
     {_output, 0} = System.cmd("git", ["init", "--bare", "-q"], cd: origin_path)
 
-    repo_path = tmp_path("repo")
-    File.mkdir_p!(repo_path)
+    repo_path = tmp_dir!("repo")
     {_output, 0} = System.cmd("git", ["init", "-q"], cd: repo_path)
     {_output, 0} = System.cmd("git", ["config", "user.name", "Test User"], cd: repo_path)
     {_output, 0} = System.cmd("git", ["config", "user.email", "test@example.com"], cd: repo_path)
@@ -126,22 +138,22 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     {_output, 0} = System.cmd("git", ["remote", "add", "origin", origin_path], cd: repo_path)
     {_output, 0} = System.cmd("git", ["push", "-q", "-u", "origin", "main"], cd: repo_path)
 
-    on_exit(fn ->
-      File.rm_rf!(origin_path)
-      File.rm_rf!(repo_path)
-    end)
-
     repo_path
   end
 
-  defp tmp_path(prefix) do
-    Path.join(
-      System.tmp_dir!(),
-      "linear_cli_profile_defaults_test_#{prefix}_#{System.unique_integer([:positive, :monotonic])}"
-    )
+  # `System.unique_integer/1` resets across BEAM VM restarts, so an interrupted
+  # prior run can reuse a stale /tmp directory. A cryptographic nonce avoids
+  # collisions across processes; `on_exit` is registered before any git command
+  # so a setup failure still cleans up.
+  defp tmp_dir!(prefix) do
+    nonce = :crypto.strong_rand_bytes(16) |> Base.url_encode64(padding: false)
+    path = Path.join(System.tmp_dir!(), "linear_cli_profile_defaults_test_#{prefix}_#{nonce}")
+    File.mkdir!(path)
+    on_exit(fn -> File.rm_rf!(path) end)
+    path
   end
 
-  describe "Commands.issue_list/1 falls back to the active profile" do
+  describe "Read.issue_list/1 falls back to the active profile" do
     test "uses the active profile's team/project when both flags are omitted" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
       :ok = Profiles.activate("manhattan")
@@ -175,7 +187,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:filter, filter}
@@ -216,7 +228,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
@@ -252,7 +264,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:filter, filter}
@@ -285,7 +297,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       assert filter["team"] == %{"key" => %{"eq" => "ENG"}}
@@ -322,7 +334,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: []
       }
 
-      capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert_received {:filter, filter}
       refute Map.has_key?(filter, "team")
@@ -354,14 +366,14 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         unknown: ["42"]
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_list(result) end)
+      output = capture_io(fn -> assert :ok = Read.issue_list(result) end)
 
       assert output =~ "CRY-1"
       assert_received {:id, "CRY-42"}
     end
   end
 
-  describe "Commands.issue_update/1 resolves bare issue numbers via the active profile" do
+  describe "Mutations.issue_update/1 resolves bare issue numbers via the active profile" do
     test "expands a bare positional id before looking it up" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -392,14 +404,128 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
         flags: %{cancel: false, close: false, trash: false}
       }
 
-      output = capture_io(fn -> assert :ok = Commands.issue_update(result) end)
+      output = capture_io(fn -> assert :ok = Mutations.issue_update(result) end)
 
       assert output =~ "Comment added to CRY-1"
       assert_received {:id, "CRY-42"}
     end
   end
 
-  describe "Commands.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
+  describe "Mutations.issue_unassign/1 resolves bare issue numbers via the active profile" do
+    test "expands a bare positional id before looking it up" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "issue(id: $id)") ->
+            send(test_pid, {:id, decoded["variables"]["id"]})
+
+            Req.Test.json(
+              conn,
+              %{"data" => %{"issue" => issue_map(%{"identifier" => "CRY-42"})}}
+            )
+
+          String.contains?(query, "issueUpdate") ->
+            assert decoded["variables"]["input"] == %{"assigneeId" => nil}
+
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issueUpdate" => %{
+                    "issue" => issue_map(%{"identifier" => "CRY-42", "assignee" => nil})
+                  }
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{unknown: ["42"], options: %{output: "text"}}
+      output = capture_io(fn -> assert :ok = Mutations.issue_unassign(result) end)
+
+      assert_received {:id, "CRY-42"}
+      assert output =~ "CRY-42 unassigned"
+    end
+
+    test "filter mode applies the active profile's team and project defaults" do
+      {:ok, _} = Profiles.create("manhattan", team: "CRY", project: "Manhattan Rollout")
+      :ok = Profiles.activate("manhattan")
+
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        decoded = Jason.decode!(body)
+        query = decoded["query"]
+
+        cond do
+          String.contains?(query, "members(first: 50, after: $after)") ->
+            Req.Test.json(
+              conn,
+              team_members_page([%{"id" => "u1", "name" => "Ada", "email" => "ada@example.com"}])
+            )
+
+          String.contains?(query, "team(id: $id)") ->
+            Req.Test.json(conn, %{"data" => %{"team" => team_map("CRY")}})
+
+          String.contains?(query, "projects(first: 100") ->
+            Req.Test.json(conn, team_projects([project_map("p1", "Manhattan Rollout")]))
+
+          String.contains?(query, "issues(filter") ->
+            send(test_pid, {:filter, decoded["variables"]["filter"]})
+            Req.Test.json(conn, issues_response([issue_map(%{"assignee" => me_map()})]))
+
+          String.contains?(query, "issueUpdate") ->
+            Req.Test.json(
+              conn,
+              %{
+                "data" => %{
+                  "issueUpdate" => %{"issue" => issue_map(%{"assignee" => nil})}
+                }
+              }
+            )
+
+          true ->
+            raise "no stub matched query: #{query}"
+        end
+      end)
+
+      result = %{
+        unknown: [],
+        flags: %{no_mine: false, no_profile: false, all: false, yes: true, dry_run: false},
+        options: %{
+          assignee: "Ada",
+          team: nil,
+          project: nil,
+          state: [],
+          status: [],
+          labels: [],
+          output: "text"
+        }
+      }
+
+      output = capture_io(fn -> assert :ok = Mutations.issue_unassign(result) end)
+
+      assert output =~ "CRY-1 unassigned"
+      assert_received {:filter, filter}
+      assert filter["assignee"] == %{"id" => %{"eq" => "u1"}}
+      assert filter["team"] == %{"key" => %{"eq" => "CRY"}}
+      assert filter["project"] == %{"id" => %{"eq" => "p1"}}
+    end
+  end
+
+  describe "Development.issue_develop/2, issue_pr/2, issue_take/2 resolve bare issue numbers via the active profile" do
     test "issue_develop/2 expands the bare issue_id before self-assigning/checking it out" do
       {:ok, _} = Profiles.create("manhattan", team: "CRY")
       :ok = Profiles.activate("manhattan")
@@ -433,7 +559,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       output =
         capture_io(fn ->
-          assert :ok = Commands.issue_develop(result, cwd: repo, me: me)
+          assert :ok = Development.issue_develop(result, cwd: repo, me: me)
         end)
 
       assert output =~ "Checked out branch main"
@@ -474,7 +600,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       output =
         capture_io(fn ->
           assert :ok =
-                   Commands.issue_pr(result,
+                   Development.issue_pr(result,
                      cwd: repo,
                      me: me,
                      runner: fn _title, _body -> "https://github.com/x/y/pull/1" end
@@ -516,7 +642,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       output =
         capture_io(fn ->
-          assert :ok = Commands.issue_take(result, me: me)
+          assert :ok = Development.issue_take(result, me: me)
         end)
 
       assert output =~ "Assigning issue CRY-42 to ya"
@@ -524,7 +650,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
     end
   end
 
-  describe "IssueHelpers.make_da_issue!/1 falls back to the active profile" do
+  describe "Creation.make_da_issue!/1 falls back to the active profile" do
     test "uses the active profile's team/project when both are omitted from opts" do
       {:ok, _} = Profiles.create("manhattan", team: "ENG", project: "Manhattan Rollout")
       :ok = Profiles.activate("manhattan")
@@ -564,7 +690,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
 
       assert capture_io(fn ->
                assert {:ok, %{identifier: "CRY-2"}} =
-                        IssueHelpers.make_da_issue!(
+                        Creation.make_da_issue!(
                           title: "New thing",
                           description: "Some description",
                           labels: ["urgent"]
@@ -612,7 +738,7 @@ defmodule LinearCli.CLI.ProfileDefaultsTest do
       end)
 
       capture_io(fn ->
-        IssueHelpers.make_da_issue!(
+        Creation.make_da_issue!(
           title: "New thing",
           description: "Some description",
           labels: ["urgent"],

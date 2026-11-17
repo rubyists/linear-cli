@@ -56,6 +56,20 @@ defmodule LinearCli.CLI.Projects do
   end
 
   @doc """
+  Like `project_for/2` but never prompts: returns the project only when there
+  is an exact match (score 100), `nil` otherwise. Used by `--yes` flows where
+  interactive prompts are disabled.
+  """
+  def project_for_strict(projects, search \\ nil)
+
+  def project_for_strict([], _search), do: nil
+  def project_for_strict(_projects, nil), do: nil
+
+  def project_for_strict(projects, search) do
+    Enum.find(project_scores(projects, search), &(Project.match_score?(&1, search) == 100))
+  end
+
+  @doc """
   Ported from Ruby's `CLI::Projects#project_scores`. The subset of
   `projects` with a positive `Project.match_score?/2` against
   `search_term`, ascending by score (lowest positive match first) - matches

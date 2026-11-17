@@ -17,6 +17,7 @@ defmodule LinearCli.Favorites do
   """
 
   alias Exqlite.Sqlite3
+  alias LinearCli.Linear
 
   @doc """
   Favorites `value` under `kind` (`"team"` or `"project"`). Supplying
@@ -65,6 +66,63 @@ defmodule LinearCli.Favorites do
       |> Enum.map(fn [value] -> value end)
     end)
   end
+
+  def records(_kind, true), do: {:ok, nil}
+
+  def records(kind, _all?) do
+    case entries(kind) do
+      [] ->
+        {:ok, nil}
+
+      entries ->
+        Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, records} ->
+          case favorite_record(kind, entry) do
+            {:ok, record} -> {:cont, {:ok, [record | records]}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+        |> case do
+          {:ok, records} -> {:ok, Enum.reverse(records)}
+          error -> error
+        end
+    end
+  end
+
+  # Older databases have only identifiers. Resolve each missing snapshot
+  # directly once, without fetching a workspace-wide list.
+  defp favorite_record(kind, %{value: value, details: nil}) do
+    result = if kind == "team", do: Linear.find_team(value), else: Linear.find_project(value)
+
+    with {:ok, record} <- result do
+      :ok = save(kind, record)
+      {:ok, record}
+    end
+  end
+
+  defp favorite_record("team", %{details: details}), do: {:ok, Linear.Team.from_map(details)}
+
+  defp favorite_record("project", %{details: details}),
+    do: {:ok, Linear.Project.from_map(details)}
+
+  def save("team", team) do
+    add("team", team.key, team_details(team))
+  end
+
+  def save("project", project) do
+    details = %{
+      "id" => project.id,
+      "name" => project.name,
+      "url" => project.url,
+      "slugId" => project.slug_id,
+      "description" => project.description,
+      "content" => project.content,
+      "teams" => %{"nodes" => Enum.map(project.teams, &team_details/1)}
+    }
+
+    add("project", project.id, details)
+  end
+
+  defp team_details(team), do: Map.take(team, [:id, :key, :name, :description])
 
   defp with_db(fun) do
     path = db_path()

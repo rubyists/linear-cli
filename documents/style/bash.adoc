@@ -1,0 +1,66 @@
+= Bash Style
+
+== Error handling
+
+Never use `set -e`, `set -u`, or `set -o pipefail`, including combined forms
+such as `set -euo pipefail`. Their context-sensitive behavior makes failures
+hard to reason about.
+
+Check every command that can fail explicitly, with an actionable diagnostic and
+an intentional exit or return path:
+
+[source,bash]
+----
+if ! install -m 0755 "$source" "$destination"
+then
+    printf 'ERROR: unable to install %s\n' "$destination" >&2
+    exit 1
+fi
+----
+
+For a command substitution, check the assignment itself:
+
+[source,bash]
+----
+checksum=$(sha256sum "$artifact") || {
+    printf 'ERROR: unable to calculate checksum for %s\n' "$artifact" >&2
+    exit 1
+}
+----
+
+Use a small helper only when it retains a clear diagnostic at every call site;
+do not capture `$?` after an unchecked command. Commands expected to fail as
+part of a test must be placed in an explicit `if` branch and have both outcomes
+handled.
+
+Cleanup is best-effort, but it is still explicit: report a warning for a failed
+cleanup action and continue cleaning the remaining resources.
+
+== Control flow and pipelines
+
+Put `then` and `do` on their own lines. Do not write `; then` or `; do`.
+
+[source,bash]
+----
+if [ -f "$file" ]
+then
+    process_file "$file"
+fi
+
+for file in "${files[@]}"
+do
+    process_file "$file"
+done
+----
+
+Avoid pipelines when an intermediate command's failure matters. Capture the
+output of the fallible command first, check it, and then process the captured
+value. If a pipeline is unavoidable, put it in an explicit conditional and
+ensure every producer failure is independently checked before the pipeline.
+
+== Shell scope
+
+Prefer Bash only when Bash features are required, and declare it with
+`#!/usr/bin/env bash`. Quote expansions unless deliberate word splitting or
+pathname expansion is required. Keep hook adapters small; put behavior in
+directly testable `ci/*.sh` programs.

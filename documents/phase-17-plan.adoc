@@ -1,0 +1,311 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 07, 2026
+:my-title: Phase 17 plan: separate issue-list label display from label filtering
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Goal
+
+Give issue listing an explicit presentation flag. `-i/--include-labels`
+includes each issue's labels in the output without selecting a subset of
+issues. Keep the existing `-l/--labels NAME[,NAME...]` spelling for label-name
+filtering and `-s/--status STATUS` spelling for friendly-status filtering.
+Every existing option keeps its contract; this phase adds only the missing
+presentation control:
+
+[source,sh]
+----
+# Include labels on the normal compact listing without filtering its issues.
+lcls --include-labels
+lcls -i
+
+# Include every assignee and every lifecycle state, with labels in the output.
+lcls -N --include-labels --all
+lcls -N -i --all
+
+# Return issues carrying Bug, and include their labels in the output.
+lcls --labels Bug
+lcls -l Bug
+
+# Match Bug or Feature, case-insensitively.
+lcls --labels Bug,Feature
+
+# Show labels for a specifically named issue.
+lcls CRY-123 --include-labels
+
+# Existing status filtering composes without changing its short option.
+lcls -s "Human Review" --include-labels
+----
+
+== Context and failure mode
+
+Versions 2.7.0 and 2.8.0 expose `-l/--labels LABELS` on `issue list` as a
+value-taking filter. Commit `f966f14` introduced the filter; commit `8073f9a`
+then made compact label rendering conditional on that same filter being
+present. That coupled three different concerns:
+
+* which issues the API selects;
+* whether the GraphQL selection retrieves each issue's labels; and
+* whether the CLI renders those labels.
+
+The coupling produces a silent and misleading failure for the motivating
+command:
+
+[source,sh]
+----
+lcls -N --labels --all
+----
+
+Optimus treats `--labels` as an option requiring a value and consumes `--all`
+as that value. `parse_labels/1` accepts it as the label name `"--all"`, so the
+real `--all` flag is never set. The CLI sends a case-insensitive filter for a
+label literally named `--all`; Linear returns no issues; formatting the empty
+list produces only a newline and exit status zero. The user's real labels are
+irrelevant because the request accidentally names a label that does not exist.
+
+The behavior was reproduced against the installed 2.8.0 binary. Supplying the
+intended value (`lcls -N --labels Bug --all`) returned the existing Bug-labeled
+issues, confirming that authentication, label data, and the Linear API were
+all working.
+
+Phase 17 does not reinterpret that malformed command as presentation. It gives
+presentation the explicit `--include-labels` name and makes the malformed
+`--labels --all` form fail clearly. The corrected presentation command is
+`lcls -N --include-labels --all`.
+
+== Decisions
+
+1. *`-i/--include-labels` is the boolean issue-list display flag.* It requests
+   label data and includes every returned issue's labels in text and JSON
+   output. It never adds a label filter. In compact text, labels remain the
+   existing trailing bracketed list (`[Bug, Feature]`); an issue with no labels
+   gets no empty bracket marker. `-i` is unused by `issue list` and by the
+   inherited global options; the top-level bare `i` subcommand alias is a
+   different token and does not conflict.
+2. *`-l/--labels` remains the issue-list label filter.* It takes one label name
+   or a comma-separated list and preserves the existing case-insensitive OR
+   semantics. A label filter continues to imply label display so a user can see
+   all labels on every match without also spelling `--include-labels`.
+3. *Presentation and filtering compose but do not imply each other in the
+   other direction.* `--include-labels` alone changes only fetched/rendered
+   fields; `--labels Bug` filters and displays; using both is valid and
+   equivalent to the filter alone for label retrieval and rendering.
+4. *`-s/--status` stays exactly as it is.* Reusing `-s` for presentation would
+   break an established issue-list contract, so it is explicitly out of scope.
+   `-l/--labels`, `-s/--status`, and every other existing short and long option
+   retain their current spelling and meaning.
+5. *An option token must not silently become a label-filter value.* The
+   `--labels` parser must reject a following recognized option such as `--all`
+   with a clear missing-value/invalid-value error before any API call. Moving
+   presentation to a new flag without closing the original parser hole would
+   leave the motivating silent failure intact.
+6. *`issue create` is unchanged.* Its existing `-l/--labels Bug,Feature`
+   option assigns labels to a new issue and remains value-taking. Optimus
+   scopes options to their leaf subcommand; the create and list forms happen to
+   retain the same value-taking labels spelling but have independent parsers.
+7. *Do not fetch label fields by default.* A normal list without
+   `--include-labels` or `--labels VALUE` keeps the smaller GraphQL selection and
+   existing compact output. The new behavior is opt-in and does not add
+   avoidable response weight to every listing.
+
+== Verified implementation boundaries
+
+* `app/lib/linear_cli/cli.ex` defines `issue list`'s current
+  `-l/--labels` entry under `options`, routed through `parse_labels/1`. The
+  same list spec binds `-s` to `--status`; both existing entries stay intact.
+  The separately scoped `issue create` labels option also does not change in
+  this phase.
+* `LinearCli.CLI.Commands.issue_list/1` currently copies
+  `options.labels` into the domain input and passes
+  `labels: input.labels != []` to `Display.show/2`. This is the CLI-layer
+  coupling point to split.
+* `LinearCli.Linear.Issue`'s `:list` action currently has one `labels` array
+  argument, used as the server-side filter. `Issue.Read.List.read/4` also uses
+  `args.labels != []` to choose between the base GraphQL document and the
+  label-bearing document. The filter argument can stay intact; a separate
+  `include_labels` boolean is needed for field selection.
+* `Issue.from_map/1` already parses `issue.labels.nodes` into `%Label{}`
+  structs, and `Issue.list_fields_with_labels/0` already supplies the needed
+  GraphQL selection. No new resource or response mapper is required.
+* `LinearCli.CLI.Display` already accepts a boolean `labels` display option and
+  has tests for showing and hiding trailing label brackets. That internal
+  contract and the current accessible, linear text format can remain intact.
+* ID-driven `issue list` calls use `Issue.full_fields/0`, which already fetches
+  labels. `--include-labels` controls whether compact output prints them; the
+  existing full-output `Labels:` line remains unchanged.
+
+== Implementation design
+
+=== CLI parsing
+
+In `app/lib/linear_cli/cli.ex`:
+
+* add `include_labels` to the `issue list` `flags` block with short name `-i`,
+  long name `--include-labels`, and help text such as
+  `Include labels in issue list output`;
+* retain the value-taking `labels` option as `-l/--labels LABELS` and preserve
+  its comma-separated, case-insensitive OR parser;
+* retain the existing `-s/--status STATUS` option unchanged; and
+* make `parse_labels/1` reject a recognized flag token supplied as
+  `--labels`' would-be value, so `lcls --labels --all` exits as a usage error
+  and makes no GraphQL request.
+
+Do not change the separately scoped `issue create` labels option or its
+parser.
+
+=== Command and domain inputs
+
+In `LinearCli.CLI.Commands.issue_list/1`:
+
+* retain `label_filter = Map.get(options, :labels) || []`;
+* derive `include_labels` as
+  `Map.get(flags, :include_labels, false) || label_filter != []`;
+* pass the existing domain filter as `labels: label_filter`;
+* pass the new domain selection switch as
+  `include_labels: include_labels`; and
+* pass the existing `labels: include_labels` option to `Display.show/2`.
+
+In the `LinearCli.Linear.Issue` `:list` action, add
+`argument :include_labels, :boolean, default: false`. Keep `:labels` as the
+array of names used by `maybe_put_label_filter/2`; this avoids an unnecessary
+break in the domain code interface while giving each concern one explicit
+input.
+
+`Issue.Read.List` chooses `list_document_with_labels/0` from
+`args.include_labels`, not from whether `args.labels` is empty. Filtering still
+comes exclusively from `maybe_put_label_filter/2`. As a defensive domain
+invariant, a non-empty `args.labels` value should also force label field
+selection even if a future caller forgets to set `include_labels`; the CLI
+sets both deliberately, while the manual read remains safe for direct domain
+callers.
+
+=== Display and output formats
+
+Keep the internal boolean `labels` display option unchanged. Compact text
+continues to append all returned label names in brackets when enabled. It does
+not show only the name used to filter: an issue matching `Bug` but also carrying
+`Feature` renders both.
+
+JSON output must contain the populated `labels` array whenever
+`--include-labels` or `--labels VALUE` requested label data. Without either
+switch, its current unloaded empty/default value remains unchanged; this phase
+does not make every JSON listing pay for nested label data.
+
+== Tests
+
+Extend the existing consolidated test files rather than introducing a new
+suite.
+
+`app/test/linear_cli/cli/issue_commands_test.exs`:
+
+* the desired command, `issue list -N --include-labels --all` (and its `-i`
+  spelling), parses both boolean flags, sends neither an assignee nor
+  lifecycle-date filter, sends no label filter, requests label fields, and
+  renders returned labels;
+* bare `--include-labels` requests label fields while leaving the API filter
+  free of a `labels` key;
+* `--labels Bug` and `-l Bug` preserve single-name case-insensitive filtering
+  and display labels;
+* `--labels Bug,Feature` preserves OR filtering and displays every label on a
+  matching issue;
+* `--labels no-such-label` returns the normal empty result;
+* `--labels` followed by `--all` is a clear usage error and sends no request;
+* `-s "Human Review"` and `--status "Human Review"` retain friendly-status
+  filtering and compose with `-i/--include-labels`;
+* a positional issue identifier composed with trailing `--include-labels` still
+  uses the full issue lookup and renders its labels;
+* with neither label switch, labels stay out of the compact GraphQL selection
+  and text; and
+* `--output json --include-labels` contains the fetched label objects without
+  human text mixed into stdout.
+
+`app/test/linear_cli/linear/issue_test.exs`:
+
+* `include_labels: true, labels: []` selects and parses label fields without
+  adding a label filter;
+* `include_labels: false, labels: []` retains the base selection;
+* non-empty `labels` retains the existing single/multiple filter shapes and
+  defensively selects label fields; and
+* API errors and pagination behave identically for both document variants.
+
+`app/test/linear_cli/cli/display_test.exs` retains its existing boolean
+`labels` option coverage for multiple labels and an unlabeled issue; no display
+API rename is part of this phase.
+
+The focused verification command is:
+
+[source,sh]
+----
+cd app
+mix test \
+  test/linear_cli/cli/issue_commands_test.exs \
+  test/linear_cli/linear/issue_test.exs \
+  test/linear_cli/cli/display_test.exs
+----
+
+Finish with the repository's complete `mix precommit` gate from the root.
+
+== Documentation
+
+* `Readme.adoc`'s List Issues section gains the command contract shown in the
+  Goal, including the explicit distinction between `--include-labels`
+  (presentation) and `--labels` (filtering). No migration note is needed for
+  existing valid commands because their contracts do not change.
+* Optimus-generated `issue list --help` must add `-i, --include-labels` under
+  FLAGS while retaining `-l, --labels LABELS` and `-s, --status STATUS` under
+  OPTIONS.
+* `documents/ash-domain-erd.adoc` must be updated in the implementation change
+  because adding the `include_labels` Ash action argument and materially
+  clarifying the `labels` argument changes the canonical domain inventory.
+* Release notes call out the additive `-i/--include-labels` flag. Do not edit
+  historical changelog entries that accurately describe 2.7/2.8.
+* `AGENTS.md` indexes this Phase 17 plan. No repository-layout or module-tree
+  update is needed because the phase adds no top-level directory or major
+  architectural layer.
+
+== Sequencing
+
+This phase depends on the label-filter and compact-label work already released
+in 2.7.0 and 2.8.0 and is based on `origin/main` at v2.8.0.
+
+1. Change the `issue list` Optimus contract and add parser-level regression
+   coverage, including `-N --include-labels --all`, `-i`, unchanged `-s`
+   status filtering, and a clear failure for the motivating malformed
+   `--labels --all` ordering.
+2. Split filter names from label-field selection through
+   `Commands.issue_list/1` and the `Issue` read action; update domain tests and
+   `documents/ash-domain-erd.adoc` in the same change.
+3. Route the new flag through the existing display switch, update text/JSON
+   tests, and preserve the existing output format.
+4. Update the README, generated help, and release notes.
+5. Run focused tests, `mix precommit`, and manual dogfooding through
+   `mix lc` (never an alternate Linear client).
+
+Implementation should use a feature branch from the then-current `main`; the
+plan branch contains documentation only. Conventional commit type: `feat`.
+
+== Acceptance criteria
+
+* `lcls -N --include-labels --all` and `lcls -N -i --all` list issues across
+  assignees and lifecycle states and include their labels without adding a
+  label filter.
+* `-i/--include-labels` never changes which issues match.
+* `-l/--labels` preserves case-insensitive, comma-separated OR filtering and
+  makes matched issues' labels visible.
+* `-s/--status` retains its existing friendly-status filtering contract.
+* `lcls --labels --all` fails clearly before any API request rather than
+  filtering for a label named `--all`.
+* `issue create -l/--labels VALUE` is unchanged.
+* Text and JSON output, paginated results, positional issue lookup, and the
+  no-label fast path all have regression coverage.
+* Help, README, release guidance, tests, and the Ash domain ERD describe the
+  same contract.

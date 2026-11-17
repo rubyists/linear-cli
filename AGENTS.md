@@ -3,6 +3,16 @@
 This document provides an index and source reference of guidelines, processes,
 and best practices for agents to follow.
 
+## Documents
+
+Use the [`simple-english`](vendor/claude-plain-english-skill/skills/simple-english) skill when
+authoring technical documentation or instructions.
+
+Use the [`plain-english`](vendor/claude-plain-english-skill/skills/plain-english) skill when
+authoring non-technical documentation, marketing copy, or other content intended for a general audience.
+
+Do not apply both to the same text.
+
 ## The Plan
 
 - Initial Plan: documents/initial-plan.adoc (historical snapshot - not
@@ -14,8 +24,39 @@ and best practices for agents to follow.
 - Phase 9 Plan: documents/phase-9-plan.adoc
 - Phase 10 Plan: documents/phase-10-plan.adoc
 - Phase 11 Plan: documents/phase-11-plan.adoc
+- Phase 12 Plan: documents/phase-12-plan.adoc
+- Phase 12 JSON output decision: documents/phase-12-json-output-decision.adoc
+- Phase 12 confirmation decision: documents/phase-12-confirmation-decision.adoc
+- Phase 13 Plan: documents/phase-13-plan.adoc
+- Phase 14 Plan: documents/phase-14-plan.adoc
+- Phase 15 Plan: documents/phase-15-plan.adoc
+- Phase 16 Plan: documents/phase-16-plan.adoc
+- Phase 17 Plan: documents/phase-17-plan.adoc
+- Phase 18 Plan: documents/phase-18-plan.adoc
+- Burrito distribution decision: documents/burrito-decision.adoc
+- Development and CI quality gates decision: documents/quality-gates-decision.adoc
 
 ## Project Structure
+
+### Linear Team and Project
+
+The `Linear CLI` project of the "Elixir Traitors" (`EXT`) team on the
+https://linear.app/the-rubyists[Rubyists Linear Organization] manages
+the project roadmap and issue tracking.
+
+#### Rules for Interacting with Linear
+
+Always only use `mix lc` to interact with linear.app. Do not look for an
+mcp or any other way to interact with issues or the project.
+
+`mix lc --help`
+`mix lc issue --help`
+`mix lc issue list --help`
+`mix lc issue create --help`
+`mix lc issue status --help`
+`mix lc issue comment --help`
+
+This should be enough to get started
 
 ### Repository layout
 
@@ -23,8 +64,9 @@ This repo uses two Mix projects side-by-side, not nested:
 
 - `app/` — The CLI itself (`LinearCli` application, version-managed,
   Burrito-released). All end-user features live here.
-- `lib/`, `mix.exs` (root) — Repo-management tooling (`RepoTasks` project,
-  no deps). Mix tasks that operate on the repo as a whole: `mix lc`,
+- `lib/`, `mix.exs` (root) — Repo-management tooling (`RepoTasks` project;
+  its own small deps, such as `req`, so a fresh clone needs `mix deps.get`
+  here as well as in `app/`). Mix tasks that operate on the repo as a whole: `mix lc`,
   `mix setup`, `mix git_hooks`, `mix stokowski`, `mix container.build/publish`.
   These tasks orchestrate other tools as child processes and know nothing
   about `app/`'s internal modules.
@@ -35,7 +77,7 @@ Supporting directories (not Mix projects):
   `lproj`). Each one just calls `exec lc ...`.
 - `ci/` — Shell scripts for CI and release: conventional-commit enforcement,
   container build/publish, Homebrew formula bump.
-- `githooks/` — `commit-msg` and `pre-push` hooks; installed by `mix setup`.
+- `git-hooks/` — `commit-msg` and `pre-push` hooks; installed by `mix setup`.
 - `oci/` — `Containerfile` for the published container image.
 - `schema/` — The Linear GraphQL schema (`LinearAPI.graphql`), kept for reference.
 - `cinemas/` — Terminal session recordings (`.cinema.gif`) embedded in Readme.adoc.
@@ -51,13 +93,25 @@ Supporting directories (not Mix projects):
 The app is organized in layers:
 
 ```
-LinearCli.CLI           — Entry point; Optimus argument parsing and dispatch
-  CLI.Commands          — One function per subcommand; formats and prints output
-  CLI.IssueHelpers      — Issue-lookup logic shared across subcommands
-  CLI.WhatFor           — Interactive prompts (team, project, label selection)
-  CLI.Display           — Output formatting helpers
-  CLI.Projects          — Project-specific prompt/resolution helpers
-  CLI.Prompt            — Low-level readline-style prompt wrapper
+LinearCli.CLI                        — Entry point; Optimus argument parsing and dispatch
+  CLI.Commands.System                — whoami, version subcommands
+  CLI.Commands.Profiles              — profile create/list/use/show/clear/delete subcommands
+  CLI.Commands.Teams                 — team list/favorite/unfavorite subcommands
+  CLI.Commands.Projects              — project list/favorite/unfavorite/update subcommands
+  CLI.Commands.Issues.Read           — issue read/list/show subcommands
+  CLI.Commands.Issues.Filter         — shared issue filter resolution
+  CLI.Commands.Issues.Create         — issue create subcommand
+  CLI.Commands.Issues.Development    — issue branch/PR subcommands
+  CLI.Commands.Issues.Mutations      — issue update/status/assign/comment subcommands
+  CLI.Commands.Issues.Move           — issue move subcommand
+  CLI.Commands.Issues.Relations      — issue relation list/add/remove subcommands
+  CLI.Commands.Issues.Graph          — --graph transitive dependency graph builder
+  CLI.Issue.Identifiers              — issue ID expansion shared across subcommands
+  CLI.WhatFor                        — Interactive prompts (team, project, label selection)
+  CLI.Display                        — Output formatting helpers
+  CLI.Output                         — Command-level JSON detection, success values, and status routing
+  CLI.Projects                       — Project-specific prompt/resolution helpers
+  CLI.Prompt                         — Low-level readline-style prompt wrapper
 
 LinearCli.Linear        — Ash domain; all Linear API resources and actions
   Linear.Issue/Team/... — Ash resources (actions are manual GraphQL calls)
@@ -76,11 +130,11 @@ LinearCli.ObanRepo      — Runtime adapter selector (SQLite or Postgres)
 LinearCli.Application   — OTP Application; starts interactive or daemon mode
 ```
 
-Data flows top-to-bottom through these layers: `CLI.Commands` calls the
+Data flows top-to-bottom through these layers: `CLI.Commands.*` modules call the
 `LinearCli.Linear` domain code interface; the domain's Ash resources call
 `LinearCli.Api`; `LinearCli.Api` calls the Linear GraphQL API. `Profiles`
-and `Favorites` are side-channels consulted by `CLI.Commands` and
-`CLI.IssueHelpers` for defaults, not part of the main API data flow.
+and `Favorites` are side-channels consulted by `CLI.Commands.*` modules
+for defaults, not part of the main API data flow.
 
 The daemon mode (started when `LINEAR_CLI_DAEMON=true`) runs
 `LinearCli.Rollover.Worker` via Oban on a monthly cron schedule. The
@@ -101,11 +155,21 @@ not need a structural-doc update.
   change** whenever an Ash resource, action, code interface, association
   attribute, or shared helper is added, removed, renamed, or materially
   changed.
+- GitHub Update-branch validation decision:
+  documents/github-update-branch-validation-decision.adoc — canonical
+  security rationale and required regression behavior for the narrowly scoped
+  exception that permits GitHub's trusted **Update branch** merge commits.
+  **Must be read and preserved** whenever changing commit-subject validation,
+  `ci/validate_commit_range.sh`, Git hooks, or CI quality-gate orchestration.
 
 ## Standards
 
+- Bash error handling: never use `set -e`, `set -u`, or `set -o pipefail`
+  (including combined forms such as `set -euo pipefail`). Handle every command
+  that can fail with an explicit status check, diagnostic, and exit path. See
+  `documents/style/bash.adoc` for the required Bash style.
 - Conventional Commits: app/usage-rules.md — enforced by the `commit-msg`
-  and `pre-push` hooks at `githooks/` (run `mix setup` once per clone to
+  and `pre-push` hooks at `git-hooks/` (run `mix setup` once per clone to
   activate them).
 - Dogfooding & running `lc` locally (no MCP, no escript): app/usage-rules.md
 - Accessibility: app/usage-rules.md — the actual reason this project
@@ -134,6 +198,7 @@ Ash is an opinionated, composable framework for building applications in Elixir.
   inside the same transaction.
 - Use hooks like `Ash.Changeset.after_transaction/2`, `Ash.Changeset.before_transaction/2` to add additional logic
   outside the transaction.
+- When other resources should react to an action, and your action doesn't depend on the return value, emit a signal with `emit` in the action (with `dynamic?: true` when you emit it yourself with `Ash.Signals.emit/4`) and listen to it in those resources, instead of calling them from a hook. See the signals rules.
 - Use action arguments for inputs that need validation
 - Use preparations to modify queries before execution
 - Preparations support `where` clauses for conditional execution
@@ -1469,6 +1534,209 @@ MyDomain.update_post!(post, %{
 
 
 <!-- ash:relationships-end -->
+<!-- ash:signals-start -->
+## ash:signals usage
+# Signals
+
+Signals let one resource react to what happens in another without either depending on the other. A signal module declares typed signals, resources emit them from their actions, and other resources listen to them with their own actions. 
+
+## When to Use Signals
+
+- Use a signal when other resources should react to an action, and the resource taking the action shouldn't know about them. For example, awarding loyalty points when an order is placed. Prefer this to calling those resources from an `after_action` hook.
+- Don't use a signal when the action needs something back from the other resource to finish. Call that resource directly, for example through its code interface. Signals are fire and forget: the emitter gets nothing back from its listeners.
+- Use a notifier, not a signal, for "at most once" side effects after the transaction commits, like publishing to PubSub.
+- With the default delivery, listeners of `:before_action` and `:after_action` signals run as nested actions inside the emitter's transaction. A failing listener fails the emitting action and rolls it back.
+
+## Declaring Signals
+
+```elixir
+defmodule MyApp.Shop.Signals do
+  use Ash.Signals
+
+  signals do
+    signal :order_placed do
+      argument :order_id, :uuid, allow_nil?: false
+      argument :customer_id, :uuid, allow_nil?: false
+    end
+  end
+end
+```
+
+- Declare signals in a signal module, not in a resource. Emitters and listeners both depend on the signal module, and never on each other.
+- Each signal defines a struct, like `MyApp.Shop.Signals.OrderPlaced`, which is what listeners receive.
+- Every signal has a `signal_id` field, a UUIDv7 generated when it is emitted. Don't declare an argument named `signal_id`.
+- A signal's `phase` is when it is emitted: `:before_action`, `:after_action` or `:after_transaction`. It defaults to `:after_action`, which you should prefer. `:before_action` and `:after_transaction` signals make update and destroy actions non-atomic, and in bulk actions, `:after_transaction` signals are emitted once per record instead of once per batch.
+
+## Emitting Signals
+
+```elixir
+create :place do
+  accept [:customer_id, :total]
+
+  emit MyApp.Shop.Signals, :order_placed, fields: [order_id: :id]
+end
+```
+
+- Emit signals with `emit` in create, update, destroy and generic actions. An action can only emit the signals it declares with `emit`.
+- For a signal emitted in another phase than `:after_action`, pass the phase, as in `emit MyApp.Shop.Signals, :order_shipped, phase: :after_transaction`. It must match the phase the signal declares.
+- Signal fields are taken from the record's attributes of the same name. In generic actions, they are taken from the action's arguments, and `fields` takes them from the action's result.
+- Use `fields: [signal_field: :attribute]` to take signal fields from other attributes, and `values: [signal_field: value]` to set them to values or templates like `actor(:id)`, `arg(:reason)` or `previous(:status)`.
+- Use `where` to emit only in some cases: `emit MyApp.Shop.Signals, :order_status_changed, where: [changing(:status)]`.
+- `emit` runs in its place among the action's changes, and is checked at compile time.
+- An update or destroy that emits a `:before_action` or `:after_transaction` signal, or uses `previous/1`, can't be atomic and needs `require_atomic? false`. `:after_action` signals don't need it.
+- `fields` only reads attributes. When the signal needs a calculation, an aggregate, related data or any other transformation, emit it from your own code: declare it with `emit MyApp.Shop.Signals, :order_placed, dynamic?: true`, and call `Ash.Signals.emit/5` from a change during the signal's phase, or `Ash.Signals.emit_many/5` from `after_batch/3`. Emitting a signal the action doesn't declare raises an error.
+
+## Listening to Signals
+
+```elixir
+signals_in do
+  from MyApp.Shop.Signals do
+    on :order_placed, :award_points
+    on :order_placed, :open_task, action: :create, inputs: [reference: :order_id]
+    on :order_placed, :mark_ordered, read_action: :active, get_by: [id: :customer_id]
+  end
+end
+```
+
+- Each `on` has a name, unique within the resource, and runs the action with that name unless `action` is set.
+- A **generic action** receives the signal struct as its `signal` argument. With `batch?: true`, it is called once with every signal emitted together, as its `signals` argument.
+
+  ```elixir
+  action :award_points do
+    argument :signal, MyApp.Shop.Signals.OrderPlaced, allow_nil?: false
+    run MyApp.Loyalty.AwardPoints
+  end
+  ```
+
+- A **create action** creates a record for each signal. Its inputs are taken from the signal fields of the same name, except `signal_id`. Map others with `inputs: [input: :signal_field]`.
+- An **update or destroy action** runs on the records selected for each signal by a read action, the primary read action unless `read_action` is set. Select them with `get_by: [field: :signal_field]`, `args: [read_argument: :signal_field]`, or both. If no records are selected, nothing happens. To react to only some signals, filter in the read action.
+- Create, update and destroy listeners handle the signals emitted together as bulk actions.
+- A listener's `delivery` decides how signals reach it. The default, `Ash.Signals.Delivery.Inline`, runs it immediately, during the signal's phase. Other deliveries come from extensions and implement `Ash.Signals.Delivery`, for example to run the listener in a job: `on :order_placed, :send_receipt, delivery: {SomeJobDelivery, queue: :mailers}`. Each listener chooses its own delivery, and the emitter doesn't change.
+- Run a listener in a job when it does slow work or calls external services. Keep it inline when its changes must be committed with the emitter's, or when its failure should fail the emitting action.
+- Listeners run with the emitting action's actor, tenant and `authorize?`. The listener resource's policies are checked against that actor, so write them with the emitting actor in mind.
+- A listener's return value is ignored. Don't design listeners to return something the emitter needs.
+
+## Setup
+
+- Add the `:ash_signals` compiler to the project: `compilers: [:ash_signals] ++ Mix.compilers()`. Without it, listeners are searched for every time a signal is emitted, which is much slower.
+- With the Phoenix code reloader, add `:ash_signals` to the endpoint's `reloadable_compilers` too.
+- Listeners defined after compilation, like resources defined inside tests, aren't found when signals are consolidated. If tests define listeners, set `ash: [consolidate_signals: Mix.env() != :test]` in the project config.
+
+## Testing
+
+- Use `Ash.Signals.Test`. `assert_emits_signal/4` and `refute_emits_signal/4` run a function, check the signals it emitted, and return its result.
+- `assert_signal_emitted/4` and `refute_signal_emitted/4` check the signals emitted so far, after `setup :capture_signals`.
+
+```elixir
+import Ash.Signals.Test
+
+test "placing an order emits order_placed" do
+  order =
+    assert_emits_signal MyApp.Shop.Signals, :order_placed, %{order_id: order_id}, fn ->
+      MyApp.Shop.place_order!(customer, 100)
+    end
+
+  assert order.id == order_id
+end
+```
+
+<!-- ash:signals-end -->
+<!-- ash:temporal-start -->
+## ash:temporal usage
+# Temporal Resources
+
+Temporal resources are experimental. A temporal resource keeps every version of a record, and each version is valid for a half-open period `[from, to)`. Every read and write happens "as of" one instant. Read the "Temporal Resources" guide before working with them.
+
+## Supported Data Layers
+
+- Only `AshPostgres.DataLayer` on PostgreSQL 18+ and `Ash.DataLayer.Ets` support temporal resources. On any other data layer, a resource that declares `temporal` won't compile.
+- Manual actions skip temporal handling entirely. If you write one, you manage periods yourself.
+
+## Defining a Temporal Resource
+
+```elixir
+temporal do
+  strategy :context
+  attribute :valid_at
+  # optional: wall-clock time each version was written
+  recorded_at :recorded_at
+end
+```
+
+- You don't have to declare the period attribute. If you leave it out, `temporal` adds an `Ash.Type.Range` over `:utc_datetime_usec` with `[from, to)` bounds.
+- If you do declare it, it must be an `Ash.Type.Range` over `:utc_datetime_usec`, `:utc_datetime` or `:datetime`, with `allow_nil? false`, an inclusive lower bound and an exclusive upper bound. Ranges over dates, naive datetimes or other types are refused at compile time.
+- **Never put the period attribute in an action's `accept`**, and never set it in a change. Its value always comes from the write's `as_of`.
+- Use `mix ash.codegen` for migrations. It generates the `PRIMARY KEY (id, valid_at WITHOUT OVERLAPS)` and installs `btree_gist`. Don't write these by hand.
+
+## Reading
+
+- To read at a point in time, use `Ash.Query.as_of/2` or pass `as_of:` anywhere `tenant:` is accepted (`Ash.read`, `Ash.get`, code interfaces, `for_read`, and so on).
+- If you leave out `as_of`, the read happens now and returns exactly one row per record. It never returns the full history.
+- Every read is a single instant. A range-valued `as_of` on a read raises `Ash.Error.Query.AsOfNotAnInstant`. Don't try to fetch several versions of a record in one query.
+- `as_of` propagates like `tenant`. Loaded relationships, calculations, aggregates and nested actions all run at the same instant, so you don't need to pass it to them again.
+- In expressions, `now()`, `ago/2` and `from_now/2` mean the query's `as_of`, not the wall clock. Write `expr(expires_at > now())`, not `^DateTime.utc_now()`. Pinning the wall clock breaks time travel.
+
+```elixir
+Ash.get!(MyApp.Subscription, 1, as_of: ~U[2026-01-15 00:00:00Z])
+
+MyApp.Subscription
+|> Ash.Query.filter(plan == "gold")
+|> Ash.Query.as_of(~U[2026-01-15 00:00:00Z])
+|> Ash.read!()
+```
+
+## Writing
+
+- A write makes something true from `as_of` onward. If you don't pass `as_of`, it uses now. One instant is pinned for the whole write, and `&DateTime.utc_now/0` defaults and `set_attribute(..., &DateTime.utc_now/0)` resolve to that same instant. Back-dated writes therefore get back-dated timestamps. Use `recorded_at` if you need the actual time a version was written.
+- **Pass `as_of` as an action option** (`for_create(:create, input, as_of: ...)`, `for_update(...)`, `for_destroy(...)`). `Ash.Changeset.as_of/2` is applied too late for cascading destroys, `manage_relationship`, and identity pre-checks.
+- A **create** opens `[as_of, ∞)`. You can't create a record if any later version of it already exists.
+- An **update** splits the version valid at `as_of`. The new values run from `as_of` to wherever that version ended. To schedule a future change, write an update with a future `as_of`, not a create.
+- A **destroy** closes the version valid at `as_of` down to `[from, as_of)`. It doesn't delete history.
+- An update or destroy with no version valid at `as_of` (because the history ended, the record hasn't started yet, or `as_of` falls in a gap) fails as a stale record. To bring back a record whose history has ended, **create** it again rather than updating it.
+- On Postgres, concurrent writes to the same record are retried automatically, up to 25 conflicts, after which `AshPostgres.Temporal.WriteConflict` is raised. It's safe to retry. Under `REPEATABLE READ`/`SERIALIZABLE` you get a serialization failure instead, and retrying is up to you.
+
+## Changes, Validations and Preparations
+
+- Any change, validation or preparation that runs on a temporal resource must declare `temporal_safe?/1` returning `true`. Otherwise the action raises `Ash.Error.Framework.NotTemporalSafe`. The callback defaults to `false`.
+- Only declare a module temporal safe if it never reads the wall clock (use `now()` in expressions or the subject's `as_of` instead), has no side effects that assume the present, and does all of its reads and nested actions through Ash so `as_of` propagates.
+- The built-in changes, validations and preparations are temporal safe. These aren't, because they wrap arbitrary functions: `before_action`, `after_action`, `before_transaction`, `after_transaction`, and anonymous-function changes, validations and preparations. Move that logic into a module that declares `temporal_safe?/1`.
+- For third-party modules that you've verified are safe but that don't declare the callback, add them to `config :ash, :temporal_safe_modules, [...]`. The list is read at compile time.
+
+```elixir
+defmodule MyApp.Changes.Slugify do
+  use Ash.Resource.Change
+
+  @impl true
+  def temporal_safe?(_opts), do: true
+
+  @impl true
+  def change(changeset, _opts, _context) do
+    # ...
+  end
+end
+```
+
+## Relationships and Identities
+
+- To make a `belongs_to` point at another temporal resource for the matching period, declare `temporal_keys {:valid_at, :valid_at}`. On Postgres this produces a `PERIOD` foreign key.
+- `PERIOD` foreign keys only support `NO ACTION`, so `on_delete`/`on_update` referential actions are rejected at compile time. Cascade in the application instead, for example with `change cascade_destroy(:subscriptions)`.
+- Write identities as usual (`identity :unique_email, [:email]`). On a temporal resource they become "unique at every instant" (`UNIQUE (... WITHOUT OVERLAPS)`). Don't add the period attribute to an identity.
+
+## Authorization
+
+- Data and filter checks are evaluated as of the query's `as_of`. Actor attribute checks (`actor_attribute_equals`, `^actor(:field)`) use the actor struct exactly as you loaded it. Ash does not re-fetch the actor at the query's instant.
+- **Load the actor as of the same instant you query.** Otherwise you're authorizing historical data with the actor's current attributes.
+
+```elixir
+as_of = ~U[2026-01-15 00:00:00Z]
+actor = Ash.get!(MyApp.User, user_id, as_of: as_of)
+
+MyApp.Subscription
+|> Ash.Query.as_of(as_of)
+|> Ash.read!(actor: actor)
+```
+
+<!-- ash:temporal-end -->
 <!-- ash:testing-start -->
 ## ash:testing usage
 # Testing
@@ -1479,6 +1747,7 @@ When testing resources:
 - Test authorization policies work as expected using `Ash.can?`
 - Use `authorize?: false` in tests where authorization is not the focus
 - Write generators using `Ash.Generator`
+- Assert on emitted signals with `Ash.Signals.Test`
 - Prefer to use raising versions of functions whenever possible, as opposed to pattern matching
 
 ## Preventing Deadlocks in Concurrent Tests

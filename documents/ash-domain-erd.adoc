@@ -1,6 +1,6 @@
 = {my-title}
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
-:revdate: Aug 18, 2026
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 24, 2026
 :my-title: Ash domain ERD: LinearCli.Linear
 :icons: font
 :env-github:
@@ -33,7 +33,7 @@ not from Ash relationship declarations or database join logic.
 
 == ERD diagram
 
-All eight resources and their GraphQL/nested-data associations.
+All nine resources and their GraphQL/nested-data associations.
 Every edge is labeled *[nested]* to make explicit that these are not
 declared Ash relationships.  Resource attributes that hold nested structs
 are shown with the target resource name as their type.
@@ -44,6 +44,7 @@ erDiagram
     User {
         string id PK
         string name
+        string display_name
         string email
         Team[] teams
     }
@@ -68,10 +69,26 @@ erDiagram
         string title
         string branch_name
         string description
+        string url
+        float priority
+        string priority_label
+        float priority_sort_order
+        string created_at
+        string updated_at
         User assignee
         WorkflowState state
         Team team
         Comment[] comments
+        Label[] labels
+        IssueRelation[] relations
+        IssueRelation[] inverse_relations
+    }
+    IssueRelation {
+        string id PK
+        atom direction
+        string type
+        term issue
+        term related_issue
     }
     Label {
         string id PK
@@ -91,6 +108,8 @@ erDiagram
         string body
         string url
         User user
+        string created_at
+        string updated_at
     }
     ProjectUpdate {
         string id PK
@@ -103,6 +122,9 @@ erDiagram
     Issue }o--|| WorkflowState : "state [nested]"
     Issue }o--|| Team : "team [nested]"
     Issue ||--o{ Comment : "comments [nested]"
+    Issue ||--o{ Label : "labels [nested]"
+    Issue ||--o{ IssueRelation : "relations [nested, outbound]"
+    Issue ||--o{ IssueRelation : "inverse_relations [nested, inbound]"
     User }o--o{ Team : "teams [nested]"
     Comment }o--|| User : "user/author [nested]"
     Project }o--o{ Team : "teams [nested]"
@@ -119,7 +141,7 @@ arguments only.
 The table below is the plain-text equivalent of the entity boxes in the
 diagram above, included for accessibility.
 
-Eight resources are registered in `LinearCli.Linear`
+Nine resources are registered in `LinearCli.Linear`
 (`app/lib/linear_cli/linear.ex`).
 
 [cols="1,2,3", options="header"]
@@ -128,7 +150,7 @@ Eight resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.User`
 | `id` (`:string`)
-| `name`, `email`, `teams` (`{:array, :term}`)
+| `name`, `display_name`, `email`, `teams` (`{:array, :term}`)
 
 | `LinearCli.Linear.Team`
 | `id` (`:string`)
@@ -140,7 +162,7 @@ Eight resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Issue`
 | `id` (`:string`)
-| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`)
+| `identifier`, `title`, `branch_name`, `description`, `url`, `priority` (`:float`), `priority_label` (`:string`), `priority_sort_order` (`:float`), `created_at` (`:string`, ISO-8601), `updated_at` (`:string`, ISO-8601), `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`), `relations` (`{:array, :term}`), `inverse_relations` (`{:array, :term}`)
 
 | `LinearCli.Linear.Label`
 | `id` (`:string`)
@@ -152,11 +174,15 @@ Eight resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Comment`
 | `id` (`:string`)
-| `body`, `url`, `user` (`:term`)
+| `body`, `url`, `user` (`:term`), `created_at` (`:string`, ISO-8601), `updated_at` (`:string`, ISO-8601)
 
 | `LinearCli.Linear.ProjectUpdate`
 | `id` (`:string`)
 | `body`, `health`, `url`
+
+| `LinearCli.Linear.IssueRelation`
+| `id` (`:string`)
+| `type` (`:string`), `direction` (`:atom`, `:outbound` or `:inbound`), `issue` (`:term`), `related_issue` (`:term`)
 |===
 
 == Associations (text reference)
@@ -196,6 +222,24 @@ data, not from declared Ash relationships.
 | `comments` (`{:array, :term}`)
 | GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.comments.nodes` (full fragment only)
 
+| `Issue`
+| `Label`
+| one-to-many
+| `labels` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.labels.nodes` (full fragment only)
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (outbound)
+| `relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.relations.edges` (full fragment only); direction set to `:outbound`
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (inbound)
+| `inverse_relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.inverseRelations.edges` (full fragment only); direction set to `:inbound`
+
 | `User`
 | `Team`
 | many-to-many
@@ -224,9 +268,14 @@ data, not from declared Ash relationships.
 
 === Notes on unidirectional associations
 
-* `Label` and `WorkflowState` have no stored association attributes.
-  Their `team_id` appears only as a query argument passed to their read
-  actions; there is no `:team` field on those structs.
+* `Label` is stored as an association attribute on `Issue` (`labels`, `{:array, :term}`) —
+  populated from `issue.labels.nodes` in `full_fields` responses and in compact list
+  responses when `include_labels: true` or `labels` is non-empty (via `list_fields_with_labels/0`).
+  However, `Label` itself has no stored back-reference to its team; the
+  `team_id` is passed as an action argument to `Label.Read.ByTeam` only.
+* `WorkflowState` has no stored association attributes.
+  Its `team_id` appears only as a query argument passed to its read
+  actions; there is no `:team` field on that struct.
 * `ProjectUpdate` has no stored association attributes.
   Its `project_id` appears only as a required create argument.
 * When `Team.Read.Find` fetches a team by id, the response includes
@@ -251,12 +300,33 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `Linear.User.Read.Me`
 | `{ viewer { ... } }` — `viewer` query with `User.fields_with_teams/0`
 
+| `User`
+| `team_members`
+| `:by_team`
+| read
+| `Linear.User.Read.ByTeam`
+| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page for team-scoped assignment and filtering
+
+| `User`
+| `workspace_team_members`
+| `:by_team_for_lookup`
+| read
+| `Linear.User.Read.ByTeamForLookup`
+| `team(id: $id) { members(first: 50, after: $after) { ... } }` — follows every page through `Paginate` for workspace-wide matching
+
 | `Team`
 | `teams`
 | `:all`
 | read
 | `Linear.Team.Read.All`
 | `teams(first:, after:)` — paginated with `Team.base_fields/0`
+
+| `Team`
+| `workspace_teams`
+| `:all_for_lookup`
+| read
+| `Linear.Team.Read.AllForLookup`
+| `teams(first:, after:)` — follows every page for workspace-wide member matching
 
 | `Team`
 | `my_teams`
@@ -285,6 +355,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | read (`get?: true`)
 | `Linear.Project.Read.Find`
 | `project(id: $id)` with `Project.fields_with_teams/0` — exact lookup for saving or hydrating favorite snapshots
+
+| `Project`
+| `workspace_projects`
+| `:all_for_lookup`
+| read
+| `Linear.Project.Read.AllForLookup`
+| `projects(first:, after:)` — follows every page for workspace-wide project matching
 
 | `Project`
 | `my_projects`
@@ -319,16 +396,29 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:list`
 | read
 | `Linear.Issue.Read.List`
-| `issues(filter:, first:, after:)` paginated (base), with `state` filtering
-  workflow-state types and `status` filtering friendly workflow-state names; or
-  `issue(id:)` per id (full, fanned concurrently)
+| `issues(filter:, first:, after:)` paginated; `state` filters workflow-state types,
+  `status` filters friendly workflow-state names, `labels` filters by label name
+  (case-insensitive OR match via `IssueLabelCollectionFilter.some`); `include_labels`
+  (boolean, default `false`) selects label fields in the response without adding a
+  label filter — `labels` non-empty also forces label-field selection as a defensive
+  invariant; `assignee_id` filters by exact user ID; `assigned_only` excludes
+  unassigned issues for filter-only batch operations; or `issue(id:)` per id
+  (full, fanned concurrently).
+
+| `Issue`
+| `issues_first_page`
+| `:list_first_page`
+| generic action (`:map`)
+| `Linear.Issue.Actions.ListFirstPage`
+| `input` contains the `Issue.list` arguments; returns `%{issues:, has_next_page:}`
+  after fetching one 100-record page. The action never follows the cursor.
 
 | `Issue`
 | `create_issue`
 | `:create`
 | create
 | `Linear.Issue.Create`
-| `issueCreate(input: { title, description, teamId, labelIds?, projectId? })` mutation
+| `issueCreate(input: { title, description, teamId, labelIds?, projectId?, priority? })` mutation
 
 | `Issue`
 | `assign_issue`
@@ -336,6 +426,13 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | update
 | `Linear.Issue.Update.Assign`
 | `issueUpdate(id:, input: { assigneeId, stateId? })` via `Issue.Update.run/2`
+
+| `Issue`
+| `unassign_issue`
+| `:unassign`
+| update
+| `Linear.Issue.Update.Unassign`
+| `issueUpdate(id:, input: { assigneeId: null })` via `Issue.Update.run/2`
 
 | `Issue`
 | `attach_issue_to_project`
@@ -358,6 +455,41 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | update
 | `Linear.Issue.Update.SetStatus`
 | `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`
+
+| `Issue`
+| `set_issue_priority`
+| `:set_priority`
+| update
+| `Linear.Issue.Update.SetPriority`
+| `issueUpdate(id:, input: { priority })` via `Issue.Update.run/2`. Argument: `priority` (integer 0–4: 0=None, 1=Urgent, 2=High, 3=Medium, 4=Low). Name-to-integer mapping lives in `CLI.Commands.Issues.Mutations.parse_priority/1`; the GraphQL response returns `priority` as `Float!`.
+
+| `Issue`
+| `update_issue_description`
+| `:update_description`
+| update
+| `Linear.Issue.Update.UpdateDescription`
+| `issueUpdate(id:, input: { description })` via `Issue.Update.run/2`
+
+| `IssueRelation`
+| `issue_relations`
+| `:list`
+| read
+| `Linear.IssueRelation.Read.List`
+| `issue(id: $issueId) { relations(first:, after:) { edges { node { ... } cursor } pageInfo { ... } } }` and same for `inverseRelations`, fetched concurrently; paginated up to 100 per direction. Each relation node's `issue` and `relatedIssue` endpoints are fetched with `IssueRelation.endpoint_fields/0` (`id identifier title url state { name }`) — the nested `state { name }` field was added to support the `--graph` dependency graph display.
+
+| `IssueRelation`
+| `create_issue_relation`
+| `:create`
+| create
+| `Linear.IssueRelation.Create`
+| `issueRelationCreate(input: { issueId, relatedIssueId, type })` mutation; returns `issueRelation { id type issue { ... } relatedIssue { ... } }`. Arguments: `issue_id` (string), `related_issue_id` (string), `type` (string, wire GraphQL enum value: `blocks`, `related`, `duplicate`). The `:create` action always receives the wire-direction values; `blocked-by` reversal happens in the CLI layer. Duplicate relation errors from Linear are surfaced to the CLI as `{:duplicate_relation, message}`.
+
+| `IssueRelation`
+| `delete_issue_relation`
+| `:destroy`
+| destroy
+| `Linear.IssueRelation.Destroy`
+| `issueRelationDelete(id: $id)` mutation returning `DeletePayload { success entityId }`. Takes an `IssueRelation` struct as its argument; the relation UUID is read from `changeset.data.id`. The CLI layer resolves the exact relation (by listing the subject issue's relations and matching by wire type, direction, and endpoint identifier) before calling this interface, so no resolution logic lives in the domain layer.
 
 | `Label`
 | `labels_by_names`
@@ -403,17 +535,64 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 `app/lib/linear_cli/linear/issue.ex` — not an Ash module; a plain
 module with a single `run/2` function.
 
-All four issue-update actions (`:assign`, `:attach_to_project`, `:close`,
-`:set_status`) delegate to this shared runner rather than each building
-their own `issueUpdate` mutation.  `run/2` calls the mutation, receives
+All seven issue-update actions delegate to this shared runner rather than each
+building its own `issueUpdate` mutation. The actions are `:assign`,
+`:unassign`, `:attach_to_project`, `:close`, `:set_status`,
+`:update_description`, and `:set_priority`. `run/2` calls the mutation, receives
 the updated issue map, and decodes it via `Issue.from_map/1` using
-`Issue.full_fields/0` (the full fragment including assignee, team, and
-comments).
+`Issue.full_fields/0` (the full fragment including assignee, team,
+comments, and labels).
 
 The mutation GraphQL document is built at call time (not a module
 attribute) because `Issue.full_fields/0` references `User`, `Team`, and
 `Comment` — cross-file module-attribute evaluation order is not guaranteed
 at compile time.
+
+=== `LinearCli.Linear.IssueRelation.endpoint_fields/0` and `relation_fields/0`
+
+`app/lib/linear_cli/linear/issue_relation.ex` — module-level helpers that
+return GraphQL field-selection strings, used everywhere a relation node is
+fetched.
+
+`endpoint_fields/0` returns `"id identifier title url state { name }"` —
+the fragment for each issue endpoint (`issue` and `relatedIssue`) inside a
+relation node.  The `state { name }` subfield was added to support the
+`--graph` dependency graph display, which needs workflow status for each node.
+
+`relation_fields/0` composes `endpoint_fields/0` into the full relation
+node fragment: `"id type issue { ... } relatedIssue { ... }"`.
+
+Both functions are evaluated at call time (not module attributes) to avoid
+compile-time cross-file evaluation ordering issues.
+
+=== `LinearCli.CLI.Commands.Issues.Graph`
+
+`app/lib/linear_cli/cli/commands/issues/graph.ex` — pure BFS traversal
+that builds a transitive dependency graph from a root issue identifier.
+
+`build/2` accepts `(root_identifier, root_issue)` where `root_issue` is the
+already-fetched `Issue` struct (reusing the `issue view` fetch to avoid a
+redundant API call). It traverses `blocks` relations in both directions via
+`Linear.issue_relations/1`, visiting each identifier at most once (cycle-safe),
+and returns `{:ok, %{root:, nodes:, edges:}}` or `{:error, {identifier, reason}}`.
+Capped at 100 nodes; deterministic output (nodes sorted by identifier, edges
+by source then target).
+
+=== `LinearCli.CLI.Commands.Issues.Filter`
+
+`app/lib/linear_cli/cli/commands/issues/filter.ex` — shared CLI selector
+construction for `issue list` and filter-only `issue unassign`.
+
+`build_input/4` applies the active profile's team and project defaults unless
+`--no-profile` is set, resolves a project in the selected team (or workspace),
+and returns the common issue-list arguments for the domain. Filter-only
+unassignment requests strict project matching and uses the one-page issue
+helper, which caps the batch at 100 and reports more matches. Ordinary issue
+listing keeps the existing permissive project resolution and 100-record cap.
+Workspace project lookup uses `Project.workspace_projects`. Workspace assignee
+lookup follows every page of every accessible team and deduplicates members by
+user ID. Team-scoped lookup follows every member page for assignment and
+assignee filtering.
 
 === `LinearCli.Linear.Paginate`
 
@@ -421,13 +600,30 @@ at compile time.
 
 Provides `all/5`: fetches cursor-paginated GraphQL connections
 (`edges { node { ... } cursor } pageInfo { hasNextPage endCursor }`)
-until `max` records are collected or the API signals no more pages.
+until `max` records are collected or the API signals no more pages. It returns
+an error for a repeated continuation cursor instead of looping forever.
+`all_pages/4` follows every page without a record limit. Lookup-only actions use
+this variant. It accepts a top-level field name or a nested response path. It
+tracks every continuation cursor. It returns `{:non_advancing_cursor, cursor}`
+when a continuation cursor is null or repeats. The bounded `all/5` path remains
+unchanged for issue operations.
+`first_page/4` fetches one page, returns its `hasNextPage` value, and never
+follows a continuation cursor.
 Used by:
 
 * `Team.Read.All` — `teams(first:, after:)` paginated query
+* `Team.Read.AllForLookup` — complete workspace team lookup
 * `Project.Read.All` — `projects(first:, after:)` paginated query
+* `Project.Read.AllForLookup` — complete workspace project lookup
 * `Issue.Read.List` — `issues(filter:, first:, after:)` paginated list
   (the find-by-ids path fans out individual `issue(id:)` calls instead)
+* `Issue.Actions.ListFirstPage` — wraps `Issue.Read.List.first_page/1` in an
+  Ash generic action for the filter-only unassign path
+
+`User.Read.ByTeamForLookup` passes the nested `team.members` path to
+`Paginate.all_pages/4`. The shared paginator validates the connection and its
+cursor sequence. The action returns every member for one team before the CLI
+deduplicates the workspace-wide candidate set.
 
 == Maintenance contract
 

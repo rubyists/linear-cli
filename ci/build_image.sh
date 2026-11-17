@@ -40,6 +40,7 @@ default_image_name=$(printf "%s" "$base_dir" | tr '[:upper:]' '[:lower:]')
 : "${IMAGE_NAME:=$default_image_name}"
 : "${LICENSE:=Proprietary/All Rights Reserved}"
 : "${APP_VERSION:=$(< "$here"/../.version.txt)}"
+: "${BURRITO_TARGET:=linux_x86_64}"
 
 usage() {
     cat <<-EOT
@@ -177,5 +178,6 @@ debug "Building $full_tag with $runtime from $CONTAINERFILE"
     --label org.opencontainers.image.source="$image_url/tree/$revision" \
     --label shortref="$shortref" \
     --build-arg APP_VERSION="$APP_VERSION" \
+    --build-arg BURRITO_TARGET="$BURRITO_TARGET" \
     -f "$CONTAINERFILE" \
     "$BUILD_CONTEXT"

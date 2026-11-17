@@ -1,5 +1,5 @@
 = {my-title}
-Tj Vanderpoel (bougyman) <tj.vanderpoel@prizepicks.com>
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :revdate: Aug 10, 2026
 :my-title: Phase 10 plan: favorite teams/projects, and filtering list views by them
 :icons: font

@@ -4,7 +4,7 @@ defmodule LinearCli.CLI.DisplayTest do
   import ExUnit.CaptureIO
 
   alias LinearCli.CLI.Display
-  alias LinearCli.Linear.Issue
+  alias LinearCli.Linear.{Issue, IssueRelation, Label}
 
   test "full issue output syntax-highlights fenced Elixir code" do
     issue = %Issue{
@@ -54,5 +54,294 @@ defmodule LinearCli.CLI.DisplayTest do
     assert output =~ theme.syntax.name_class <> "Greeter" <> theme.reset
     assert output =~ theme.syntax.name_function <> "hello" <> theme.reset
     refute output =~ theme.code_text <> "class Greeter"
+  end
+
+  test "full issue output includes a Labels line when labels are present" do
+    issue = %Issue{
+      id: "issue-2",
+      identifier: "EXT-2",
+      title: "Labelled issue",
+      description: "Some work",
+      comments: [],
+      labels: [
+        %Label{id: "l1", name: "Bug", description: nil, is_group: false},
+        %Label{id: "l2", name: "Feature", description: nil, is_group: false}
+      ]
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{full: true}) end)
+
+    assert output =~ "Labels: Bug, Feature"
+  end
+
+  test "full issue output omits the Labels line when no labels are present" do
+    issue = %Issue{
+      id: "issue-3",
+      identifier: "EXT-3",
+      title: "Unlabelled issue",
+      description: "Some work",
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{full: true}) end)
+
+    refute output =~ "Labels:"
+  end
+
+  test "compact listing appends labels in brackets when labels opt is true" do
+    issue = %Issue{
+      id: "issue-4",
+      identifier: "EXT-4",
+      title: "Labelled compact",
+      description: nil,
+      comments: [],
+      labels: [
+        %Label{id: "l1", name: "Bug", description: nil, is_group: false},
+        %Label{id: "l2", name: "Feature", description: nil, is_group: false}
+      ]
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{labels: true}) end)
+
+    assert output =~ "EXT-4"
+    assert output =~ "[Bug, Feature]"
+  end
+
+  test "compact listing omits label brackets when labels opt is false" do
+    issue = %Issue{
+      id: "issue-5",
+      identifier: "EXT-5",
+      title: "Unlabelled compact",
+      description: nil,
+      comments: [],
+      labels: [
+        %Label{id: "l1", name: "Bug", description: nil, is_group: false}
+      ]
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{labels: false}) end)
+
+    assert output =~ "EXT-5"
+    refute output =~ "[Bug]"
+  end
+
+  defp relation(id, type, direction, src_ident, rel_ident) do
+    %IssueRelation{
+      id: id,
+      type: type,
+      direction: direction,
+      issue: %{
+        id: "i-src",
+        identifier: src_ident,
+        title: "#{src_ident} Title",
+        url: "https://example.com/#{src_ident}"
+      },
+      related_issue: %{
+        id: "i-rel",
+        identifier: rel_ident,
+        title: "#{rel_ident} Title",
+        url: "https://example.com/#{rel_ident}"
+      }
+    }
+  end
+
+  test "relations list shows Blocks section for outbound blocks relations" do
+    rels = [relation("r1", "blocks", :outbound, "EXT-1", "EXT-2")]
+    output = capture_io(fn -> Display.show(rels, %{}) end)
+
+    assert output =~ "Blocks:"
+    assert output =~ "EXT-2"
+    refute output =~ "Blocked by:"
+  end
+
+  test "relations list shows Blocked by section for inbound blocks relations" do
+    rels = [relation("r1", "blocks", :inbound, "EXT-3", "EXT-1")]
+    output = capture_io(fn -> Display.show(rels, %{}) end)
+
+    assert output =~ "Blocked by:"
+    assert output =~ "EXT-3"
+    refute output =~ "Blocks:"
+  end
+
+  test "relations list shows Related to section for related type" do
+    rels = [relation("r1", "related", :outbound, "EXT-1", "EXT-4")]
+    output = capture_io(fn -> Display.show(rels, %{}) end)
+
+    assert output =~ "Related to:"
+    assert output =~ "EXT-4"
+  end
+
+  test "relations list shows all relation sections in order" do
+    rels = [
+      relation("r1", "blocks", :outbound, "EXT-1", "EXT-2"),
+      relation("r2", "blocks", :inbound, "EXT-3", "EXT-1"),
+      relation("r3", "related", :outbound, "EXT-1", "EXT-4"),
+      relation("r4", "duplicate", :outbound, "EXT-1", "EXT-5"),
+      relation("r5", "similar", :outbound, "EXT-1", "EXT-6")
+    ]
+
+    output = capture_io(fn -> Display.show(rels, %{}) end)
+
+    assert output =~ "Blocks:"
+    assert output =~ "Blocked by:"
+    assert output =~ "Related to:"
+    assert output =~ "Duplicate of:"
+    assert output =~ "Similar to:"
+    assert String.contains?(output, "EXT-2")
+    assert String.contains?(output, "EXT-3")
+    assert String.contains?(output, "EXT-4")
+    assert String.contains?(output, "EXT-5")
+    assert String.contains?(output, "EXT-6")
+  end
+
+  test "full issue view shows relations when issue has them" do
+    rel = relation("r1", "blocks", :outbound, "EXT-1", "EXT-2")
+
+    issue = %Issue{
+      id: "issue-1",
+      identifier: "EXT-1",
+      title: "Blocker issue",
+      description: "This issue blocks another",
+      comments: [],
+      relations: [rel],
+      inverse_relations: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{full: true}) end)
+
+    assert output =~ "Blocks:"
+    assert output =~ "EXT-2"
+  end
+
+  test "full issue view omits relations block when issue has none" do
+    issue = %Issue{
+      id: "issue-1",
+      identifier: "EXT-1",
+      title: "Standalone issue",
+      description: "No relations",
+      comments: [],
+      relations: [],
+      inverse_relations: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{full: true}) end)
+
+    refute output =~ "Blocks:"
+    refute output =~ "Related to:"
+  end
+
+  test "relations JSON output includes direction and type fields" do
+    rels = [relation("r1", "blocks", :outbound, "EXT-1", "EXT-2")]
+    output = capture_io(fn -> Display.show(rels, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert is_list(decoded)
+    [entry] = decoded
+    assert entry["type"] == "blocks"
+    assert entry["direction"] == "outbound"
+    assert entry["id"] == "r1"
+  end
+
+  test "compact listing omits label brackets when issue has no labels even if labels opt is true" do
+    issue = %Issue{
+      id: "issue-6",
+      identifier: "EXT-6",
+      title: "No labels",
+      description: nil,
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{labels: true}) end)
+
+    assert output =~ "EXT-6"
+    refute output =~ "["
+  end
+
+  test "JSON output preserves priority=0 as a real numeric value" do
+    issue = %Issue{
+      id: "issue-7",
+      identifier: "EXT-7",
+      title: "No priority issue",
+      description: nil,
+      priority: 0.0,
+      priority_label: "No priority",
+      priority_sort_order: 0.0,
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert decoded["priority"] === 0.0
+    refute is_nil(decoded["priority"])
+    assert decoded["priority_label"] == "No priority"
+    assert decoded["priority_sort_order"] === 0.0
+  end
+
+  test "JSON output uses snake_case field names for priority and timestamps" do
+    issue = %Issue{
+      id: "issue-8",
+      identifier: "EXT-8",
+      title: "Field name stability",
+      description: nil,
+      priority: 1.0,
+      priority_label: "Urgent",
+      priority_sort_order: 42.0,
+      created_at: "2024-01-15T10:30:00.000Z",
+      updated_at: "2024-01-16T12:00:00.000Z",
+      comments: [],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert Map.has_key?(decoded, "priority")
+    assert Map.has_key?(decoded, "priority_label")
+    assert Map.has_key?(decoded, "priority_sort_order")
+    assert Map.has_key?(decoded, "created_at")
+    assert Map.has_key?(decoded, "updated_at")
+    refute Map.has_key?(decoded, "priorityLabel")
+    refute Map.has_key?(decoded, "prioritySortOrder")
+    refute Map.has_key?(decoded, "createdAt")
+    refute Map.has_key?(decoded, "updatedAt")
+    assert decoded["priority"] == 1.0
+    assert decoded["priority_label"] == "Urgent"
+    assert decoded["created_at"] == "2024-01-15T10:30:00.000Z"
+    assert decoded["updated_at"] == "2024-01-16T12:00:00.000Z"
+  end
+
+  test "JSON output includes timestamps on nested comment structs" do
+    alias LinearCli.Linear.Comment
+
+    issue = %Issue{
+      id: "issue-9",
+      identifier: "EXT-9",
+      title: "With comments",
+      description: nil,
+      priority: nil,
+      comments: [
+        %Comment{
+          id: "c1",
+          body: "A comment",
+          url: "https://linear.app/x#comment-c1",
+          user: nil,
+          created_at: "2024-01-20T08:00:00.000Z",
+          updated_at: "2024-01-20T08:30:00.000Z"
+        }
+      ],
+      labels: []
+    }
+
+    output = capture_io(fn -> Display.show(issue, %{output: "json"}) end)
+
+    decoded = Jason.decode!(output)
+    assert [comment] = decoded["comments"]
+    assert comment["id"] == "c1"
+    assert comment["created_at"] == "2024-01-20T08:00:00.000Z"
+    assert comment["updated_at"] == "2024-01-20T08:30:00.000Z"
   end
 end

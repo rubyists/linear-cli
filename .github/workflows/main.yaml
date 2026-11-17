@@ -10,6 +10,9 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
 
 permissions:
+  # actions: write lets manage-release-pr dispatch a release run whose
+  # release-PR merge run failed (ci/recover_release.sh).
+  actions: write
   contents: write
   packages: write
   pull-requests: write
@@ -19,7 +22,23 @@ jobs:
     name: Validations
     uses: ./.github/workflows/ci.yaml
     with:
-      skip_commit_validation: true
+      # push: validate every commit introduced after github.event.before.
+      # The exact SHA lets ci/validate_commit_range.sh check the squash/merge
+      # integration commit itself rather than comparing main to main (empty).
+      # pull_request closed: validate the merged result when a PR was actually
+      # merged; the base SHA gives the correct start of the new-commits range.
+      # For unmerged closes the range would be empty, but passing the base SHA
+      # is harmless — git log will find no commits to validate.
+      # workflow_dispatch: no PR title and no exact base; the validator falls
+      # back to origin/main as the comparison base.
+      # PR title validation only applies to direct pull_request events
+      # (handled by ci.yaml's own trigger), not to any workflow_call here.
+      base_ref: >-
+        ${{ github.event_name == 'push' && github.event.before
+            || github.event_name == 'pull_request' && github.event.pull_request.base.sha
+            || '' }}
+      pull_request_title_required: false
+      pull_request_title: ""
 
   manage-release-pr:
     needs: [validate]
@@ -34,6 +53,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-tags: true
+      -
+        # Only the release-PR merge run builds and publishes a release. If
+        # that run fails (as 2.10.0 and 2.11.0 did, on validation), the
+        # manifest version is never tagged and release-please below aborts
+        # on every push. This dispatches the release run for that version.
+        name: Recover a release whose run failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/recover_release.sh
       -
         # skip-github-release: this only ever manages the version-bump PR
         # (manifest/CHANGELOG.md/mix.exs) - it never creates a tag or
@@ -90,8 +118,8 @@ jobs:
       -
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
+          version-file: mise.toml
+          version-type: strict
           # Without this, setup-beam's problem matchers promote every
           # compiler warning from deps (e.g. postgrex/rewrite's deprecated
           # `xref: [exclude: ...]`, yamerl's deprecated `catch ...` syntax -
@@ -178,6 +206,14 @@ jobs:
         timeout-minutes: 1
         run: ./burrito_out/lc_${{ matrix.target }} version
       -
+        # Burrito 1.6.0 used one predictable /tmp ELF interpreter for every
+        # user. Exercise the packaged ERTS as two real unprivileged accounts,
+        # with an attacker-owned legacy loader already occupying that path.
+        if: startsWith(matrix.target, 'linux_')
+        name: Test the ${{ matrix.target }} binary across users
+        timeout-minutes: 2
+        run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_${{ matrix.target }}
+      -
         # Handed off to burrito-package below, which needs every target's
         # binary gathered back into one place before it can build the
         # per-platform tarballs/SBOM/release.
@@ -206,8 +242,8 @@ jobs:
         # setup-zig/p7zip here.
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
+          version-file: mise.toml
+          version-type: strict
           disable_problem_matchers: true
       -
         run: mix deps.get
@@ -314,70 +350,64 @@ jobs:
         # keeps finding this PR stuck "pending" forever and refuses to
         # open any future release PR ("There are untagged, merged release
         # PRs outstanding - aborting").
+        # A dispatched run (a manual or recovered release) has no PR in its
+        # event, so it relabels every merged release PR still marked pending.
         name: Mark the release PR as tagged
-        if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr edit "${{ github.event.pull_request.number }}" \
-              --remove-label "autorelease: pending" \
-              --add-label "autorelease: tagged"
+          if [ -n "$PR_NUMBER" ]
+          then
+              numbers="$PR_NUMBER"
+          elif ! numbers=$(gh pr list --state merged --label "autorelease: pending" \
+              --head release-please--branches--main --json number --jq '.[].number')
+          then
+              printf 'ERROR: unable to list pending release PRs\n' >&2
+              exit 1
+          fi
+          for number in $numbers
+          do
+              if ! gh pr edit "$number" \
+                  --remove-label "autorelease: pending" \
+                  --add-label "autorelease: tagged"
+              then
+                  printf 'ERROR: unable to relabel release PR #%s\n' "$number" >&2
+                  exit 1
+              fi
+          done
         working-directory: .
 
   container:
     needs: [burrito-package]
-    name: Build and publish container image
-    runs-on: ubuntu-latest
+    name: Build and publish ${{ matrix.arch }} container image
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - target: linux_x86_64
+            arch: amd64
+            runner: ubuntu-latest
+          - target: linux_aarch64
+            arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       -
         uses: actions/checkout@v7
       -
-        uses: erlef/setup-beam@v1
+        # Reuse the matching native binary from burrito-build. Building the
+        # image on a matching runner means Alpine and the packaged executable
+        # have the same architecture without emulation.
+        name: Download the ${{ matrix.target }} container payload
+        uses: actions/download-artifact@v7
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
-          disable_problem_matchers: true
-      -
-        # Same Burrito build as the `burrito-build` job above, so it needs
-        # the same pinned Zig (see that job's comment) - missing here would
-        # fail this job's build at `mix release` time even though
-        # `burrito-build` succeeds.
-        uses: mlugg/setup-zig@v2.2.1
-        with:
-          version: "0.16.0"
-      -
-        run: mix deps.get
-        working-directory: app
-      -
-        # Same two-stage preparation as the Linux burrito-build legs: Syntect
-        # must finish compiling with its host NIF before that artifact can be
-        # replaced with the musl build.
-        name: Compile makeup_syntect with its host NIF
-        env:
-          MIX_ENV: prod
-        run: mix deps.compile castore rustler_precompiled makeup_syntect
-        working-directory: app
-      -
-        name: Pre-compile mdex_native with its musl NIF
-        env:
-          MIX_ENV: prod
-          TARGET_ABI: musl
-        run: mix deps.compile mdex_native
-        working-directory: app
-      -
-        # Install Syntect's musl artifact and apply the same libgcc repair to
-        # both Rust NIFs as the standalone Linux binaries.
-        name: Install and repair the musl NIFs
-        run: ../ci/prepare_musl_nifs.sh
-        working-directory: app
-      -
-        name: Build the linux_x86_64 target (container's payload)
-        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
-        working-directory: app
+          name: burrito-${{ matrix.target }}
+          path: app/burrito_out
       -
         name: Build the image
         env:
           APP_VERSION: ${{ needs.burrito-package.outputs.tag_name }}
+          BURRITO_TARGET: ${{ matrix.target }}
         run: ./ci/build_image.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Verify the musl NIF actually loads on Alpine before publishing.
@@ -385,12 +415,9 @@ jobs:
         # Markdown renders, forcing the MDEx and Syntect NIFs, their bundled
         # libgcc runtimes, Makeup, and the Elixir/Ruby lexers to load. It then
         # prints the version and exits 0; no API key or network is needed.
-        # ci/build_image.sh prefers
-        # Podman, so the image lives in Podman's local storage; we run it
-        # directly rather than loading a tarball. LINEAR_CLI_DAEMON is
-        # overridden to false (the image bakes in true so the default CMD
-        # starts the daemon; without this override the app ignores `version`
-        # and stays alive as a daemon, timing out the step). See EXT-7.
+        # Podman owns the image built above, so run it directly. Overriding
+        # LINEAR_CLI_DAEMON lets `lc version` exit instead of starting the
+        # daemon. See EXT-7.
         name: Smoke-test the container image Markdown runtime on Alpine/musl
         timeout-minutes: 1
         run: |
@@ -409,7 +436,7 @@ jobs:
         name: Save the image to a tarball for Trivy to scan directly
         id: save
         run: |
-          tarball="$RUNNER_TEMP/linear-cli.tar"
+          tarball="$RUNNER_TEMP/linear-cli-${{ matrix.arch }}.tar"
           ./ci/save_image.sh "${{ needs.burrito-package.outputs.tag_name }}" "$tarball"
           printf 'tarball_path=%s\n' "$tarball" >> "$GITHUB_OUTPUT"
       -
@@ -426,12 +453,13 @@ jobs:
           input: ${{ steps.save.outputs.tarball_path }}
           scan-type: image
           format: cyclonedx
-          output: container-sbom.cdx.json
+          output: container-sbom-${{ matrix.arch }}.cdx.json
       -
-        name: Publish the image
+        name: Publish the ${{ matrix.arch }} image
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_ACTOR: ${{ github.actor }}
+          REGISTRY_TAG_SUFFIX: -${{ matrix.arch }}
         run: ./ci/publish.sh "${{ needs.burrito-package.outputs.tag_name }}"
       -
         # Can't attach this to the GitHub release the burrito-package job
@@ -441,9 +469,35 @@ jobs:
         name: Upload the container SBOM as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: container-sbom
-          path: container-sbom.cdx.json
+          name: container-sbom-${{ matrix.arch }}
+          path: container-sbom-${{ matrix.arch }}.cdx.json
           retention-days: 90
+
+  container-manifest:
+    needs: [burrito-package, container]
+    name: Publish multi-architecture container manifest
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Publish the amd64 and arm64 image manifest
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          TAG: ${{ needs.burrito-package.outputs.tag_name }}
+        run: |
+          image_repo=ghcr.io/rubyists/linear-cli
+          printf '%s' "$GITHUB_TOKEN" | podman login --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+
+          mapfile -t tags < <(echo "$TAG" | awk -F'.' 'NF==3{print; print $1"."$2; print $1; next} NF==2{print; print $1; next} {print}')
+
+          for published_tag in "${tags[@]}"
+          do
+              manifest="$image_repo:$published_tag"
+              podman manifest create "$manifest"
+              podman manifest add "$manifest" "docker://$image_repo:${published_tag}-amd64"
+              podman manifest add "$manifest" "docker://$image_repo:${published_tag}-arm64"
+              podman manifest push --all "$manifest" "docker://$manifest"
+          done
 
   homebrew-tap-bump:
     needs: [burrito-package]

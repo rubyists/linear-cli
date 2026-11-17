@@ -1,0 +1,30 @@
+== EXT-76 — Pagination termination invariant
+:status: active
+:risk: high
+:owner: EXT-76
+:evidence-date: 2026-10-04
+
+=== Failure
+
+Removing the 100-record lookup cap left cursor loops with no complete
+termination invariant. A repeated cursor or a null continuation cursor caused
+the lookup to request pages forever.
+
+=== Rule
+
+When a pagination cap is removed, add a termination invariant in the same
+change. The invariant must reject every repeated continuation cursor and every
+null continuation cursor that claims another page exists.
+
+=== Guardrail
+
+`Paginate.all_pages/4` records every cursor that it uses. It rejects a repeated
+or null continuation cursor. Workspace member lookup uses this paginator for
+the nested `team.members` connection. Bounded `Paginate.all/5` keeps its record
+limit and behavior.
+
+=== Retirement
+
+Retire this entry when the paginator guard and its cycle regressions remain in
+the supported implementation, and no related lookup path uses a separate
+unbounded pagination loop.

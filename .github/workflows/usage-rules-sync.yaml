@@ -23,8 +23,8 @@ jobs:
       -
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
+          version-file: mise.toml
+          version-type: strict
           disable_problem_matchers: true
       -
         run: mix deps.get

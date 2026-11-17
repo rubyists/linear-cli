@@ -7,17 +7,30 @@ defmodule LinearCli.MixProject do
     [
       app: :linear_cli,
       # x-release-please-start-version
-      version: "2.5.0",
+      version: "2.11.2",
       # x-release-please-end
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       elixirc_options: [warnings_as_errors: Mix.env() == :test],
+      elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
       consolidate_protocols: Mix.env() != :dev,
       usage_rules: usage_rules(),
-      releases: releases()
+      releases: releases(),
+      hex: [
+        # EEF-CVE-2026-96596: hex_core's bundled erl_tar loops forever on a
+        # crafted GNU sparse tar member. No fixed hex_core release exists yet
+        # (0.20.0 is the latest and is affected). hex_core is dev-only
+        # (`runtime: false`, pulled in for sbom), never ships in the release,
+        # and we never extract untrusted tarballs with it. Remove this entry
+        # once a patched hex_core is out.
+        ignore_advisories: ["EEF-CVE-2026-96596"]
+      ]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   # Burrito-wrapped release, both the interactive CLI and (with
   # LINEAR_CLI_DAEMON=true) the daemon - one binary, not two build
@@ -77,6 +90,9 @@ defmodule LinearCli.MixProject do
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]},
       {:sbom, "~> 0.10", only: :dev, runtime: false},
+      # sbom pins hex_core ~> 0.19.0, which carries EEF-CVE-2026-103502 and
+      # EEF-CVE-2026-105274; override until sbom allows 0.20.
+      {:hex_core, "~> 0.20.0", only: :dev, runtime: false, override: true},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.1", only: [:dev, :test], runtime: false}
       # {:dep_from_hexpm, "~> 0.3.0"},

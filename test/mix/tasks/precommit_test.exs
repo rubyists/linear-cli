@@ -1,0 +1,56 @@
+defmodule Mix.Tasks.PrecommitTest do
+  use ExUnit.Case, async: true
+
+  alias Mix.Tasks.Precommit
+
+  test "runs only local checks in order" do
+    caller = self()
+
+    shell = fn cmd, args, opts ->
+      send(caller, {:run, cmd, args, opts})
+      :ok
+    end
+
+    assert :ok = Precommit.run([], shell)
+
+    assert_received {:run, "mix", ["format", "--check-formatted"], []}
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], []}
+    assert_received {:run, "mix", ["format", "--check-formatted"], [cd: "app"]}
+    assert_received {:run, "mix", ["credo", "--strict"], [cd: "app"]}
+    assert_received {:run, "mix", ["test", "--exclude", "ci_only"], [cd: "app"]}
+  end
+
+  test "does not run CI-only steps" do
+    caller = self()
+
+    shell = fn cmd, args, opts ->
+      send(caller, {:run, cmd, args, opts})
+      :ok
+    end
+
+    Precommit.run([], shell)
+
+    refute_received {:run, "./ci/validate_pull_request_title.sh", _, _}
+    refute_received {:run, "./ci/validate_commit_range.sh", _, _}
+    refute_received {:run, "mix", ["deps.get"], _}
+    refute_received {:run, "mix", ["hex.audit"], _}
+    refute_received {:run, "mix", ["deps.audit"], _}
+    refute_received {:run, "mix", ["usage_rules.sync", "--check"], _}
+    refute_received {:run, "mix", ["test", "--only", "ci_only"], _}
+  end
+
+  test "does not globally exclude CI-only tests" do
+    helper = Path.expand("../../../app/test/test_helper.exs", __DIR__)
+
+    refute File.read!(helper) =~ "ExUnit.start(exclude: [:ci_only])"
+
+    root_ci_only_test = Path.expand("../../git_hooks_test.exs", __DIR__)
+    assert File.read!(root_ci_only_test) =~ "@moduletag :ci_only"
+  end
+
+  test "rejects arguments" do
+    assert_raise Mix.Error, "Usage: mix precommit", fn ->
+      Precommit.run(["unexpected"], fn _, _, _ -> :ok end)
+    end
+  end
+end

@@ -5,14 +5,39 @@ on:  # yamllint disable-line rule:truthy
   workflow_dispatch:
   workflow_call:
     inputs:
-      skip_commit_validation:
+      base_ref:
         description: >-
-          Skip the commit-subject check - it only makes sense pre-merge
-          (should this PR be mergeable), not as a post-merge gate.
+          Commit comparison base: an exact 40-character SHA (for push events
+          and closed-PR validation), a branch name (for workflow_dispatch with
+          an explicit base), or empty (falls back to origin/main). The Test job
+          exports this as BASE_REF so ci/validate_commit_range.sh uses the
+          correct range instead of re-resolving it from scratch.
+        required: false
+        type: string
+        default: ""
+      pull_request_title_required:
+        description: >-
+          Set to true only for pull_request events. ci/validate_pull_request_title.sh
+          treats any other value as "skip" and exits 0. Pass "false" for push,
+          closed-PR, and workflow_dispatch events where there is no PR title to enforce.
         required: false
         type: boolean
         default: false
+      pull_request_title:
+        description: >-
+          The pull request title to validate. Only meaningful when
+          pull_request_title_required is true. Passed as an environment variable
+          so the title is never interpolated as shell code — quotes, backticks,
+          dollar signs, and Unicode are all safe.
+        required: false
+        type: string
+        default: ""
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   test:
@@ -24,11 +49,22 @@ jobs:
     steps:
       -
         uses: actions/checkout@v7
+        with:
+          # mix ci calls ci/validate_commit_range.sh, which validates
+          # every commit since the merge base. A full-history checkout lets the
+          # script resolve that base locally without a second network fetch.
+          fetch-depth: 0
+          # pull_request otherwise checks out GitHub's synthetic test-merge
+          # commit (subject "Merge <sha> into <sha>"). Validate the
+          # contributor's actual branch tip instead so that commit never
+          # appears in the validated range. Falls back to github.sha for
+          # non-PR triggers (workflow_dispatch, workflow_call from push/closed).
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
         uses: erlef/setup-beam@v1
         with:
-          otp-version: "29.0.3"
-          elixir-version: "1.20.3"
+          version-file: mise.toml
+          version-type: strict
           # Without this, setup-beam's problem matchers promote every
           # compiler warning from deps (e.g. postgrex/rewrite's deprecated
           # `xref: [exclude: ...]`, yamerl's deprecated `catch ...` syntax -
@@ -44,30 +80,121 @@ jobs:
             app/_build
           key: ${{ runner.os }}-mix-${{ hashFiles('app/mix.lock') }}
       -
-        # mix ci covers: deps.get, hex.audit, deps.audit (Elixir security
-        # advisories), format --check-formatted, credo (static analysis),
-        # usage_rules.sync --check (catches dep-bump drift, see #79),
-        # and mix test. Runs from the repo root; cd: app/ is handled
-        # inside the task itself.
-        run: mix ci
+        # mix ci is the complete integration gate:
+        #   1. App deps.get (bootstrap)
+        #   2. ci/validate_pull_request_title.sh — PR title (when required)
+        #   3. ci/validate_commit_range.sh — all commit subjects in the range
+        #   4. mix precommit — root format + test, app format + credo + test --exclude ci_only
+        #   5-7. App hex.audit, deps.audit, usage_rules.sync
+        #   8. App mix test (the unfiltered suite, including ci_only tests)
+        # BASE_REF carries the exact comparison base SHA so the commit-range
+        # validator never has to guess. For pull_request events it is the exact
+        # base SHA; for push events it is github.event.before; for
+        # workflow_dispatch and unverified closes it is empty, and the validator
+        # falls back to origin/main.
+        # PULL_REQUEST_TITLE is set via env (never ${{ }} in run:) so PR titles
+        # containing quotes, backticks, dollar signs, or Unicode are treated as
+        # inert data, not executable shell code.
+        name: Run full quality gate
+        env:
+          BASE_REF: >-
+            ${{ inputs.base_ref != '' && inputs.base_ref
+                || github.event.pull_request.base.sha }}
+          PULL_REQUEST_TITLE_REQUIRED: >-
+            ${{ inputs.pull_request_title_required
+                || github.event_name == 'pull_request' }}
+          PULL_REQUEST_TITLE: >-
+            ${{ inputs.pull_request_title != '' && inputs.pull_request_title
+                || github.event.pull_request.title }}
+        run: mix deps.get && mix ci
         working-directory: .
 
-  conventional_commits:
-    if: inputs.skip_commit_validation != true
-    name: Validate Commit Subjects
+  burrito_changes:
+    # Building Burrito is deliberately reserved for changes that affect its
+    # dependency graph or packaging path. The release workflow still builds
+    # every target before publishing.
+    # Exclude 'edited' events — a title-only change never alters file content,
+    # so there are no Burrito-impacting diffs to check.
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.action != 'closed'
+      && github.event.action != 'edited'
+    name: Detect Burrito-impacting changes
     runs-on: ubuntu-latest
+    outputs:
+      burrito_changed: ${{ steps.changes.outputs.burrito_changed }}
     steps:
       -
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          # pull_request's default ref is the synthetic refs/pull/N/merge test-merge
-          # commit (subject "Merge <sha> into <sha>"), not the PR branch tip - check
-          # out the real head SHA instead so that commit is never in the validated
-          # range. Falls back to github.sha for non-PR triggers (workflow_dispatch/
-          # workflow_call), where github.event.pull_request is unset.
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       -
+        id: changes
+        name: Check whether Burrito-impacting files changed
         env:
-          FETCH_BASE_REF: "true"
-        run: ./ci/conventional_commits.sh
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- \
+              app/mix.exs \
+              app/mix.lock \
+              app/release/ \
+              ci/prepare_musl_nifs.sh \
+              ci/test_burrito_shared_loader.sh \
+              .github/workflows/ci.yaml \
+              .github/workflows/main.yaml
+          then
+              printf 'burrito_changed=false\n' >> "$GITHUB_OUTPUT"
+          else
+              printf 'burrito_changed=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+  burrito_linux_regression:
+    # ci.yaml is also called by main.yaml after pushes and closed release PRs.
+    # Keep this expensive native build as a pre-merge dependency-change gate;
+    # the release workflow builds every target after the release PR merges.
+    needs: [burrito_changes]
+    if: needs.burrito_changes.outputs.burrito_changed == 'true'
+    name: Burrito Linux shared-loader regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app
+        shell: bash
+    steps:
+      -
+        uses: actions/checkout@v7
+      -
+        uses: erlef/setup-beam@v1
+        with:
+          version-file: mise.toml
+          version-type: strict
+          disable_problem_matchers: true
+      -
+        uses: mlugg/setup-zig@v2.2.1
+        with:
+          version: "0.16.0"
+      -
+        run: mix deps.get
+      -
+        name: Compile makeup_syntect with its host NIF
+        env:
+          MIX_ENV: prod
+        run: mix deps.compile castore rustler_precompiled makeup_syntect
+      -
+        name: Pre-compile mdex_native with its musl NIF
+        env:
+          MIX_ENV: prod
+          TARGET_ABI: musl
+        run: mix deps.compile mdex_native
+      -
+        name: Install and repair the musl NIFs
+        run: ../ci/prepare_musl_nifs.sh
+      -
+        name: Build the native linux_x86_64 target
+        run: MIX_ENV=prod BURRITO_TARGET=linux_x86_64 mix release lc
+      -
+        name: Test the packaged binary across users
+        timeout-minutes: 2
+        run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_linux_x86_64

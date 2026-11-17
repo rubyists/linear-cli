@@ -1,5 +1,6 @@
 defmodule LinearCli.Linear.IssueTest do
   use ExUnit.Case, async: true
+  import ExUnit.CaptureLog
 
   alias LinearCli.Linear
 
@@ -62,6 +63,56 @@ defmodule LinearCli.Linear.IssueTest do
     assert {:ok, []} = Linear.issues(%{unassigned: true})
   end
 
+  test "issues/1 with mine: false does not add an assignee filter" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+      refute Map.has_key?(filter, "assignee")
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{mine: false})
+  end
+
+  test "issues/1 with labels sends the correct label filter to the API" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+      assert filter["labels"] == %{"some" => %{"name" => %{"eqIgnoreCase" => "Bug"}}}
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+  end
+
+  test "issues/1 with multiple labels sends OR filter to the API" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+      assert filter["labels"] == %{
+               "some" => %{
+                 "or" => [
+                   %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                   %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                 ]
+               }
+             }
+
+      Req.Test.json(conn, %{
+        "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+      })
+    end)
+
+    assert {:ok, []} = Linear.issues(%{labels: ["Bug", "Feature"]})
+  end
+
   test "issues/1 with ids fetches each by id via the full-detail query" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -70,6 +121,7 @@ defmodule LinearCli.Linear.IssueTest do
       assert id == "CRY-2"
       assert query =~ "issue(id: $id)"
       assert query =~ "comments"
+      assert query =~ "labels"
 
       Req.Test.json(conn, %{
         "data" => %{
@@ -81,7 +133,8 @@ defmodule LinearCli.Linear.IssueTest do
             "description" => nil,
             "assignee" => nil,
             "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
-            "comments" => %{"nodes" => []}
+            "comments" => %{"nodes" => []},
+            "labels" => %{"nodes" => []}
           }
         }
       })
@@ -89,6 +142,49 @@ defmodule LinearCli.Linear.IssueTest do
 
     assert {:ok, [issue]} = Linear.issues(%{ids: ["cry-2"]})
     assert issue.identifier == "CRY-2"
+    assert issue.labels == []
+  end
+
+  test "issues/1 with ids parses labels from the full-detail response" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"id" => _id}} = Jason.decode!(body)
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "issue" => %{
+            "id" => "i2",
+            "identifier" => "CRY-2",
+            "title" => "Ship it",
+            "branchName" => "cry-2-ship-it",
+            "description" => nil,
+            "assignee" => nil,
+            "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+            "comments" => %{"nodes" => []},
+            "labels" => %{
+              "nodes" => [
+                %{
+                  "id" => "lbl-1",
+                  "name" => "Bug",
+                  "description" => nil,
+                  "isGroup" => false
+                },
+                %{
+                  "id" => "lbl-2",
+                  "name" => "Feature",
+                  "description" => "A new feature",
+                  "isGroup" => false
+                }
+              ]
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, [issue]} = Linear.issues(%{ids: ["cry-2"]})
+    assert length(issue.labels) == 2
+    assert Enum.map(issue.labels, & &1.name) == ["Bug", "Feature"]
   end
 
   test "issues/1 parses the issue's current state when present in the response" do
@@ -163,8 +259,13 @@ defmodule LinearCli.Linear.IssueTest do
       })
     end)
 
-    assert {:error, %Ash.Error.Unknown{errors: [%{value: [not_found: _id]}]}} =
-             Linear.issues(%{ids: ["nope"]})
+    log =
+      capture_log(fn ->
+        assert {:error, %Ash.Error.Unknown{errors: [%{value: [not_found: _id]}]}} =
+                 Linear.issues(%{ids: ["nope"]})
+      end)
+
+    assert log =~ "Linear API partial-success: 1 field error(s) discarded, data returned"
   end
 
   describe "create_issue/3+" do
@@ -289,6 +390,50 @@ defmodule LinearCli.Linear.IssueTest do
       end)
 
       assert {:error, %Ash.Error.Invalid{}} = Linear.assign_issue(issue, "nope")
+    end
+  end
+
+  describe "unassign_issue/1" do
+    test "sends a JSON null assigneeId and returns the updated issue" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
+
+        assert id == "CRY-1"
+        assert input == %{"assigneeId" => nil}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.unassign_issue(issue)
+      assert updated.assignee == nil
+    end
+
+    test "surfaces a GraphQL error" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "mutation denied"}]})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{}} = Linear.unassign_issue(issue)
     end
   end
 
@@ -466,6 +611,555 @@ defmodule LinearCli.Linear.IssueTest do
 
       assert {:error, %Ash.Error.Invalid{}} =
                Linear.update_issue_description(issue, "Updated body")
+    end
+  end
+
+  describe "set_issue_priority/2" do
+    test "sends priority as integer and returns the issue refetched via full_fields" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"id" => id, "input" => input}} = Jason.decode!(body)
+
+        assert id == "CRY-1"
+        assert input == %{"priority" => 2}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "priority" => 2.0,
+                "priorityLabel" => "High",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => "2024-01-15T10:30:00.000Z",
+                "updatedAt" => "2024-01-16T12:00:00.000Z",
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.set_issue_priority(issue, 2)
+      assert updated.priority == 2.0
+      assert updated.priority_label == "High"
+    end
+
+    test "priority 0 (none) sends integer 0 in the mutation input" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+
+        assert input == %{"priority" => 0}
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueUpdate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "Fix it",
+                "branchName" => "cry-1-fix-it",
+                "description" => nil,
+                "priority" => 0.0,
+                "priorityLabel" => "No priority",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => "2024-01-15T10:30:00.000Z",
+                "updatedAt" => "2024-01-16T12:00:00.000Z",
+                "assignee" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                "comments" => %{"nodes" => []}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, updated} = Linear.set_issue_priority(issue, 0)
+      assert updated.priority == 0.0
+      assert updated.priority_label == "No priority"
+    end
+
+    test "surfaces a GraphQL error" do
+      issue = struct!(LinearCli.Linear.Issue, id: "i1", identifier: "CRY-1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{"errors" => [%{"message" => "unauthorized"}]})
+      end)
+
+      assert {:error, %Ash.Error.Invalid{}} = Linear.set_issue_priority(issue, 1)
+    end
+  end
+
+  describe "issues/1 label filtering" do
+    test "issues/1 with labels requests labels fields in the GraphQL query" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels {")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+    end
+
+    test "issues/1 without labels does not request labels fields in the GraphQL query" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        refute String.contains?(query, "labels {")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
+    end
+
+    test "issues/1 with labels parses label names from the response" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Bug fix",
+                    "branchName" => "cry-1-bug-fix",
+                    "description" => nil,
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                    "labels" => %{
+                      "nodes" => [
+                        %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+                      ]
+                    }
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{labels: ["Bug"]})
+      assert [label] = issue.labels
+      assert label.name == "Bug"
+    end
+
+    test "issues/1 with labels: [single] sends some/name/eqIgnoreCase filter" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert filter["labels"] == %{
+                 "some" => %{"name" => %{"eqIgnoreCase" => "Bug"}}
+               }
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug"]})
+    end
+
+    test "issues/1 with labels: [multiple] sends some/or filter for OR semantics" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert filter["labels"] == %{
+                 "some" => %{
+                   "or" => [
+                     %{"name" => %{"eqIgnoreCase" => "Bug"}},
+                     %{"name" => %{"eqIgnoreCase" => "Feature"}}
+                   ]
+                 }
+               }
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: ["Bug", "Feature"]})
+    end
+
+    test "issues/1 with labels: [] sends no labels filter key" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        refute Map.has_key?(filter, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
+    end
+  end
+
+  describe "from_map/1 priority and timestamp extraction" do
+    test "extracts priority=0 as a real float value (not nil)" do
+      map = %{
+        "id" => "i1",
+        "identifier" => "CRY-1",
+        "title" => "No priority issue",
+        "branchName" => "cry-1-no-priority",
+        "description" => nil,
+        "priority" => 0.0,
+        "priorityLabel" => "No priority",
+        "prioritySortOrder" => 0.0,
+        "createdAt" => "2024-01-15T10:30:00.000Z",
+        "updatedAt" => "2024-01-16T12:00:00.000Z",
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert issue.priority === 0.0
+      refute is_nil(issue.priority)
+      assert issue.priority_label == "No priority"
+      assert issue.priority_sort_order == 0.0
+      assert issue.created_at == "2024-01-15T10:30:00.000Z"
+      assert issue.updated_at == "2024-01-16T12:00:00.000Z"
+    end
+
+    test "extracts non-zero priority values" do
+      map = %{
+        "id" => "i2",
+        "identifier" => "CRY-2",
+        "title" => "Urgent issue",
+        "branchName" => "cry-2-urgent",
+        "description" => nil,
+        "priority" => 1.0,
+        "priorityLabel" => "Urgent",
+        "prioritySortOrder" => 42.5,
+        "createdAt" => "2024-02-01T08:00:00.000Z",
+        "updatedAt" => "2024-02-02T09:00:00.000Z",
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert issue.priority == 1.0
+      assert issue.priority_label == "Urgent"
+      assert issue.priority_sort_order == 42.5
+      assert issue.created_at == "2024-02-01T08:00:00.000Z"
+      assert issue.updated_at == "2024-02-02T09:00:00.000Z"
+    end
+
+    test "tolerates missing priority fields (nil stays nil)" do
+      map = %{
+        "id" => "i3",
+        "identifier" => "CRY-3",
+        "title" => "Legacy issue",
+        "branchName" => "cry-3-legacy",
+        "description" => nil,
+        "assignee" => nil,
+        "state" => nil,
+        "team" => nil
+      }
+
+      issue = LinearCli.Linear.Issue.from_map(map)
+
+      assert is_nil(issue.priority)
+      assert is_nil(issue.priority_label)
+      assert is_nil(issue.priority_sort_order)
+      assert is_nil(issue.created_at)
+      assert is_nil(issue.updated_at)
+    end
+
+    test "GraphQL query selection includes priority fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert query =~ "priority"
+        assert query =~ "priorityLabel"
+        assert query =~ "prioritySortOrder"
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{labels: [], mine: false})
+    end
+  end
+
+  describe "Issue.from_map/1 priority and timestamp fields" do
+    test "extracts priority, priority_label, priority_sort_order, created_at, updated_at" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix it",
+                    "branchName" => "cry-1-fix-it",
+                    "description" => nil,
+                    "priority" => 2.0,
+                    "priorityLabel" => "High",
+                    "prioritySortOrder" => 14.5,
+                    "createdAt" => "2024-01-15T10:30:00.000Z",
+                    "updatedAt" => "2024-01-16T12:00:00.000Z",
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{mine: false})
+      assert issue.priority == 2.0
+      assert issue.priority_label == "High"
+      assert issue.priority_sort_order == 14.5
+      assert issue.created_at == "2024-01-15T10:30:00.000Z"
+      assert issue.updated_at == "2024-01-16T12:00:00.000Z"
+    end
+
+    test "priority 0 is preserved as a real value, not treated as missing" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix it",
+                    "branchName" => "cry-1",
+                    "description" => nil,
+                    "priority" => 0.0,
+                    "priorityLabel" => "No priority",
+                    "prioritySortOrder" => 0.0,
+                    "createdAt" => "2024-01-15T10:30:00.000Z",
+                    "updatedAt" => "2024-01-15T10:30:00.000Z",
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{mine: false})
+      assert issue.priority == 0.0
+      refute is_nil(issue.priority)
+    end
+
+    test "GraphQL query includes priority and timestamp fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert query =~ "priority"
+        assert query =~ "priorityLabel"
+        assert query =~ "prioritySortOrder"
+        assert query =~ "createdAt"
+        assert query =~ "updatedAt"
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{mine: false})
+    end
+  end
+
+  describe "issues/1 include_labels field selection" do
+    test "include_labels: true, labels: [] requests label fields without adding a label filter" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => %{"filter" => filter}} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels")
+        refute Map.has_key?(filter, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issues" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "i1",
+                    "identifier" => "CRY-1",
+                    "title" => "Fix",
+                    "branchName" => "cry-1-fix",
+                    "description" => nil,
+                    "assignee" => nil,
+                    "state" => nil,
+                    "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"},
+                    "labels" => %{
+                      "nodes" => [
+                        %{"id" => "l1", "name" => "Bug", "description" => nil, "isGroup" => false}
+                      ]
+                    }
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, [issue]} = Linear.issues(%{include_labels: true, labels: [], mine: false})
+      assert [label] = issue.labels
+      assert label.name == "Bug"
+    end
+
+    test "include_labels: false, labels: [] uses the base selection without label fields" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        refute String.contains?(query, "labels { nodes")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{include_labels: false, labels: [], mine: false})
+    end
+
+    test "non-empty labels defensively selects label fields even when include_labels is false" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        assert String.contains?(query, "labels")
+
+        Req.Test.json(conn, %{
+          "data" => %{"issues" => %{"edges" => [], "pageInfo" => %{"hasNextPage" => false}}}
+        })
+      end)
+
+      assert {:ok, []} = Linear.issues(%{include_labels: false, labels: ["Bug"], mine: false})
+    end
+  end
+
+  describe "Issue.Create priority input" do
+    test "includes priority in the GraphQL input when provided" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+        send(test_pid, {:input, input})
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueCreate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "T",
+                "branchName" => "cry-1-t",
+                "description" => nil,
+                "priority" => 2.0,
+                "priorityLabel" => "High",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => nil,
+                "updatedAt" => nil,
+                "assignee" => nil,
+                "state" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, _issue} =
+               Linear.create_issue("T", nil, "team-id", %{label_ids: [], priority: 2})
+
+      assert_received {:input, input}
+      assert input["priority"] == 2
+    end
+
+    test "omits priority from the GraphQL input when not provided" do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"variables" => %{"input" => input}} = Jason.decode!(body)
+        send(test_pid, {:input, input})
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "issueCreate" => %{
+              "issue" => %{
+                "id" => "i1",
+                "identifier" => "CRY-1",
+                "title" => "T",
+                "branchName" => "cry-1-t",
+                "description" => nil,
+                "priority" => 0.0,
+                "priorityLabel" => "No priority",
+                "prioritySortOrder" => 0.0,
+                "createdAt" => nil,
+                "updatedAt" => nil,
+                "assignee" => nil,
+                "state" => nil,
+                "team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+              }
+            }
+          }
+        })
+      end)
+
+      assert {:ok, _issue} = Linear.create_issue("T", nil, "team-id", %{label_ids: []})
+
+      assert_received {:input, input}
+      refute Map.has_key?(input, "priority")
     end
   end
 end

@@ -11,12 +11,21 @@ defmodule LinearCli.Linear.Issue do
       argument :ids, {:array, :string}, default: []
       argument :mine, :boolean, default: true
       argument :unassigned, :boolean, default: false
+      argument :assignee_id, :string, allow_nil?: true
+      argument :assigned_only, :boolean, default: false
       argument :team_key, :string, allow_nil?: true
       argument :project_id, :string, allow_nil?: true
       argument :all, :boolean, default: false
       argument :state, {:array, :string}, default: []
       argument :status, {:array, :string}, default: []
+      argument :labels, {:array, :string}, default: []
+      argument :include_labels, :boolean, default: false
       manual LinearCli.Linear.Issue.Read.List
+    end
+
+    action :list_first_page, :map do
+      argument :input, :map, allow_nil?: false
+      run LinearCli.Linear.Issue.Actions.ListFirstPage
     end
 
     # Ruby: Issue::ClassMethods#create(title:, description:, team:, project:, labels: [])
@@ -26,6 +35,7 @@ defmodule LinearCli.Linear.Issue do
       argument :team_id, :string, allow_nil?: false
       argument :project_id, :string, allow_nil?: true
       argument :label_ids, {:array, :string}, default: []
+      argument :priority, :integer, allow_nil?: true
       manual LinearCli.Linear.Issue.Create
     end
 
@@ -34,6 +44,10 @@ defmodule LinearCli.Linear.Issue do
       argument :assignee_id, :string, allow_nil?: false
       argument :state_id, :string, allow_nil?: true
       manual LinearCli.Linear.Issue.Update.Assign
+    end
+
+    update :unassign do
+      manual LinearCli.Linear.Issue.Update.Unassign
     end
 
     # Ruby: Issue#attach_to_project(project)
@@ -60,6 +74,11 @@ defmodule LinearCli.Linear.Issue do
       argument :description, :string, allow_nil?: false
       manual LinearCli.Linear.Issue.Update.UpdateDescription
     end
+
+    update :set_priority do
+      argument :priority, :integer, allow_nil?: false
+      manual LinearCli.Linear.Issue.Update.SetPriority
+    end
   end
 
   attributes do
@@ -68,13 +87,22 @@ defmodule LinearCli.Linear.Issue do
     attribute :title, :string, public?: true
     attribute :branch_name, :string, public?: true
     attribute :description, :string, public?: true
+    attribute :url, :string, public?: true
+    attribute :priority, :float, public?: true
+    attribute :priority_label, :string, public?: true
+    attribute :priority_sort_order, :float, public?: true
+    attribute :created_at, :string, public?: true
+    attribute :updated_at, :string, public?: true
     attribute :assignee, :term, public?: true
     attribute :state, :term, public?: true
     attribute :team, :term, public?: true
     attribute :comments, {:array, :term}, public?: true, default: []
+    attribute :labels, {:array, :term}, public?: true, default: []
+    attribute :relations, {:array, :term}, public?: true, default: []
+    attribute :inverse_relations, {:array, :term}, public?: true, default: []
   end
 
-  @issue_fields "id identifier title branchName description createdAt updatedAt"
+  @issue_fields "id identifier title branchName description url priority priorityLabel prioritySortOrder createdAt updatedAt"
   @state_fields "id name type"
 
   @doc "GraphQL field selection for an issue plus its assignee/team (Ruby: Issue.base_fragment)."
@@ -85,13 +113,24 @@ defmodule LinearCli.Linear.Issue do
       "team { #{LinearCli.Linear.Team.base_fields()} }"
   end
 
+  @doc "GraphQL field selection for base_fields plus labels — used when listing issues filtered by label."
+  def list_fields_with_labels do
+    "#{base_fields()} labels { nodes { #{LinearCli.Linear.Label.base_fields()} } }"
+  end
+
   @doc "GraphQL field selection for a fully detailed issue, incl. comments (Ruby: Issue.full_fragment)."
   def full_fields do
+    rel = LinearCli.Linear.IssueRelation.relation_fields()
+    relation_connection = "edges { node { #{rel} } cursor } pageInfo { hasNextPage endCursor }"
+
     "#{@issue_fields} " <>
       "state { #{@state_fields} } " <>
       "assignee { #{LinearCli.Linear.User.fields_with_teams()} } " <>
       "team { #{LinearCli.Linear.Team.full_fields()} } " <>
-      "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } }"
+      "comments { nodes { #{LinearCli.Linear.Comment.base_fields()} } } " <>
+      "labels { nodes { #{LinearCli.Linear.Label.base_fields()} } } " <>
+      "relations(first: 50) { #{relation_connection} } " <>
+      "inverseRelations(first: 50) { #{relation_connection} }"
   end
 
   @doc false
@@ -102,6 +141,12 @@ defmodule LinearCli.Linear.Issue do
       title: map["title"],
       branch_name: map["branchName"],
       description: map["description"],
+      url: map["url"],
+      priority: map["priority"],
+      priority_label: map["priorityLabel"],
+      priority_sort_order: map["prioritySortOrder"],
+      created_at: map["createdAt"],
+      updated_at: map["updatedAt"],
       assignee: map["assignee"] && LinearCli.Linear.User.from_map(map["assignee"]),
       state: map["state"] && LinearCli.Linear.WorkflowState.from_map(map["state"]),
       team: map["team"] && LinearCli.Linear.Team.from_map(map["team"]),
@@ -109,6 +154,21 @@ defmodule LinearCli.Linear.Issue do
         Enum.map(
           get_in(map, ["comments", "nodes"]) || [],
           &LinearCli.Linear.Comment.from_map/1
+        ),
+      labels:
+        Enum.map(
+          get_in(map, ["labels", "nodes"]) || [],
+          &LinearCli.Linear.Label.from_map/1
+        ),
+      relations:
+        Enum.map(
+          get_in(map, ["relations", "edges"]) || [],
+          &LinearCli.Linear.IssueRelation.from_map(&1["node"], :outbound)
+        ),
+      inverse_relations:
+        Enum.map(
+          get_in(map, ["inverseRelations", "edges"]) || [],
+          &LinearCli.Linear.IssueRelation.from_map(&1["node"], :inbound)
         )
     )
   end
@@ -127,8 +187,21 @@ defmodule LinearCli.Linear.Issue.Read.List do
     if args.ids != [] do
       find_by_ids(args.ids)
     else
-      list_all(build_filter(args))
+      list_all(build_filter(args), args.include_labels || args.labels != [])
     end
+  end
+
+  @doc """
+  Fetches one issue page for filter-only batch commands.
+
+  Returns `{:ok, issues, has_next_page}` and never follows the continuation
+  cursor. The caller can warn before it processes the first 100 matches.
+  """
+  def first_page(args) do
+    list_first_page(
+      build_filter(args),
+      Map.get(args, :include_labels, false) || Map.get(args, :labels, []) != []
+    )
   end
 
   # Ruby: BaseModel::ClassMethods#find - singular `issue(id:)` lookup, full_fragment.
@@ -145,6 +218,19 @@ defmodule LinearCli.Linear.Issue.Read.List do
     query($filter: IssueFilter, $first: Int!, $after: String) {
       issues(filter: $filter, first: $first, after: $after) {
         edges { node { #{Issue.base_fields()} } cursor }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+    """
+  end
+
+  # Same paginated query but includes labels in each node — used when the caller
+  # filtered by --labels so we can show labels in the compact output.
+  defp list_document_with_labels do
+    """
+    query($filter: IssueFilter, $first: Int!, $after: String) {
+      issues(filter: $filter, first: $first, after: $after) {
+        edges { node { #{Issue.list_fields_with_labels()} } cursor }
         pageInfo { hasNextPage endCursor }
       }
     }
@@ -177,11 +263,25 @@ defmodule LinearCli.Linear.Issue.Read.List do
     end
   end
 
-  defp list_all(filter) do
+  defp list_all(filter, include_labels) do
+    document = if include_labels, do: list_document_with_labels(), else: list_document()
+
     Paginate.all(
-      list_document(),
+      document,
       "issues",
       fn after_cursor -> %{"filter" => filter, "first" => 50, "after" => after_cursor} end,
+      &Issue.from_map/1,
+      100
+    )
+  end
+
+  defp list_first_page(filter, include_labels) do
+    document = if include_labels, do: list_document_with_labels(), else: list_document()
+
+    Paginate.first_page(
+      document,
+      "issues",
+      fn _after_cursor -> %{"filter" => filter, "first" => 100, "after" => nil} end,
       &Issue.from_map/1
     )
   end
@@ -199,6 +299,7 @@ defmodule LinearCli.Linear.Issue.Read.List do
     |> maybe_put_team_filter(args)
     |> maybe_put_project_filter(args)
     |> maybe_put_state_filter(args)
+    |> maybe_put_label_filter(args)
   end
 
   @completed_types ~w(completed)
@@ -230,12 +331,21 @@ defmodule LinearCli.Linear.Issue.Read.List do
       else: Map.put(filter, "canceledAt", %{"null" => true})
   end
 
+  defp maybe_put_assignee_filter(filter, %{assignee_id: assignee_id})
+       when is_binary(assignee_id) and assignee_id != "" do
+    Map.put(filter, "assignee", %{"id" => %{"eq" => assignee_id}})
+  end
+
   defp maybe_put_assignee_filter(filter, %{unassigned: true}) do
     Map.put(filter, "assignee", %{"null" => true})
   end
 
   defp maybe_put_assignee_filter(filter, %{mine: true}) do
     Map.put(filter, "assignee", %{"isMe" => %{"eq" => true}})
+  end
+
+  defp maybe_put_assignee_filter(filter, %{assigned_only: true}) do
+    Map.put(filter, "assignee", %{"null" => false})
   end
 
   defp maybe_put_assignee_filter(filter, _args), do: filter
@@ -279,6 +389,32 @@ defmodule LinearCli.Linear.Issue.Read.List do
     names = Enum.map(statuses, &%{"name" => %{"eqIgnoreCase" => &1}})
     Map.put(filter, "or", names)
   end
+
+  defp maybe_put_label_filter(filter, %{labels: []}), do: filter
+
+  defp maybe_put_label_filter(filter, %{labels: [label]}) do
+    Map.put(filter, "labels", %{"some" => %{"name" => %{"eqIgnoreCase" => label}}})
+  end
+
+  defp maybe_put_label_filter(filter, %{labels: labels}) do
+    or_clauses = Enum.map(labels, &%{"name" => %{"eqIgnoreCase" => &1}})
+    Map.put(filter, "labels", %{"some" => %{"or" => or_clauses}})
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Actions.ListFirstPage do
+  @moduledoc false
+  use Ash.Resource.Actions.Implementation
+
+  alias LinearCli.Linear.Issue.Read.List
+
+  @impl true
+  def run(input, _opts, _context) do
+    case List.first_page(input.arguments.input) do
+      {:ok, issues, has_next_page} -> {:ok, %{issues: issues, has_next_page: has_next_page}}
+      error -> error
+    end
+  end
 end
 
 defmodule LinearCli.Linear.Issue.Create do
@@ -298,6 +434,7 @@ defmodule LinearCli.Linear.Issue.Create do
       %{"title" => args.title, "description" => args.description, "teamId" => args.team_id}
       |> maybe_put_label_ids(args.label_ids)
       |> maybe_put_project_id(Map.get(args, :project_id))
+      |> maybe_put_priority(Map.get(args, :priority))
 
     case Api.call(document(), %{"input" => input}) do
       {:ok, %{"issueCreate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
@@ -317,6 +454,9 @@ defmodule LinearCli.Linear.Issue.Create do
   defp maybe_put_project_id(input, nil), do: input
   defp maybe_put_project_id(input, project_id), do: Map.put(input, "projectId", project_id)
 
+  defp maybe_put_priority(input, nil), do: input
+  defp maybe_put_priority(input, priority), do: Map.put(input, "priority", priority)
+
   # A function, not a module attribute: Issue.base_fields/0 reaches into
   # User (another file), so it must be evaluated at call time - see house
   # rule on cross-file compile-time module attribute evaluation order.
@@ -332,8 +472,8 @@ defmodule LinearCli.Linear.Issue.Update do
   alias LinearCli.Linear.Issue
 
   # Ruby: Issue#update!(input) - the shared issueUpdate mutation that
-  # assign!/attach_to_project!/close! all delegate to, refetching the
-  # updated issue via Issue.full_fragment.
+  # the issue update actions delegate to, refetching the updated issue via
+  # Issue.full_fragment.
   def run(identifier, input) do
     case Api.call(document(), %{"id" => identifier, "input" => input}) do
       {:ok, %{"issueUpdate" => %{"issue" => issue_map}}} when is_map(issue_map) ->
@@ -368,6 +508,17 @@ defmodule LinearCli.Linear.Issue.Update.Assign do
     input = if state_id, do: Map.put(input, "stateId", state_id), else: input
 
     Issue.Update.run(changeset.data.identifier, input)
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.Unassign do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{"assigneeId" => nil})
   end
 end
 
@@ -438,6 +589,19 @@ defmodule LinearCli.Linear.Issue.Update.UpdateDescription do
   def update(changeset, _opts, _context) do
     Issue.Update.run(changeset.data.identifier, %{
       "description" => changeset.arguments.description
+    })
+  end
+end
+
+defmodule LinearCli.Linear.Issue.Update.SetPriority do
+  @moduledoc false
+  use Ash.Resource.ManualUpdate
+
+  alias LinearCli.Linear.Issue
+
+  def update(changeset, _opts, _context) do
+    Issue.Update.run(changeset.data.identifier, %{
+      "priority" => changeset.arguments.priority
     })
   end
 end

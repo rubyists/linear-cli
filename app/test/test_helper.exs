@@ -26,4 +26,6 @@ Application.put_env(:elixir, :ansi_enabled, true)
 # creates a profile.
 Application.fetch_env!(:linear_cli, :profiles_db_path) |> File.rm()
 
+# Test selection belongs to the invoking quality gate. `mix precommit` excludes
+# `:ci_only`; `mix ci` is unfiltered so it runs the complete suite.
 ExUnit.start()

@@ -1,4 +1,5 @@
 = Linear Command line interface (Elixir)
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
 :toc: right
 :toclevels: 3
 :sectanchors:
@@ -6,6 +7,8 @@
 :tip-caption: 💡
 :note-caption: 📝
 :experimental:
+:docinfo: private
+:docinfodir: {docdir}
 ifdef::env-github[]
 :tip-caption: :bulb:
 :note-caption: :information_source:
@@ -18,13 +21,26 @@ endif::[]
 :image-major-tag: v2
 // x-release-please-end
 // x-release-please-start-version
-:image-pin-example: v2.5.0
+:image-pin-example: v2.11.2
 // x-release-please-end
 
 A command line interface to https://linear.app - list, take, create, develop,
-and update issues without leaving your terminal.
+unassign, and update issues without leaving your terminal.
 
-image::cinemas/listings.cinema.gif[]
+[cols="1,1",frame=none,grid=none]
+|===
+|Ruby CLI (The Original)
+|Elixir CLI (This Project)
+
+a|[.cast-preview]
+image::cinemas/listings.cinema.gif[Original Ruby CLI listing demo,link=cinemas/listings.cinema.gif,window=_blank]
+
+a|[.cast-preview]
+image::cinemas/elixir-lcls-demo.gif[Elixir CLI listing demo,link=cinemas/elixir-lcls-demo.gif,window=_blank]
+|===
+
+Click either recording to enlarge it. In the rendered HTML, press kbd:[Esc]
+or select *Close* to return here.
 
 This is an Elixir/OTP port of https://github.com/rubyists/linear-cli-rb[linear-cli-rb]
 (the original Ruby CLI): same commands, same wrapper scripts (`lcls`,
@@ -39,6 +55,7 @@ vs ~5s doing it one at a time.
 === I don't want to install
 
 You can run the CLI from the container image without installing anything.
+The image supports Linux x86_64 and ARM64 hosts.
 
 [source,sh,subs="attributes+"]
 ----
@@ -53,7 +70,39 @@ entrypoint can also run as the long-lived Oban scheduling daemon. Override it
 to an empty value (as above) for one-off interactive CLI usage - otherwise
 `lc`/the wrapper scripts never see your command at all.
 
-=== Download a release binary (Most should use this)
+=== Homebrew (Recommended: macOS Apple Silicon, Linux x86_64, Linux ARM64)
+
+[source,sh]
+----
+$ brew tap rubyists/tap
+$ brew install lc
+----
+
+See https://github.com/rubyists/homebrew-tap for the formula itself.
+
+=== install.sh (for machines without Homebrew)
+
+[source,sh]
+----
+$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/install.sh | bash
+----
+
+Detects your platform, downloads and checksum-verifies the matching release
+tarball (the same one in the "Download a release binary" section below),
+and installs `lc` plus the `bin/` wrapper scripts onto a directory already on
+your `$PATH` - no Erlang/Elixir/Zig toolchain required. `LC_VERSION` pins a
+specific release tag instead of the latest one; `LC_INSTALL_DIR` pins a
+specific install directory.
+
+[source,sh]
+----
+$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/uninstall.sh | bash
+----
+
+Removes exactly what `install.sh` installed, by replaying the manifest it
+wrote - not a guess at where things ended up.
+
+=== Download a release binary
 
 Grab the tarball for your platform from the
 https://github.com/rubyists/linear-cli/releases[latest release] - macOS
@@ -86,39 +135,7 @@ so they're unaffected) since it isn't signed/notarized yet:
 $ xattr -d com.apple.quarantine /usr/local/bin/lc
 ----
 
-=== Homebrew (macOS Apple Silicon, Linux x86_64, Linux ARM64)
-
-[source,sh]
-----
-$ brew tap rubyists/tap
-$ brew install lc
-----
-
-See https://github.com/rubyists/homebrew-tap for the formula itself.
-
-=== install.sh (fetches a release binary, for machines without Homebrew)
-
-[source,sh]
-----
-$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/install.sh | bash
-----
-
-Detects your platform, downloads and checksum-verifies the matching release
-tarball (the same one the "Download a release binary" section above uses),
-and installs `lc` plus the `bin/` wrapper scripts onto a directory already on
-your `$PATH` - no Erlang/Elixir/Zig toolchain required. `LC_VERSION` pins a
-specific release tag instead of the latest one; `LC_INSTALL_DIR` pins a
-specific install directory.
-
-[source,sh]
-----
-$ curl --retry 5 --retry-all-errors -fsSL https://raw.githubusercontent.com/rubyists/linear-cli/main/uninstall.sh | bash
-----
-
-Removes exactly what `install.sh` installed, by replaying the manifest it
-wrote - not a guess at where things ended up.
-
-=== From Source (You are obviously a developer)
+=== From Source (Developers only)
 
 [source,sh]
 ----
@@ -158,8 +175,11 @@ so you don't have to type the full name every time:
 |`issue list` |`l`, `ls`
 |`issue status` |`s`, `st`, `stat`
 |`issue assign` |`a`
+|`issue unassign` |
 |`issue move` |`m`, `mv`
 |`issue update` |`u`
+|`issue view` |`v`
+|`issue comment` |
 |`issue pr` |`pull-request`
 |`team list` |`l`, `ls`
 |`project list` |`l`, `ls`
@@ -207,11 +227,44 @@ $ lcls -N <1>
 $ lcls --state started <2>
 $ lcls --status "Human Review" <3>
 $ lcls --state started --status "Human Review,Gate Approved" <4>
+$ lcls --include-labels <5>
+$ lcls -N -i --all <6>
+$ lcls --labels Bug <7>
+$ lcls --labels Bug,Feature <8>
+$ lcls --labels Bug --include-labels <9>
 ----
 <1> Include issues not assigned to you (short for `--no-mine`)
 <2> Filter by Linear's internal workflow state type
 <3> Filter by a friendly workflow status name (case-insensitive)
 <4> Combine state and status filters; both must match
+<5> Include each issue's labels in the compact listing (presentation only — does not filter which issues are returned)
+<6> Short forms: `-i` for `--include-labels`, `-N` for `--no-mine`; `--all` includes completed and cancelled issues
+<7> Filter to issues carrying the "Bug" label (case-insensitive); labels are shown automatically
+<8> Filter to issues carrying "Bug" or "Feature" (case-insensitive OR); all labels on each match are shown
+<9> Explicit `--include-labels` is redundant when `--labels` is also present; both work together
+
+In JSON mode, a project filter must match one project exactly. Partial project
+matches are rejected on stderr instead of opening the text-mode selection menu.
+
+==== View an Issue
+
+Show full details for a single issue (title, description, and all comments):
+
+[source,sh]
+----
+$ lc issue view CRY-1234
+$ lc i v CRY-1234 <1>
+$ lc issue view CRY-1234 --output json <2>
+$ lc issue view CRY-1234 --web <3>
+$ lc issue view CRY-1234 -w <4>
+----
+<1> Short alias: `i` for `issue`, `v` for `view`
+<2> Output as JSON
+<3> Open the issue in your browser instead of printing it
+<4> Short form of `--web`
+
+NOTE: JSON output cannot be combined with `--web`, because opening a browser
+does not produce an issue value on stdout.
 
 ==== Assign one or more issues to yourself (take em!)
 
@@ -239,17 +292,71 @@ $ lc issue assign CRY-1234 <4>
 <3> Short form of `--status`
 <4> Prompts for the assignee interactively
 
+NOTE: In JSON mode, `--assignee` is required. An omitted assignee is an
+interactive choice in text mode and is rejected on stderr in JSON mode.
+
+==== Unassign one or more issues
+
+This command clears the assignee from each listed issue. It accepts explicit
+issue identifiers or a filter-only selection. Filter mode requires at least one
+narrowing selector: `--assignee`, `--team`, `--project`, `--state`, `--status`,
+or `--labels`. `--no-mine`, `--no-profile`, and `--all` modify that selection
+but are not selectors by themselves. Positional issue identifiers cannot be
+combined with filter options.
+
+[source,sh]
+----
+$ lc issue unassign CRY-1234
+$ lc issue unassign CRY-1 CRY-2
+$ lc issue unassign --output json CRY-1 CRY-2
+$ lc issue unassign --no-profile --assignee "Alice Smith" --yes
+$ lc issue unassign --team CRY --project "Roadmap" --status "Human Review" --dry-run
+$ lc issue unassign --no-mine --all --labels Bug,Feature --yes
+----
+
+Text output shows each updated issue and a confirmation. JSON output returns
+one object for one issue and an array for multiple issues. A filter with no
+matches prints `No issues matched.` in text mode and returns `[]` in JSON mode.
+Filter mode selects only your own issues by default; use `--no-mine` to include
+issues assigned to other users, or `--assignee` to select a named user. Already
+unassigned issues are skipped. Exact
+project and assignee matches are used without a prompt. Partial matches prompt
+you to choose a project or assignee. Before any filtered mutation, the command
+asks for confirmation. An explicit `y` or `yes`, or `--yes`, is required.
+EOF, blank input, and exhausted invalid input cancel without
+changing issues. `--dry-run` prints the matching issues without changing them.
+The command processes at most 100 matches at a time. If more than 100 issues
+match, it prints a warning and processes only the first 100. Updates remain
+independent API calls, so a failed request can leave earlier matches already
+unassigned. In JSON mode, the warning goes to stderr so stdout stays valid
+JSON. The existing `--unassigned` issue-list filter is not a selector for this
+command because unassigning already-unassigned issues has no effect.
+
+NOTE: In JSON mode, filtered unassign requires `--yes` or `--dry-run`. Partial
+project or assignee matches return a diagnostic on stderr instead of prompting.
+Successful commands write one JSON value to stdout.
+
 ==== Create an issue
 
 [source,sh]
 ----
 $ lc issue create --title "My new issue" --description "This is a new issue" --labels Bug,Feature --team CRY
 $ lc issue create -t "My new issue" -T CRY -l Improvement,Feature
+$ lc issue create --title "Unassigned issue" --description "Ready to triage" --team CRY --yes --no-take
 ----
 
 NOTE: If you don't provide a title, team, labels, or description, you will be prompted to enter them.
 
+NOTE: `--yes` creates and self-assigns an issue without prompting. Add
+`--no-take` to keep the new issue unassigned; it cannot be combined with
+`--dev`, which starts development by self-assigning the issue.
+
 TIP: When creating an issue, you can use the `--dev` (or `--develop`) option to immediately start development on the issue.
+
+NOTE: JSON issue creation requires `--yes`, which supplies all required
+fields without prompts. JSON mode does not support `--dev`; use the separate
+`issue develop` command after creation. A project supplied with `--yes` must
+match exactly; partial project searches are rejected before issue creation.
 
 ==== Develop an issue
 
@@ -269,9 +376,15 @@ Requires the `gh` CLI to be installed and configured.
 $ lc issue pr CRY-1234
 ----
 
+NOTE: JSON `issue pr` requires both `--title` and `--description`. Without
+those options the text command asks questions and JSON mode rejects the
+invocation before checking out the branch.
+
 ==== Update an issue
 
 All of the update options can work on multiple issues at a time.
+See link:documents/body-file.adoc[`--body-file`: context-specific file input]
+for how file-backed text maps to each command.
 
 ===== Add a comment to one or more issues
 
@@ -289,6 +402,22 @@ $ lcomment CRY-1234 CRY-3 <5>
 <4> Opens your editor for the comment (use `-` to prompt)
 <5> Always prompts for a comment (`lcomment` is a wrapper for `lc issue update --comment -`)
 
+===== Add a comment from a file (`issue comment`)
+
+Same plain create as `issue update --comment`/`lcomment`, plus
+`--body-file` — the way to supply a large multi-line body without
+building it as a single shell argument.
+
+[source,sh]
+----
+$ lc issue comment CRY-1234 -m "Here is a comment" <1>
+$ lc issue comment CRY-1234 --body-file notes.md <2>
+$ lc issue comment CRY-1234 --body-file - <3>
+----
+<1> Plain create, same as `issue update --comment`
+<2> Reads the body from a file
+<3> Reads the body from stdin
+
 ===== Close one or many issues
 
 Use `--status`/`-s` to choose the completed or cancelled workflow state by
@@ -299,6 +428,12 @@ the team has more than one matching state.
 ----
 $ lc issue update --close --status Done --reason "These were closable" CRY-1234 CRY-2
 ----
+
+For JSON issue updates, close and cancel operations require both `--status`
+and `--reason`. Project moves also require an exact project match, and the
+`-` editor sentinel is not accepted for JSON comment, description, or reason
+inputs. These checks happen before the first issue mutation; text mode keeps
+its prompts.
 
 ==== Move an issue to a different workflow state
 
@@ -317,6 +452,12 @@ $ lc issue status CRY-1234 -s Done -m "Wrapped up" <4>
 <3> Move multiple issues at once — updates run concurrently
 <4> Add a comment alongside the state change
 
+NOTE: JSON `issue status` requires `--status`. The interactive state menu is
+available in text mode only.
+
+For `issue comment`, JSON mode requires `--comment` or `--body-file`; the
+editor prompt used when neither is supplied remains a text-mode behavior.
+
 ==== Move issues to a project
 
 Two modes: move specific issues by ID, or bulk-move an entire project's backlog.
@@ -331,7 +472,7 @@ $ lc issue move --project Manhattan --dry-run CRY-1 <3>
 $ lc issue move --project Manhattan --yes CRY-1 <4>
 $ lc issue move --project Manhattan --team ENG CRY-1 <5>
 ----
-<1> Move a single issue; prompts for confirmation before executing
+<1> Move a single issue; an explicit `y` or `yes` is required before execution
 <2> Move multiple issues at once — updates run concurrently
 <3> Preview the planned moves without executing any mutations
 <4> Skip the confirmation prompt
@@ -348,10 +489,19 @@ $ lc issue move --from Retired --to Active --all <2>
 $ lc issue move --from p-uuid-1 --to p-uuid-2 <3>
 $ lc issue move --from Retired --to Active --dry-run <4>
 ----
-<1> Moves all open issues from "Retired" to "Active", prompts for confirmation
+<1> Moves all open issues from "Retired" to "Active". An explicit `y` or `yes` is required
 <2> Includes completed and cancelled issues too
 <3> Move by project UUID — the way to target a project in another team
 <4> Preview without mutating
+
+NOTE: In JSON mode, ID and bulk moves require `--yes` or `--dry-run`. Project
+names must match exactly. A bare-number ID must resolve its team from an
+active profile, one favorite team, or the only available team. If team
+selection is ambiguous, the command writes a diagnostic to stderr and exits
+before mutation. A name-based bulk move must provide `--team` or an active
+profile; UUID-only moves do not need either. Partial matches and other
+prompt-required inputs return a diagnostic on stderr. A successful dry-run
+writes the selected issues as one JSON value.
 
 ==== Default team/project (profiles)
 
@@ -370,6 +520,11 @@ $ lc profile delete manhattan
 
 An explicit `--team`/`--project` on the command line always overrides the
 active profile.
+
+Profile and favorite mutations return one JSON result when `--output json` is
+used. Project favorites and project updates require an exact project name or
+ID, and require `--team` or an active profile when more than one team is
+available. Text mode keeps its existing selection prompts.
 
 Issue commands also accept a bare number (`lc issue develop 1234`) in
 place of a full team-prefixed identifier - it's resolved via the active
@@ -430,8 +585,10 @@ $ lproj list --mine
 
 == Development
 
-First, activate the repo's git hooks (enforces conventional-commit subjects
-on every commit, and again on every commit about to be pushed):
+In a shell with Mise activated, entering the checkout installs the repo's git
+hooks when needed. Otherwise, activate them manually (they enforce
+conventional-commit subjects on every commit and push, and run a Hex dependency
+security audit before a push):
 
 [source,sh]
 ----
@@ -449,7 +606,25 @@ $ mix lc whoami
 $ mix lc issue list --output json
 ----
 
-The project uses ExUnit and `mix format`. Run tests with:
+The project uses ExUnit and `mix format`. During development, run the fast
+local gate repeatedly (format, static analysis, unit tests — no network
+required after a one-time `mix deps.get` inside `app/`):
+
+[source,sh]
+----
+$ mix precommit
+----
+
+Before opening a pull request, or to reproduce CI locally, run the complete
+integration gate (includes dependency audits, PR-title and commit-range
+validation, and any CI-classified tests):
+
+[source,sh]
+----
+$ mix ci
+----
+
+To run only the app test suite or format check directly:
 
 [source,sh]
 ----

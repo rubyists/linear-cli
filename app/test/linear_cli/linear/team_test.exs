@@ -53,6 +53,36 @@ defmodule LinearCli.Linear.TeamTest do
     assert {:ok, [%Linear.Team{id: "t1"}, %Linear.Team{id: "t2"}]} = Linear.teams()
   end
 
+  test "workspace_teams/0 follows every team page for lookup" do
+    team_node = fn id -> %{"id" => id, "key" => id, "name" => id, "description" => nil} end
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"after" => after_cursor}} = Jason.decode!(body)
+
+      {teams, page_info} =
+        case after_cursor do
+          nil ->
+            {[team_node.("t1")], %{"hasNextPage" => true, "endCursor" => "c1"}}
+
+          "c1" ->
+            {[team_node.("t2")], %{"hasNextPage" => false, "endCursor" => "c2"}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "teams" => %{
+            "edges" => Enum.map(teams, &%{"node" => &1, "cursor" => &1["id"]}),
+            "pageInfo" => page_info
+          }
+        }
+      })
+    end)
+
+    assert {:ok, teams} = Linear.workspace_teams()
+    assert Enum.map(teams, & &1.id) == ["t1", "t2"]
+  end
+
   test "find_team/1 looks up a single team by id (Ruby: BaseModel::ClassMethods#find)" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)

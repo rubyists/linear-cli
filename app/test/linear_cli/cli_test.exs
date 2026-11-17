@@ -1,8 +1,19 @@
 defmodule LinearCli.CLITest do
-  use ExUnit.Case, async: true
+  # async: false - capture_io(:stderr, ...) redirects the global :standard_error
+  # device. Multiple async modules capturing stderr simultaneously causes output
+  # from one test's CLI invocation to leak into another's capture window, breaking
+  # the refute output =~ "What the heck is this?" assertions. Same pattern as
+  # missing_api_key_test.exs (shared global state → async: false).
+  use ExUnit.Case, async: false
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   setup do
+    # Clear any profile left by a prior async: false module (ProfilesTest,
+    # ProfileDefaultsTest) so Profiles.default_team/0 returns nil and the
+    # project-update test doesn't pick up a stale active team.
+    Application.fetch_env!(:linear_cli, :profiles_db_path) |> File.rm()
+
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
       %{"query" => query} = Jason.decode!(body)
@@ -305,6 +316,41 @@ defmodule LinearCli.CLITest do
              ["issue", "take", "CRY-1"]
 
     assert LinearCli.CLI.normalize_subcommand_aliases([]) == []
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "ls", "EXT-1"]) ==
+             ["issue", "relation", "list", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "l", "EXT-1"]) ==
+             ["issue", "relation", "list", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "a", "EXT-1"]) ==
+             ["issue", "relation", "add", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases([
+             "i",
+             "relation",
+             "a",
+             "EXT-1",
+             "EXT-2",
+             "--type",
+             "blocks"
+           ]) == ["issue", "relation", "add", "EXT-1", "EXT-2", "--type", "blocks"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "r", "EXT-1"]) ==
+             ["issue", "relation", "remove", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases(["issue", "relation", "rm", "EXT-1"]) ==
+             ["issue", "relation", "remove", "EXT-1"]
+
+    assert LinearCli.CLI.normalize_subcommand_aliases([
+             "i",
+             "relation",
+             "rm",
+             "EXT-1",
+             "EXT-2",
+             "--type",
+             "blocks"
+           ]) == ["issue", "relation", "remove", "EXT-1", "EXT-2", "--type", "blocks"]
   end
 
   test "aliased subcommands actually dispatch end to end" do
@@ -558,10 +604,13 @@ defmodule LinearCli.CLITest do
 
     output =
       capture_io(:stderr, fn ->
-        LinearCli.CLI.main(["issue", "develop", "CRY-999"], halt)
+        log = capture_log(fn -> LinearCli.CLI.main(["issue", "develop", "CRY-999"], halt) end)
+        send(test_pid, {:log, log})
       end)
 
     assert_received {:halted, 66}
+    assert_received {:log, log}
+    assert log =~ "Linear API partial-success: 1 field error(s) discarded, data returned"
     assert output =~ "No issue found with id"
     refute output =~ "What the heck is this?"
   end

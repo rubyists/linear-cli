@@ -5,10 +5,9 @@ defmodule RepoTasks.MixProject do
   # deliberately its own Mix project, sibling to app/, not nested inside it.
   # app/ is the CLI itself; this is tooling that operates ON the repo as a
   # whole (this file's own directory, plus ci/, oci/, .github/workflows/ -
-  # things app/'s own mix.exs has no business knowing about). Kept
-  # dependency-free on purpose: every task here just orchestrates other
-  # already-existing tools (mix release inside app/, the ci/*.sh scripts)
-  # as child OS processes, never runs them in-process.
+  # things app/'s own mix.exs has no business knowing about). Its dependencies
+  # support repo-management tasks and do not become app dependencies. Tasks
+  # use child processes or direct service requests as needed.
   def project do
     [
       app: :repo_tasks,
@@ -26,6 +25,9 @@ defmodule RepoTasks.MixProject do
   end
 
   defp deps do
-    []
+    [
+      {:req, "~> 0.7"},
+      {:plug, "~> 1.0", only: :test}
+    ]
   end
 end

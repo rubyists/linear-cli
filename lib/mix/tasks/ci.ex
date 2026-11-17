@@ -1,27 +1,46 @@
 defmodule Mix.Tasks.Ci do
-  @shortdoc "Runs the complete quality gate against app/"
+  @shortdoc "Complete integration gate: local checks plus CI-only audits and validation"
 
   @moduledoc """
   #{@shortdoc}.
 
       mix ci
 
-  Runs every check `.github/workflows/ci.yaml`'s `test` job runs on a pull
-  request, in the same order, so a green `mix ci` locally predicts a green
-  CI run — and CI itself calls this task, so there's one place to fix if
-  either ever breaks:
+  The canonical pull-request and merge gate, and the command GitHub Actions
+  invokes. It bootstraps dependencies, runs fast metadata guards, runs the full
+  local gate, then performs CI-only checks that may use the network, PR
+  metadata, or advisory services.
 
-    1. `mix deps.get` — ensure deps are present
-    2. `mix hex.audit` — reject retired or vulnerable Hex packages
-    3. `mix deps.audit` — scan dependencies for known security advisories
-    4. `mix format --check-formatted` — code is formatted
-    5. `mix credo --strict` — static analysis (style, complexity, common bugs)
-    6. `mix usage_rules.sync --check` — usage rules are in sync with deps
-       (catches drift introduced by a dep bump without re-running the sync;
-       see #79)
-    7. `mix test` — all tests pass
+  Steps:
 
-  All steps run inside `app/`.
+    1. `mix deps.get` — ensure app dependencies are installed
+    2. `ci/validate_pull_request_title.sh` — require a Conventional Commits PR
+       title when `PULL_REQUEST_TITLE_REQUIRED=true`
+    3. `ci/validate_commit_range.sh` — validate every commit since the branch
+       diverged from its base
+    4. `mix precommit` — the fast local gate (format, static analysis, unit tests)
+    5. `mix hex.audit` — reject retired or vulnerable Hex packages
+    6. `mix deps.audit` — scan dependencies for known security advisories
+    7. `mix usage_rules.sync --check` — catch usage-rule drift after dep bumps
+    8. `mix test` — run the complete root test suite, including CI-classified tests
+    9. `mix test` — run the complete app test suite, including CI-classified tests
+
+  Step 1 and steps 5-7 and 9 run inside `app/`. Steps 2-3 and 8 run from the
+  repo root.
+  Step 4 expands to all of `mix precommit`'s steps in place.
+
+  Every check in `mix precommit` also runs through `mix ci`. The relationship
+  is:
+
+      mix precommit  ⊂  mix ci
+
+  Pull request metadata does not exist before a pull request is opened, so
+  local runs of `mix ci` skip only the title guard. GitHub Actions sets both
+  `PULL_REQUEST_TITLE_REQUIRED=true` and `PULL_REQUEST_TITLE` from the event;
+  a missing, empty, or non-conventional title then fails step 2. Commit subjects
+  are always validated in step 3.
+
+  For the fast local gate only (no network, no CI metadata), use `mix precommit`.
   """
 
   use Mix.Task
@@ -34,14 +53,21 @@ defmodule Mix.Tasks.Ci do
   end
 
   @doc false
-  def run(_argv, shell) do
+  def run([], shell) do
+    shell.("mix", ["deps.get"], [])
     shell.("mix", ["deps.get"], cd: "app")
+    shell.("./ci/validate_pull_request_title.sh", [], [])
+    shell.("./ci/validate_commit_range.sh", [], [])
+    Mix.Tasks.Precommit.run([], shell)
     shell.("mix", ["hex.audit"], cd: "app")
     shell.("mix", ["deps.audit"], cd: "app")
-    shell.("mix", ["format", "--check-formatted"], cd: "app")
-    shell.("mix", ["credo", "--strict"], cd: "app")
     shell.("mix", ["usage_rules.sync", "--check"], cd: "app")
+    shell.("mix", ["test"], [])
     shell.("mix", ["test"], cd: "app")
     :ok
+  end
+
+  def run(_argv, _shell) do
+    Mix.raise("Usage: mix ci")
   end
 end

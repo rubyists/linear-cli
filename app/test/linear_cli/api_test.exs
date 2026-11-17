@@ -3,6 +3,7 @@ defmodule LinearCli.ApiTest do
   # not per-process) LINEAR_API_KEY env var. test_helper.exs sets a default
   # for the rest of the suite; running this module concurrently with it would race.
   use ExUnit.Case, async: false
+  import ExUnit.CaptureLog
 
   test "returns {:ok, data} on a successful response" do
     Req.Test.stub(LinearCli.Api, fn conn ->
@@ -33,7 +34,12 @@ defmodule LinearCli.ApiTest do
       })
     end)
 
-    assert LinearCli.Api.call("{ issue(id: $id) { id } }") == {:ok, %{"issue" => nil}}
+    log =
+      capture_log(fn ->
+        assert LinearCli.Api.call("{ issue(id: $id) { id } }") == {:ok, %{"issue" => nil}}
+      end)
+
+    assert log =~ "Linear API partial-success: 1 field error(s) discarded, data returned"
   end
 
   test "returns {:error, {:unexpected_response, body}} when there's neither data nor errors" do

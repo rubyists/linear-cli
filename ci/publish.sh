@@ -39,6 +39,7 @@ base_dir=$(basename "$(pwd)")
 : "${REGISTRY:=ghcr.io}"
 : "${REGISTRY_TOKEN:=${GITHUB_TOKEN:-}}"
 : "${REGISTRY_USERNAME:=${GITHUB_ACTOR:-}}"
+: "${REGISTRY_TAG_SUFFIX:=}"
 
 usage() {
     cat <<-EOT
@@ -173,7 +174,9 @@ mapfile -t tags < <(echo "$tag" | awk -F'.' 'NF==3{print; print $1"."$2; print $
 
 for pushed_tag in "${tags[@]}"
 do
-    remote_image="$image_repo:$pushed_tag"
+    # Release CI publishes one temporary tag per architecture, then combines
+    # them into this public tag's manifest after both native builds succeed.
+    remote_image="$image_repo:$pushed_tag$REGISTRY_TAG_SUFFIX"
     debug "Pushing $local_image to $remote_image"
     "$runtime" tag "$local_image" "$remote_image" ||
         die 9 "Failed to tag '$local_image' as '$remote_image'"

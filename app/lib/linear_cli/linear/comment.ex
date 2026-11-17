@@ -24,6 +24,8 @@ defmodule LinearCli.Linear.Comment do
     attribute :body, :string, public?: true
     attribute :url, :string, public?: true
     attribute :user, :term, public?: true
+    attribute :created_at, :string, public?: true
+    attribute :updated_at, :string, public?: true
   end
 
   @doc "GraphQL field selection for a comment's own fields (Ruby: Comment::Base)."
@@ -37,7 +39,9 @@ defmodule LinearCli.Linear.Comment do
       id: map["id"],
       body: map["body"],
       url: map["url"],
-      user: map["user"] && LinearCli.Linear.User.from_map(map["user"])
+      user: map["user"] && LinearCli.Linear.User.from_map(map["user"]),
+      created_at: map["createdAt"],
+      updated_at: map["updatedAt"]
     )
   end
 end
