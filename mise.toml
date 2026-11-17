@@ -5,11 +5,11 @@
 # erlef/setup-beam's `version-file`, so bump erlang/elixir here only.
 # See documents/phase-8-plan.adoc.
 erlang = "29.1"
-elixir = "1.20.4"
+elixir = "1.20.5"
 python = "3.15.0"
 uv = "0.13.0"
-codex = "0.162.1"
-claude = "2.1.299"
+codex = "0.169.0"
+claude = "2.1.326"
 [env]
 #ANTHROPIC_BASE_URL = "http://127.0.0.1:13305"
 #ANTHROPIC_AUTH_TOKEN = "lemonade"
