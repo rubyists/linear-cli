@@ -54,26 +54,43 @@ defmodule LinearCli.CLI.Commands do
 
   @doc "Ported from commands/team/list.rb. Ruby's `--mine` defaults true."
   def team_list(%{flags: flags, options: options}) do
-    result = if flags.no_mine, do: Linear.teams(), else: Linear.my_teams()
-
-    with {:ok, teams} <- result do
-      Display.show(filter_favorites(teams, flags.all, "team", & &1.key), %{
-        output: options.output
-      })
-
+    with {:ok, cached} <- favorite_records("team", flags.all),
+         {:ok, teams} <- listed_teams(cached, flags) do
+      Display.show(teams, %{output: options.output})
       :ok
     end
   end
 
+  defp listed_teams(nil, %{no_mine: true}), do: Linear.teams()
+  defp listed_teams(nil, _flags), do: Linear.my_teams()
+  defp listed_teams(teams, _flags), do: {:ok, teams}
+
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
-    with {:ok, projects} <- projects_for(flags, options) do
-      Display.show(filter_favorites(projects, flags.all, "project", & &1.id), %{
-        output: options.output
-      })
-
+    with {:ok, cached} <- favorite_records("project", flags.all),
+         {:ok, projects} <- listed_projects(cached, flags, options) do
+      Display.show(projects, %{output: options.output})
       :ok
     end
+  end
+
+  defp listed_projects(nil, flags, options), do: projects_for(flags, options)
+
+  defp listed_projects(projects, _flags, %{team: key}) when is_binary(key) do
+    {:ok, Enum.filter(projects, &Enum.any?(&1.teams, fn team -> team_matches?(team, key) end))}
+  end
+
+  defp listed_projects(projects, %{mine: true}, _options) do
+    with {:ok, teams} <- Linear.my_teams() do
+      ids = Enum.map(teams, & &1.id)
+      {:ok, Enum.filter(projects, &Enum.any?(&1.teams, fn team -> team.id in ids end))}
+    end
+  end
+
+  defp listed_projects(projects, _flags, _options), do: {:ok, projects}
+
+  defp team_matches?(team, key) do
+    Enum.any?([team.id, team.key], &(String.downcase(&1 || "") == String.downcase(key)))
   end
 
   defp projects_for(_flags, %{team: team_key}) when is_binary(team_key) do
@@ -92,7 +109,7 @@ defmodule LinearCli.CLI.Commands do
   """
   def team_favorite(%{args: %{team: key}}) do
     with {:ok, team} <- Linear.find_team(key) do
-      Favorites.add("team", team.key)
+      :ok = save_favorite("team", team)
       Prompt.ok("Favorited team #{team.key}")
       :ok
     end
@@ -118,8 +135,9 @@ defmodule LinearCli.CLI.Commands do
     team = WhatFor.team_for(options.team || Profiles.default_team())
 
     with {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
-         project when not is_nil(project) <- Projects.project_for(projects, search) do
-      Favorites.add("project", project.id)
+         project when not is_nil(project) <- Projects.project_for(projects, search),
+         {:ok, project} <- Linear.find_project(project.id) do
+      :ok = save_favorite("project", project)
       Prompt.ok("Favorited project #{project.name}")
       :ok
     else
@@ -143,19 +161,62 @@ defmodule LinearCli.CLI.Commands do
     end
   end
 
-  # Once any favorite of `kind` exists, narrows `records` down to just
-  # those (matched via `key_fun`) - invisible to anyone who's never
-  # favorited anything, since an empty favorites list leaves `records`
-  # untouched. `all?` (the new `--all` flag) always shows everything,
-  # bypassing the favorites lookup entirely.
-  defp filter_favorites(records, true, _kind, _key_fun), do: records
+  defp favorite_records(_kind, true), do: {:ok, nil}
 
-  defp filter_favorites(records, _all?, kind, key_fun) do
-    case Favorites.list(kind) do
-      [] -> records
-      favorite_values -> Enum.filter(records, &(key_fun.(&1) in favorite_values))
+  defp favorite_records(kind, _all?) do
+    case Favorites.entries(kind) do
+      [] ->
+        {:ok, nil}
+
+      entries ->
+        Enum.reduce_while(entries, {:ok, []}, fn entry, {:ok, records} ->
+          case favorite_record(kind, entry) do
+            {:ok, record} -> {:cont, {:ok, [record | records]}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+        |> case do
+          {:ok, records} -> {:ok, Enum.reverse(records)}
+          error -> error
+        end
     end
   end
+
+  # Older databases have only identifiers. Resolve each missing snapshot
+  # directly once, without fetching a workspace-wide list.
+  defp favorite_record(kind, %{value: value, details: nil}) do
+    result = if kind == "team", do: Linear.find_team(value), else: Linear.find_project(value)
+
+    with {:ok, record} <- result do
+      :ok = save_favorite(kind, record)
+      {:ok, record}
+    end
+  end
+
+  defp favorite_record("team", %{details: details}), do: {:ok, Linear.Team.from_map(details)}
+
+  defp favorite_record("project", %{details: details}),
+    do: {:ok, Linear.Project.from_map(details)}
+
+  defp save_favorite("team", team) do
+    Favorites.add("team", team.key, team_details(team))
+  end
+
+  defp save_favorite("project", project) do
+    details = %{
+      "id" => project.id,
+      "name" => project.name,
+      "url" => project.url,
+      "slugId" => project.slug_id,
+      "description" => project.description,
+      "content" => project.content,
+      "teams" => %{"nodes" => Enum.map(project.teams, &team_details/1)}
+    }
+
+    Favorites.add("project", project.id, details)
+  end
+
+  defp team_details(team), do: Map.take(team, [:id, :key, :name, :description])
 
   @doc """
   New in this port - Ruby has no equivalent. Posts a status update

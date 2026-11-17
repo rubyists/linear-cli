@@ -11,18 +11,38 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
 
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
-      %{"query" => query} = Jason.decode!(body)
-      respond(conn, query)
+      %{"query" => query, "variables" => variables} = Jason.decode!(body)
+      respond(conn, query, variables)
     end)
 
     :ok
   end
 
-  defp respond(conn, query) do
+  defp respond(conn, query, variables \\ %{}) do
     cond do
-      query =~ "team(id: $id)" ->
+      query =~ "project(id: $id)" ->
         Req.Test.json(conn, %{
-          "data" => %{"team" => %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}}
+          "data" => %{
+            "project" => %{
+              "id" => "p1",
+              "name" => "Manhattan",
+              "slugId" => "abc",
+              "url" => "https://linear.app/x/project/manhattan-abc",
+              "teams" => %{
+                "nodes" => [%{"id" => "t1", "key" => "ENG", "name" => "Engineering"}]
+              }
+            }
+          }
+        })
+
+      query =~ "team(id: $id)" ->
+        team =
+          if variables["id"] == "OPS",
+            do: %{"id" => "t2", "key" => "OPS", "name" => "Ops"},
+            else: %{"id" => "t1", "key" => "ENG", "name" => "Engineering"}
+
+        Req.Test.json(conn, %{
+          "data" => %{"team" => team}
         })
 
       query =~ "teams(" ->
@@ -171,6 +191,106 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
   end
 
   describe "project list favorites filtering" do
+    test "lists multiple saved favorites from different teams without calling Linear" do
+      for {id, name, team} <- [
+            {"p1", "Wallet Service Extraction", "PAY"},
+            {"p2", "Platform Cleanup", "OPS"}
+          ] do
+        :ok =
+          LinearCli.Favorites.add("project", id, %{
+            "id" => id,
+            "name" => name,
+            "teams" => %{"nodes" => [%{"id" => team, "key" => team}]}
+          })
+      end
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> flunk("cached favorites must not call Linear") end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--output", "json"])
+        end)
+
+      assert Enum.map(Jason.decode!(output), & &1["name"]) == [
+               "Wallet Service Extraction",
+               "Platform Cleanup"
+             ]
+    end
+
+    test "favoriting a name with spaces saves details for offline text, JSON and team filtering" do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query} = Jason.decode!(body)
+
+        response = respond(conn, query)
+        # Give both lookup paths the same multiword project name.
+        %{
+          response
+          | resp_body:
+              String.replace(response.resp_body, "Manhattan", "Wallet Service Extraction")
+        }
+      end)
+
+      assert capture_io(fn ->
+               assert :ok =
+                        LinearCli.CLI.main([
+                          "project",
+                          "favorite",
+                          "Wallet Service Extraction",
+                          "--team",
+                          "ENG"
+                        ])
+             end) =~ "Favorited project Wallet Service Extraction"
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> flunk("cached favorites must not call Linear") end)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["project", "list"]) end)
+      assert output =~ "Wallet Service Extraction"
+      assert output =~ "https://linear.app/x/project/manhattan-abc"
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["project", "list", "--team", "eng", "--output", "json"])
+        end)
+
+      assert [
+               %{
+                 "id" => "p1",
+                 "name" => "Wallet Service Extraction",
+                 "teams" => [%{"key" => "ENG"}]
+               }
+             ] = Jason.decode!(output)
+
+      output =
+        capture_io(fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["project", "list", "--team", "OPS", "--output", "json"])
+        end)
+
+      assert Jason.decode!(output) == []
+    end
+
+    test "legacy favorites are hydrated by id once and then work offline" do
+      LinearCli.Favorites.add("project", "p1")
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => variables} = Jason.decode!(body)
+        assert query =~ "project(id: $id)"
+        assert variables == %{"id" => "p1"}
+        respond(conn, query)
+      end)
+
+      assert capture_io(fn -> assert :ok = LinearCli.CLI.main(["project", "list"]) end) =~
+               "Manhattan"
+
+      Req.Test.stub(LinearCli.Api, fn _conn -> flunk("already hydrated") end)
+
+      assert capture_io(fn -> assert :ok = LinearCli.CLI.main(["project", "list"]) end) =~
+               "Manhattan"
+    end
+
     test "with no favorites, lists every project unchanged" do
       output = capture_io(fn -> LinearCli.CLI.main(["project", "list"]) end)
       assert output =~ "Manhattan"
@@ -192,5 +312,13 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
       assert output =~ "Manhattan"
       assert output =~ "Platform Cleanup"
     end
+  end
+
+  test "favorited teams list offline" do
+    capture_io(fn -> assert :ok = LinearCli.CLI.main(["team", "favorite", "ENG"]) end)
+    Req.Test.stub(LinearCli.Api, fn _conn -> flunk("cached teams must not call Linear") end)
+
+    assert capture_io(fn -> assert :ok = LinearCli.CLI.main(["team", "list"]) end) =~
+             "Engineering"
   end
 end

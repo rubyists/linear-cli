@@ -24,6 +24,7 @@ defmodule LinearCli.Linear do
 
     resource LinearCli.Linear.Project do
       define :projects, action: :all
+      define :find_project, action: :find, args: [:id], get?: true
       define :my_projects, action: :mine
       define :projects_by_team, action: :by_team, args: [:team_id]
       define :create_project, action: :create, args: [:name, :team_id]
