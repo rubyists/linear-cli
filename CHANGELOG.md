@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.3](https://github.com/rubyists/linear-cli/compare/v2.11.2...v2.11.3) (2026-11-18)
+
+
+### Bug Fixes
+
+* **favorites:** corrects projects listing of favorites to use db ([#308](https://github.com/rubyists/linear-cli/issues/308)) ([6339bed](https://github.com/rubyists/linear-cli/commit/6339bed7d93528101d447e492a42b74cb5079a95))
+
 ## [2.11.2](https://github.com/rubyists/linear-cli/compare/v2.11.1...v2.11.2) (2026-10-14)
 
 
