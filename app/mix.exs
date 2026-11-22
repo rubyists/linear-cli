@@ -18,13 +18,7 @@ defmodule LinearCli.MixProject do
       usage_rules: usage_rules(),
       releases: releases(),
       hex: [
-        # EEF-CVE-2026-96596: hex_core's bundled erl_tar loops forever on a
-        # crafted GNU sparse tar member. No fixed hex_core release exists yet
-        # (0.20.0 is the latest and is affected). hex_core is dev-only
-        # (`runtime: false`, pulled in for sbom), never ships in the release,
-        # and we never extract untrusted tarballs with it. Remove this entry
-        # once a patched hex_core is out.
-        ignore_advisories: ["EEF-CVE-2026-96596"]
+        # ignore_advisories: ["EEF-CVE-2026-96596"]
       ]
     ]
   end
