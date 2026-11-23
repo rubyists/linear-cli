@@ -287,6 +287,12 @@ defmodule LinearCli.CLITest do
 
             query =~ "team(id: $teamId)" ->
               assert variables["teamId"] == "t2"
+              assert query =~ "filter: $filter"
+
+              assert %{"name" => %{"containsIgnoreCase" => "Website"}} in variables["filter"][
+                       "or"
+                     ]
+
               %{"team" => %{"projects" => %{"nodes" => [second]}}}
 
             query =~ "projects(first: $first" ->
@@ -482,6 +488,17 @@ defmodule LinearCli.CLITest do
       refute output =~ "Show the next"
       assert output =~ "FirstPage"
       assert output =~ "SecondPage"
+    end
+
+    test "explicitly disabling interactivity fetches every page without prompting" do
+      Application.put_env(:linear_cli, :interactive, false)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["project", "list", "--all"]) end)
+
+      refute output =~ "Show the next"
+      assert output =~ "FirstPage"
+      assert output =~ "SecondPage"
+      assert_received {:requested, "page-1"}
     end
   end
 

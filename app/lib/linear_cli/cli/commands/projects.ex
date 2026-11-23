@@ -32,8 +32,10 @@ defmodule LinearCli.CLI.Commands.Projects do
   end
 
   defp interactive? do
-    Application.get_env(:linear_cli, :interactive) ||
-      (:prim_tty.isatty(:stdin) == true and :prim_tty.isatty(:stdout) == true)
+    case Application.get_env(:linear_cli, :interactive) do
+      nil -> :prim_tty.isatty(:stdin) == true and :prim_tty.isatty(:stdout) == true
+      interactive? when is_boolean(interactive?) -> interactive?
+    end
   end
 
   defp show_pages(flags, options, cursor) do
@@ -62,11 +64,15 @@ defmodule LinearCli.CLI.Commands.Projects do
 
   defp refresh_updates(_cached, projects, _flags) do
     projects
-    |> Enum.reduce_while({:ok, []}, fn project, {:ok, acc} ->
-      case Linear.find_project(project.id, %{with_updates: true}) do
-        {:ok, refreshed} -> {:cont, {:ok, [refreshed | acc]}}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
+    |> Task.async_stream(&Linear.find_project(&1.id, %{with_updates: true}),
+      max_concurrency: 4,
+      timeout: 30_000,
+      on_timeout: :kill_task
+    )
+    |> Enum.reduce_while({:ok, []}, fn
+      {:ok, {:ok, refreshed}}, {:ok, acc} -> {:cont, {:ok, [refreshed | acc]}}
+      {:ok, {:error, reason}}, {:ok, _acc} -> {:halt, {:error, reason}}
+      {:exit, reason}, {:ok, _acc} -> {:halt, {:error, {:task_exit, reason}}}
     end)
     |> case do
       {:ok, refreshed} -> {:ok, Enum.reverse(refreshed)}
@@ -128,7 +134,7 @@ defmodule LinearCli.CLI.Commands.Projects do
   text mode prompts for a choice and JSON mode returns an error.
   """
   def project_update(%{args: %{project: search}, options: options}) do
-    with {:ok, projects} <- update_candidates(options),
+    with {:ok, projects} <- update_candidates(options, search),
          {:ok, project} <- resolve_update_project(projects, search, options),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do
@@ -139,13 +145,13 @@ defmodule LinearCli.CLI.Commands.Projects do
     end
   end
 
-  defp update_candidates(%{team: team_key} = options) when is_binary(team_key) do
+  defp update_candidates(%{team: team_key} = options, search) when is_binary(team_key) do
     with {:ok, team} <- resolve_team(options) do
-      Linear.projects_by_team(team.id)
+      Linear.projects_by_team(team.id, %{search: search})
     end
   end
 
-  defp update_candidates(_options), do: Linear.workspace_projects()
+  defp update_candidates(_options, _search), do: Linear.workspace_projects()
 
   defp resolve_update_project(projects, search, options) do
     matches =

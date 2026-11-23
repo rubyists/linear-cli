@@ -377,7 +377,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:by_team`
 | read
 | `Linear.Project.Read.ByTeam`
-| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects, or applies a server-side name/slug/id filter when `search` is supplied. The optional `with_updates` argument also selects each project's newest update (not applied to the `search` filter query)
+| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects. The `search` argument applies a server-side name, slug, or ID filter to every page. With `with_updates`, the unfiltered query includes each project's newest update.
 
 | `Project`
 | `create_project`
@@ -413,7 +413,7 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | generic action (`:map`)
 | `Linear.Project.Actions.Page`
 | `projects(first: 100, after:)` — one page. Arguments: `after` (cursor), `with_updates`. Returns
-  `%{projects:, has_next_page:, end_cursor:}`. The action never follows the cursor.
+  `%{projects:, has_next_page:, end_cursor:}`. The next page requires a non-empty cursor that differs from `after`.
 
 | `Issue`
 | `issues_first_page`

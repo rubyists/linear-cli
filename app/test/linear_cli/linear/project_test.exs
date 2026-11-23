@@ -114,6 +114,24 @@ defmodule LinearCli.Linear.ProjectTest do
              Linear.projects_page(%{after: "page-1"})
   end
 
+  test "projects_page/1 does not report another page without an advancing cursor" do
+    for end_cursor <- [nil, "", "page-1"] do
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "edges" => [%{"node" => %{"id" => "p1"}}],
+              "pageInfo" => %{"hasNextPage" => true, "endCursor" => end_cursor}
+            }
+          }
+        })
+      end)
+
+      assert {:ok, %{projects: [%{id: "p1"}], has_next_page: false}} =
+               Linear.projects_page(%{after: "page-1"})
+    end
+  end
+
   test "workspace_projects/0 follows every project page for lookup" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)
@@ -169,6 +187,37 @@ defmodule LinearCli.Linear.ProjectTest do
 
     assert {:ok, projects} = Linear.projects_by_team("team-1")
     assert Enum.map(projects, & &1.id) == ["p1", "p2"]
+  end
+
+  test "projects_by_team/2 follows every page with the server-side search filter" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"query" => query, "variables" => variables} = Jason.decode!(body)
+
+      assert query =~ "filter: $filter"
+      assert variables["teamId"] == "team-1"
+      assert %{"name" => %{"containsIgnoreCase" => "Website"}} in variables["filter"]["or"]
+
+      {project_id, page_info} =
+        case variables["after"] do
+          nil -> {"p1", %{"hasNextPage" => true, "endCursor" => "page-1"}}
+          "page-1" -> {"p2", %{"hasNextPage" => false}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "team" => %{
+            "projects" => %{
+              "nodes" => [%{"id" => project_id, "name" => "Website"}],
+              "pageInfo" => page_info
+            }
+          }
+        }
+      })
+    end)
+
+    assert {:ok, [%{id: "p1", name: "Website"}, %{id: "p2", name: "Website"}]} =
+             Linear.projects_by_team("team-1", %{search: "Website"})
   end
 
   test "my_projects/0 flat-maps each of the viewer's teams' projects (Ruby: Project.mine)" do

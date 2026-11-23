@@ -386,28 +386,42 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
       refute output =~ "Platform Cleanup"
     end
 
-    test "--updates refetches favorites with their latest update" do
-      LinearCli.Favorites.add("project", "p1")
-      {:ok, _} = LinearCli.Favorites.records("project", false)
+    test "--updates refetches favorites concurrently and keeps their order" do
+      for id <- ["p1", "p2"] do
+        :ok = LinearCli.Favorites.add("project", id, %{"id" => id, "name" => id})
+      end
+
+      coordinator =
+        Task.async(fn ->
+          assert_receive {:refresh, "p1", first_worker}, 2_000
+          assert_receive {:refresh, "p2", _second_worker}, 2_000
+          send(first_worker, :second_refresh_started)
+        end)
 
       Req.Test.stub(LinearCli.Api, fn conn ->
         {:ok, body, conn} = Plug.Conn.read_body(conn)
-        query = Jason.decode!(body)["query"]
+        %{"query" => query, "variables" => %{"id" => id}} = Jason.decode!(body)
 
         assert query =~ "project(id: $id)"
         assert query =~ "projectUpdates(first: 1)"
+        send(coordinator.pid, {:refresh, id, self()})
+
+        if id == "p1" do
+          assert_receive :second_refresh_started, 2_000
+        end
 
         Req.Test.json(conn, %{
           "data" => %{
             "project" => %{
-              "id" => "p1",
-              "name" => "Manhattan",
-              "slugId" => "abc",
-              "url" => "https://linear.app/x/project/manhattan-abc",
-              "teams" => %{"nodes" => []},
+              "id" => id,
+              "name" => id,
               "projectUpdates" => %{
                 "nodes" => [
-                  %{"id" => "pu1", "body" => "On pace.", "createdAt" => "2026-11-18T09:00:00Z"}
+                  %{
+                    "id" => "update-#{id}",
+                    "body" => "Update for #{id}",
+                    "createdAt" => "2026-11-18T09:00:00Z"
+                  }
                 ]
               }
             }
@@ -415,10 +429,17 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
         })
       end)
 
-      output = capture_io(fn -> LinearCli.CLI.main(["project", "list", "--updates"]) end)
-      assert output =~ "Manhattan"
-      assert output =~ "2026-11-18"
-      assert output =~ "On pace."
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--updates", "--output", "json"])
+        end)
+
+      Task.await(coordinator)
+
+      assert [
+               %{"id" => "p1", "latest_update" => %{"body" => "Update for p1"}},
+               %{"id" => "p2", "latest_update" => %{"body" => "Update for p2"}}
+             ] = Jason.decode!(output)
     end
 
     test "--all overrides the favorites filter" do

@@ -261,11 +261,15 @@ defmodule LinearCli.Linear.Project.Actions.Page do
 
     case Api.call(document, %{"first" => @page_size, "after" => Map.get(args, :after)}) do
       {:ok, %{"projects" => %{"edges" => edges, "pageInfo" => page_info}}} ->
+        cursor = page_info["endCursor"]
+
         {:ok,
          %{
            projects: Enum.map(edges, &Project.from_map(&1["node"])),
-           has_next_page: page_info["hasNextPage"] == true,
-           end_cursor: page_info["endCursor"]
+           has_next_page:
+             page_info["hasNextPage"] == true and is_binary(cursor) and cursor != "" and
+               cursor != Map.get(args, :after),
+           end_cursor: cursor
          }}
 
       {:ok, other} ->
@@ -316,10 +320,11 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   @slugged_reference ~r/^(.*)-([[:alnum:]]{12})$/
 
   @search_document """
-  query($teamId: String!, $filter: ProjectFilter!) {
+  query($teamId: String!, $filter: ProjectFilter!, $after: String) {
     team(id: $teamId) {
-      projects(first: 100, filter: $filter) {
+      projects(first: 100, filter: $filter, after: $after) {
         nodes { #{Project.base_fields()} }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
@@ -341,12 +346,15 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   defp search(team_id, search, with_updates?) do
     variables = %{"teamId" => team_id, "filter" => project_filter(search)}
 
-    with {:ok, projects} <- fetch(@search_document, variables) do
-      if projects == [], do: all(team_id, with_updates?), else: {:ok, projects}
+    case page(@search_document, variables, [], MapSet.new()) do
+      {:ok, []} -> all(team_id, with_updates?)
+      result -> result
     end
   end
 
-  defp all(team_id, with_updates?), do: page(team_id, with_updates?, nil, [])
+  defp all(team_id, with_updates?) do
+    page(document(with_updates?), %{"teamId" => team_id}, [], MapSet.new())
+  end
 
   defp document(with_updates?) do
     """
@@ -361,23 +369,11 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
     """
   end
 
-  defp page(team_id, with_updates?, after_cursor, acc) do
-    variables =
-      if after_cursor,
-        do: %{"teamId" => team_id, "after" => after_cursor},
-        else: %{"teamId" => team_id}
-
-    case Api.call(document(with_updates?), variables) do
+  defp page(document, variables, acc, seen_cursors) do
+    case Api.call(document, variables) do
       {:ok, %{"team" => %{"projects" => projects}}} ->
         acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
-
-        case projects["pageInfo"] do
-          %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) ->
-            page(team_id, with_updates?, cursor, acc)
-
-          _ ->
-            {:ok, acc}
-        end
+        continue(projects["pageInfo"], document, variables, acc, seen_cursors)
 
       {:ok, other} ->
         {:error, {:unexpected_response, other}}
@@ -390,21 +386,17 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
     end
   end
 
-  defp fetch(document, variables) do
-    case Api.call(document, variables) do
-      {:ok, %{"team" => %{"projects" => %{"nodes" => nodes}}}} ->
-        {:ok, Enum.map(nodes, &Project.from_map/1)}
+  defp continue(%{"hasNextPage" => true} = info, document, variables, acc, seen_cursors) do
+    cursor = info["endCursor"]
 
-      {:ok, other} ->
-        {:error, {:unexpected_response, other}}
-
-      {:error, {:http_error, status, _body}} ->
-        {:error, {:http_error, status}}
-
-      {:error, reason} ->
-        {:error, reason}
+    if is_binary(cursor) and cursor != "" and not MapSet.member?(seen_cursors, cursor) do
+      page(document, Map.put(variables, "after", cursor), acc, MapSet.put(seen_cursors, cursor))
+    else
+      {:error, {:non_advancing_cursor, cursor}}
     end
   end
+
+  defp continue(_info, _document, _variables, acc, _seen_cursors), do: {:ok, acc}
 
   defp project_filter(search) do
     reference = project_reference(search)
