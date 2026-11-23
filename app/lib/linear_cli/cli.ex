@@ -633,7 +633,8 @@ defmodule LinearCli.CLI do
               about: "List projects",
               flags: [
                 mine: [short: "-m", long: "--mine", help: "Only show my projects"],
-                all: [long: "--all", help: "Ignore favorites (doesn't affect --mine/--team)"]
+                all: [long: "--all", help: "Ignore favorites (doesn't affect --mine/--team)"],
+                updates: [long: "--updates", help: "Show each project's most recent update"]
               ],
               options: [
                 team: [short: "-t", long: "--team", help: "Show projects for only this team"]

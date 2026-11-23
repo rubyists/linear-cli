@@ -386,6 +386,62 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
       refute output =~ "Platform Cleanup"
     end
 
+    test "--updates refetches favorites concurrently and keeps their order" do
+      for id <- ["p1", "p2"] do
+        :ok = LinearCli.Favorites.add("project", id, %{"id" => id, "name" => id})
+      end
+
+      coordinator =
+        Task.async(fn ->
+          assert_receive {:refresh, "p1", first_worker}, 2_000
+          assert_receive {:refresh, "p2", _second_worker}, 2_000
+          send(first_worker, :second_refresh_started)
+        end)
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => %{"id" => id}} = Jason.decode!(body)
+
+        assert query =~ "project(id: $id)"
+        assert query =~ "projectUpdates(first: 1)"
+        send(coordinator.pid, {:refresh, id, self()})
+
+        if id == "p1" do
+          assert_receive :second_refresh_started, 2_000
+        end
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "project" => %{
+              "id" => id,
+              "name" => id,
+              "projectUpdates" => %{
+                "nodes" => [
+                  %{
+                    "id" => "update-#{id}",
+                    "body" => "Update for #{id}",
+                    "createdAt" => "2026-11-18T09:00:00Z"
+                  }
+                ]
+              }
+            }
+          }
+        })
+      end)
+
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--updates", "--output", "json"])
+        end)
+
+      Task.await(coordinator)
+
+      assert [
+               %{"id" => "p1", "latest_update" => %{"body" => "Update for p1"}},
+               %{"id" => "p2", "latest_update" => %{"body" => "Update for p2"}}
+             ] = Jason.decode!(output)
+    end
+
     test "--all overrides the favorites filter" do
       LinearCli.Favorites.add("project", "p1")
 

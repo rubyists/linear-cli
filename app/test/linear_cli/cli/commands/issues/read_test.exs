@@ -196,7 +196,7 @@ defmodule LinearCli.CLI.Commands.Issues.ReadTest do
           String.contains?(query, "team(id: $id)") ->
             Req.Test.json(conn, %{"data" => %{"team" => team_map()}})
 
-          String.contains?(query, "projects(first: 100, filter: $filter)") ->
+          query =~ "team(id: $teamId)" and query =~ "filter: $filter" ->
             filters = decoded["variables"]["filter"]["or"]
 
             assert %{"name" => %{"containsIgnoreCase" => "Wallet Service Extraction"}} in filters
