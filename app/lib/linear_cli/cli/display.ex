@@ -60,8 +60,14 @@ defmodule LinearCli.CLI.Display do
     "#{String.pad_trailing(team.key || "", 6)} #{team.name}"
   end
 
-  defp format(%Project{} = project, _opts) do
-    "#{String.pad_trailing(project.name || "", 12)} #{project.url}"
+  defp format(%Project{} = project, opts) do
+    line = "#{String.pad_trailing(project.name || "", 12)} #{project.url}"
+
+    if Map.get(opts, :updates, false) do
+      line <> "\n" <> latest_update_block(project.latest_update)
+    else
+      line
+    end
   end
 
   defp format(%ProjectUpdate{} = update, _opts) do
@@ -367,6 +373,17 @@ defmodule LinearCli.CLI.Display do
     rows = Enum.map(edges, fn e -> "#{String.pad_trailing(e.source, src_w)}  #{e.target}" end)
     Enum.join([header | rows], "\n")
   end
+
+  defp latest_update_block(nil), do: "    (no updates)\n"
+
+  defp latest_update_block(%ProjectUpdate{} = update) do
+    health = if update.health, do: " (#{update.health})", else: ""
+    body = update.body |> to_string() |> String.trim() |> String.replace("\n", "\n    ")
+    "    #{update_date(update.created_at)}#{health}\n    #{body}\n"
+  end
+
+  defp update_date(<<date::binary-size(10), _rest::binary>>), do: date
+  defp update_date(_other), do: "(unknown date)"
 
   defp to_plain(list) when is_list(list), do: Enum.map(list, &to_plain/1)
 

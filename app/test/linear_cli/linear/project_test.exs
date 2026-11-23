@@ -70,6 +70,50 @@ defmodule LinearCli.Linear.ProjectTest do
     assert {:ok, [%Linear.Project{id: "p1", name: "Manhattan"}]} = Linear.projects()
   end
 
+  defp stub_two_project_pages do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      %{"variables" => %{"after" => after_cursor}} = Jason.decode!(body)
+
+      {project, page_info} =
+        case after_cursor do
+          nil ->
+            {%{"id" => "p1", "name" => "First"},
+             %{"hasNextPage" => true, "endCursor" => "page-1"}}
+
+          "page-1" ->
+            {%{"id" => "p2", "name" => "Later"},
+             %{"hasNextPage" => false, "endCursor" => "page-2"}}
+        end
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "projects" => %{
+            "edges" => [%{"node" => project, "cursor" => project["id"]}],
+            "pageInfo" => page_info
+          }
+        }
+      })
+    end)
+  end
+
+  test "projects/0 follows every page instead of stopping at 100" do
+    stub_two_project_pages()
+
+    assert {:ok, projects} = Linear.projects()
+    assert Enum.map(projects, & &1.id) == ["p1", "p2"]
+  end
+
+  test "projects_page/1 returns one page with its cursor and whether more remain" do
+    stub_two_project_pages()
+
+    assert {:ok, %{projects: [%{id: "p1"}], has_next_page: true, end_cursor: "page-1"}} =
+             Linear.projects_page(%{})
+
+    assert {:ok, %{projects: [%{id: "p2"}], has_next_page: false}} =
+             Linear.projects_page(%{after: "page-1"})
+  end
+
   test "workspace_projects/0 follows every project page for lookup" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)

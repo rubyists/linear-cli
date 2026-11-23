@@ -140,20 +140,22 @@ defmodule LinearCli.CLITest do
             }
           })
 
-        String.contains?(query, "team(id: $teamId)") ->
+        String.contains?(query, "projects(first: $first") ->
           Req.Test.json(conn, %{
             "data" => %{
-              "team" => %{
-                "projects" => %{
-                  "nodes" => [
-                    %{
+              "projects" => %{
+                "edges" => [
+                  %{
+                    "node" => %{
                       "id" => "p1",
                       "name" => "Manhattan",
                       "slugId" => "abc",
                       "url" => "https://linear.app/x/project/manhattan-abc"
-                    }
-                  ]
-                }
+                    },
+                    "cursor" => "c1"
+                  }
+                ],
+                "pageInfo" => %{"hasNextPage" => false}
               }
             }
           })
@@ -198,6 +200,192 @@ defmodule LinearCli.CLITest do
 
     assert_received {:input,
                      %{"projectId" => "p1", "body" => "Doing great", "health" => "onTrack"}}
+  end
+
+  test "project update finds projects on any team when --team is not given" do
+    # The active profile's team must not narrow the search: a project can live
+    # on a different team than the profile's default.
+    {:ok, _} = LinearCli.Profiles.create("other-team", team: "OPS")
+    :ok = LinearCli.Profiles.activate("other-team")
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      query = Jason.decode!(body)["query"]
+
+      refute query =~ "team(id: $teamId)"
+
+      if query =~ "projectUpdateCreate" do
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projectUpdateCreate" => %{
+              "projectUpdate" => %{"id" => "pu1", "url" => "https://linear.app/x/update/pu1"}
+            }
+          }
+        })
+      else
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "p9",
+                    "name" => "leopard",
+                    "slugId" => "f14",
+                    "url" => "https://linear.app/x/project/leopard-f14"
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["project", "update", "leopard", "--body", "Shipping"])
+      end)
+
+    assert output =~ "https://linear.app/x/update/pu1"
+  end
+
+  test "project list --updates shows each project's latest update and its date" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      query = Jason.decode!(body)["query"]
+
+      assert query =~ "projectUpdates(first: 1)"
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "projects" => %{
+            "edges" => [
+              %{
+                "node" => %{
+                  "id" => "p1",
+                  "name" => "Manhattan",
+                  "slugId" => "abc",
+                  "url" => "https://linear.app/x/project/manhattan-abc",
+                  "projectUpdates" => %{
+                    "nodes" => [
+                      %{
+                        "id" => "pu1",
+                        "body" => "Phase one done.\nPhase two next.",
+                        "health" => "onTrack",
+                        "url" => "https://linear.app/x/update/pu1",
+                        "createdAt" => "2026-11-14T15:30:00.000Z"
+                      }
+                    ]
+                  }
+                },
+                "cursor" => "c1"
+              },
+              %{
+                "node" => %{
+                  "id" => "p2",
+                  "name" => "Quiet",
+                  "slugId" => "def",
+                  "url" => "https://linear.app/x/project/quiet-def",
+                  "projectUpdates" => %{"nodes" => []}
+                },
+                "cursor" => "c2"
+              }
+            ],
+            "pageInfo" => %{"hasNextPage" => false}
+          }
+        }
+      })
+    end)
+
+    output = capture_io(fn -> LinearCli.CLI.main(["project", "list", "--updates", "--all"]) end)
+
+    assert output =~ "2026-11-14 (onTrack)"
+    assert output =~ "Phase one done."
+    assert output =~ "    Phase two next."
+    assert output =~ "(no updates)"
+  end
+
+  describe "project list paging" do
+    setup do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        after_cursor = Jason.decode!(body)["variables"]["after"]
+        send(test_pid, {:requested, after_cursor})
+
+        {node, page_info} =
+          case after_cursor do
+            nil ->
+              {%{"id" => "p1", "name" => "FirstPage", "slugId" => "a", "url" => "u1"},
+               %{"hasNextPage" => true, "endCursor" => "page-1"}}
+
+            "page-1" ->
+              {%{"id" => "p2", "name" => "SecondPage", "slugId" => "b", "url" => "u2"},
+               %{"hasNextPage" => false, "endCursor" => "page-2"}}
+          end
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "edges" => [%{"node" => node, "cursor" => node["id"]}],
+              "pageInfo" => page_info
+            }
+          }
+        })
+      end)
+
+      Application.put_env(:linear_cli, :interactive, true)
+      on_exit(fn -> Application.delete_env(:linear_cli, :interactive) end)
+    end
+
+    test "interactive listing asks before fetching the next page and continues on yes" do
+      output =
+        capture_io([input: "y\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all"])
+        end)
+
+      assert output =~ "FirstPage"
+      assert output =~ "Show the next 100 projects?"
+      assert output =~ "SecondPage"
+      assert_received {:requested, "page-1"}
+    end
+
+    test "interactive listing stops after the first page on no" do
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all"])
+        end)
+
+      assert output =~ "FirstPage"
+      refute output =~ "SecondPage"
+      refute_received {:requested, "page-1"}
+    end
+
+    test "JSON output fetches every page without prompting" do
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all", "-o", "json"])
+        end)
+
+      refute output =~ "Show the next"
+      assert output =~ "FirstPage"
+      assert output =~ "SecondPage"
+    end
+  end
+
+  test "project list without --updates does not request project updates" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      refute Jason.decode!(body)["query"] =~ "projectUpdates"
+      respond(conn, Jason.decode!(body)["query"])
+    end)
+
+    assert capture_io(fn -> LinearCli.CLI.main(["project", "list", "--all"]) end) =~ "Manhattan"
   end
 
   test "issue list prints a one-line summary per issue" do

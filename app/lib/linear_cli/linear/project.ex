@@ -8,12 +8,23 @@ defmodule LinearCli.Linear.Project do
   actions do
     read :find do
       argument :id, :string, allow_nil?: false
+      argument :with_updates, :boolean, default: false
       get? true
       manual LinearCli.Linear.Project.Read.Find
     end
 
+    # Every project in the workspace, following all pages.
     read :all do
+      argument :with_updates, :boolean, default: false
       manual LinearCli.Linear.Project.Read.All
+    end
+
+    # One page of 100 plus its cursor, for callers that let the user decide
+    # whether to fetch the next page.
+    action :page, :map do
+      argument :after, :string, allow_nil?: true
+      argument :with_updates, :boolean, default: false
+      run LinearCli.Linear.Project.Actions.Page
     end
 
     read :all_for_lookup do
@@ -21,12 +32,14 @@ defmodule LinearCli.Linear.Project do
     end
 
     read :mine do
+      argument :with_updates, :boolean, default: false
       manual LinearCli.Linear.Project.Read.Mine
     end
 
     read :by_team do
       argument :team_id, :string, allow_nil?: false
       argument :search, :string
+      argument :with_updates, :boolean, default: false
       manual LinearCli.Linear.Project.Read.ByTeam
     end
 
@@ -56,12 +69,28 @@ defmodule LinearCli.Linear.Project do
     attribute :description, :string, public?: true
     attribute :url, :string, public?: true
     attribute :teams, {:array, :term}, public?: true, default: []
+    # Only populated when fetched with `list_fields(true)`; nil otherwise.
+    attribute :latest_update, :term, public?: true
   end
 
   @base_fields "id name content slugId description url createdAt updatedAt"
 
   @doc "GraphQL field selection for a project's own fields (Ruby: Project::Base)."
   def base_fields, do: @base_fields
+
+  @doc """
+  Field selection for project listings. With `with_updates?`, also selects
+  each project's most recent project update (Linear orders by `createdAt`,
+  newest first, by default).
+  """
+  def list_fields(true), do: "#{@base_fields} #{latest_update_selection()}"
+
+  def list_fields(_with_updates?), do: @base_fields
+
+  @doc "GraphQL selection of a project's newest update. See `list_fields/1`."
+  def latest_update_selection do
+    "projectUpdates(first: 1) { nodes { #{LinearCli.Linear.ProjectUpdate.base_fields()} } }"
+  end
 
   @doc "GraphQL field selection including the project's teams. New in Phase 7."
   def fields_with_teams do
@@ -77,9 +106,15 @@ defmodule LinearCli.Linear.Project do
       slug_id: map["slugId"],
       description: map["description"],
       url: map["url"],
-      teams: Enum.map(get_in(map, ["teams", "nodes"]) || [], &LinearCli.Linear.Team.from_map/1)
+      teams: Enum.map(get_in(map, ["teams", "nodes"]) || [], &LinearCli.Linear.Team.from_map/1),
+      latest_update: latest_update(map)
     )
   end
+
+  defp latest_update(%{"projectUpdates" => %{"nodes" => [update | _]}}),
+    do: LinearCli.Linear.ProjectUpdate.from_map(update)
+
+  defp latest_update(_map), do: nil
 
   @doc """
   Ported from Ruby's `Project#slug`: the URL's basename with the trailing
@@ -165,7 +200,12 @@ defmodule LinearCli.Linear.Project.Read.Find do
   alias LinearCli.Linear.Project
 
   def read(query, _ecto_query, _opts, _context) do
-    document = "query($id: String!) { project(id: $id) { #{Project.fields_with_teams()} } }"
+    fields =
+      if Map.get(query.arguments, :with_updates, false),
+        do: "#{Project.fields_with_teams()} #{Project.latest_update_selection()}",
+        else: Project.fields_with_teams()
+
+    document = "query($id: String!) { project(id: $id) { #{fields} } }"
 
     case Api.call(document, %{"id" => query.arguments.id}) do
       {:ok, %{"project" => nil}} -> {:ok, []}
@@ -183,22 +223,60 @@ defmodule LinearCli.Linear.Project.Read.All do
 
   alias LinearCli.Linear.{Paginate, Project}
 
-  @document """
-  query($first: Int!, $after: String) {
-    projects(first: $first, after: $after) {
-      edges { node { #{Project.base_fields()} } cursor }
-      pageInfo { hasNextPage endCursor }
-    }
-  }
-  """
-
-  def read(_query, _ecto_query, _opts, _context) do
-    Paginate.all(
-      @document,
+  def read(query, _ecto_query, _opts, _context) do
+    Paginate.all_pages(
+      document(Map.get(query.arguments, :with_updates, false)),
       "projects",
       fn after_cursor -> %{"first" => 50, "after" => after_cursor} end,
       &Project.from_map/1
     )
+  end
+
+  @doc false
+  def document(with_updates?) do
+    """
+    query($first: Int!, $after: String) {
+      projects(first: $first, after: $after) {
+        edges { node { #{Project.list_fields(with_updates?)} } cursor }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+    """
+  end
+end
+
+defmodule LinearCli.Linear.Project.Actions.Page do
+  @moduledoc false
+  use Ash.Resource.Actions.Implementation
+
+  alias LinearCli.Api
+  alias LinearCli.Linear.Project
+
+  @page_size 100
+
+  @impl true
+  def run(input, _opts, _context) do
+    args = input.arguments
+    document = Project.Read.All.document(Map.get(args, :with_updates, false))
+
+    case Api.call(document, %{"first" => @page_size, "after" => Map.get(args, :after)}) do
+      {:ok, %{"projects" => %{"edges" => edges, "pageInfo" => page_info}}} ->
+        {:ok,
+         %{
+           projects: Enum.map(edges, &Project.from_map(&1["node"])),
+           has_next_page: page_info["hasNextPage"] == true,
+           end_cursor: page_info["endCursor"]
+         }}
+
+      {:ok, other} ->
+        {:error, {:unexpected_response, other}}
+
+      {:error, {:http_error, status, _body}} ->
+        {:error, {:http_error, status}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 end
 
@@ -237,17 +315,6 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
   @uuid ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
   @slugged_reference ~r/^(.*)-([[:alnum:]]{12})$/
 
-  @document """
-  query($teamId: String!, $after: String) {
-    team(id: $teamId) {
-      projects(first: 100, after: $after) {
-        nodes { #{Project.base_fields()} }
-        pageInfo { hasNextPage endCursor }
-      }
-    }
-  }
-  """
-
   @search_document """
   query($teamId: String!, $filter: ProjectFilter!) {
     team(id: $teamId) {
@@ -260,39 +327,53 @@ defmodule LinearCli.Linear.Project.Read.ByTeam do
 
   def read(query, _ecto_query, _opts, _context) do
     team_id = query.arguments.team_id
+    with_updates? = Map.get(query.arguments, :with_updates, false)
 
     case Map.get(query.arguments, :search) do
       search when is_binary(search) and search not in ["", "-"] ->
-        search(team_id, search)
+        search(team_id, search, with_updates?)
 
       _ ->
-        all(team_id)
+        all(team_id, with_updates?)
     end
   end
 
-  defp search(team_id, search) do
+  defp search(team_id, search, with_updates?) do
     variables = %{"teamId" => team_id, "filter" => project_filter(search)}
 
     with {:ok, projects} <- fetch(@search_document, variables) do
-      if projects == [], do: all(team_id), else: {:ok, projects}
+      if projects == [], do: all(team_id, with_updates?), else: {:ok, projects}
     end
   end
 
-  defp all(team_id), do: page(team_id, nil, [])
+  defp all(team_id, with_updates?), do: page(team_id, with_updates?, nil, [])
 
-  defp page(team_id, after_cursor, acc) do
+  defp document(with_updates?) do
+    """
+    query($teamId: String!, $after: String) {
+      team(id: $teamId) {
+        projects(first: 100, after: $after) {
+          nodes { #{Project.list_fields(with_updates?)} }
+          pageInfo { hasNextPage endCursor }
+        }
+      }
+    }
+    """
+  end
+
+  defp page(team_id, with_updates?, after_cursor, acc) do
     variables =
       if after_cursor,
         do: %{"teamId" => team_id, "after" => after_cursor},
         else: %{"teamId" => team_id}
 
-    case Api.call(@document, variables) do
+    case Api.call(document(with_updates?), variables) do
       {:ok, %{"team" => %{"projects" => projects}}} ->
         acc = acc ++ Enum.map(projects["nodes"] || [], &Project.from_map/1)
 
         case projects["pageInfo"] do
           %{"hasNextPage" => true, "endCursor" => cursor} when is_binary(cursor) ->
-            page(team_id, cursor, acc)
+            page(team_id, with_updates?, cursor, acc)
 
           _ ->
             {:ok, acc}
@@ -436,10 +517,12 @@ defmodule LinearCli.Linear.Project.Read.Mine do
   # Ruby: Project.mine = User.me.teams.flat_map(&:projects) - fully serial,
   # one request per team. Each team's projects are an independent GraphQL
   # call, so fan them out concurrently instead.
-  def read(_query, _ecto_query, _opts, _context) do
+  def read(query, _ecto_query, _opts, _context) do
+    with_updates? = Map.get(query.arguments, :with_updates, false)
+
     with {:ok, user} <- Ash.read_one(Ash.Query.for_read(User, :me)) do
       user.teams
-      |> Task.async_stream(&fetch_team_projects/1, timeout: 30_000)
+      |> Task.async_stream(&fetch_team_projects(&1, with_updates?), timeout: 30_000)
       |> Enum.reduce_while({:ok, []}, fn
         {:ok, {:ok, projects}}, {:ok, acc} -> {:cont, {:ok, acc ++ projects}}
         {:ok, {:error, reason}}, {:ok, _acc} -> {:halt, {:error, reason}}
@@ -450,7 +533,9 @@ defmodule LinearCli.Linear.Project.Read.Mine do
 
   # Ash.read/1 (not read!/1) - a raise inside an async task would surface as
   # an unhelpful {:exit, reason} to the caller instead of a clean error tuple.
-  defp fetch_team_projects(team) do
-    Ash.read(Ash.Query.for_read(Project, :by_team, %{team_id: team.id}))
+  defp fetch_team_projects(team, with_updates?) do
+    Ash.read(
+      Ash.Query.for_read(Project, :by_team, %{team_id: team.id, with_updates: with_updates?})
+    )
   end
 end

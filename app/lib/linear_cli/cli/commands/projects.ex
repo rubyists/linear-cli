@@ -9,10 +9,67 @@ defmodule LinearCli.CLI.Commands.Projects do
 
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
-    with {:ok, cached} <- Favorites.records("project", flags.all),
-         {:ok, projects} <- listed_projects(cached, flags, options) do
-      Display.show(projects, %{output: options.output})
-      :ok
+    with {:ok, cached} <- Favorites.records("project", flags.all) do
+      if cached == nil and paged?(flags, options) do
+        show_pages(flags, options, nil)
+      else
+        with {:ok, projects} <- listed_projects(cached, flags, options),
+             {:ok, projects} <- refresh_updates(cached, projects, flags) do
+          show_projects(projects, flags, options)
+        end
+      end
+    end
+  end
+
+  # Interactive, workspace-wide, unfiltered listings (the caller has already
+  # ruled out a favorites filter) are shown 100 at a time, asking before each
+  # further page. Everything else (JSON, pipes, --mine, --team) fetches every
+  # page.
+  defp paged?(flags, options) do
+    interactive?() and not Output.json?(options) and not flags.mine and
+      not is_binary(options.team)
+  end
+
+  defp interactive? do
+    Application.get_env(:linear_cli, :interactive) ||
+      (:prim_tty.isatty(:stdin) == true and :prim_tty.isatty(:stdout) == true)
+  end
+
+  defp show_pages(flags, options, cursor) do
+    with {:ok, %{projects: projects, has_next_page: more?, end_cursor: next}} <-
+           Linear.projects_page(%{after: cursor, with_updates: flags.updates}) do
+      show_projects(projects, flags, options)
+
+      if more? and Prompt.yes?("Show the next 100 projects?") do
+        show_pages(flags, options, next)
+      else
+        :ok
+      end
+    end
+  end
+
+  defp show_projects(projects, flags, options) do
+    Display.show(projects, %{output: options.output, updates: flags.updates})
+    :ok
+  end
+
+  # Favorites are served from cached snapshots, which carry no project
+  # updates. When `--updates` is given, refetch each favorite with its latest
+  # update. Listings fetched live already include them.
+  defp refresh_updates(nil, projects, _flags), do: {:ok, projects}
+  defp refresh_updates(_cached, projects, %{updates: false}), do: {:ok, projects}
+
+  defp refresh_updates(_cached, projects, _flags) do
+    projects
+    |> Enum.reduce_while({:ok, []}, fn project, {:ok, acc} ->
+      case Linear.find_project(project.id, %{with_updates: true}) do
+        {:ok, refreshed} -> {:cont, {:ok, [refreshed | acc]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, refreshed} -> {:ok, Enum.reverse(refreshed)}
+      error -> error
     end
   end
 
@@ -22,6 +79,9 @@ defmodule LinearCli.CLI.Commands.Projects do
   prompting if ambiguous. Team is resolved via `--team`, the active
   profile, or an interactive prompt. Once any project is favorited,
   `project list` defaults to showing just favorites (`--all` overrides).
+  `--updates` also shows each project's most recent status update. An
+  interactive, unscoped listing is paged 100 projects at a time, asking before
+  each next page; every other listing fetches all projects.
   """
   def project_favorite(%{args: %{project: search}, options: options}) do
     with {:ok, team} <- resolve_team(options),
@@ -65,13 +125,13 @@ defmodule LinearCli.CLI.Commands.Projects do
   New in this port - Ruby has no equivalent. Posts a status update
   (Linear's own "Project Update" feature - a journal-style status post,
   not an edit to the project's own fields) via the projectUpdateCreate
-  mutation. `PROJECT` is resolved against the active team's projects,
-  prompting if ambiguous. Team is resolved via `--team`, the active
-  profile, or an interactive prompt.
+  mutation. `PROJECT` is resolved against every project in the workspace,
+  prompting if ambiguous, unless `--team` narrows the search to one team.
+  The active profile's team is deliberately not used here: a project can
+  live on a different team than the one the profile defaults to.
   """
   def project_update(%{args: %{project: search}, options: options}) do
-    with {:ok, team} <- resolve_team(options),
-         {:ok, projects} <- Linear.projects_by_team(team.id, %{search: search}),
+    with {:ok, projects} <- update_candidates(options),
          {:ok, project} <- resolve_project(projects, search, options),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do
@@ -81,6 +141,14 @@ defmodule LinearCli.CLI.Commands.Projects do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp update_candidates(%{team: team_key} = options) when is_binary(team_key) do
+    with {:ok, team} <- resolve_team(options) do
+      Linear.projects_by_team(team.id)
+    end
+  end
+
+  defp update_candidates(_options), do: Linear.workspace_projects()
 
   defp resolve_team(options) do
     key = options.team || Profiles.default_team()
@@ -145,12 +213,14 @@ defmodule LinearCli.CLI.Commands.Projects do
     Enum.any?([team.id, team.key], &(String.downcase(&1 || "") == String.downcase(key)))
   end
 
-  defp projects_for(_flags, %{team: team_key}) when is_binary(team_key) do
+  defp projects_for(flags, %{team: team_key}) when is_binary(team_key) do
     with {:ok, team} <- Linear.find_team(team_key) do
-      Linear.projects_by_team(team.id)
+      Linear.projects_by_team(team.id, %{with_updates: flags.updates})
     end
   end
 
-  defp projects_for(%{mine: true}, _options), do: Linear.my_projects()
-  defp projects_for(_flags, _options), do: Linear.projects()
+  defp projects_for(%{mine: true} = flags, _options),
+    do: Linear.my_projects(%{with_updates: flags.updates})
+
+  defp projects_for(flags, _options), do: Linear.projects(%{with_updates: flags.updates})
 end

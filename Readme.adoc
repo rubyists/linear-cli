@@ -522,9 +522,10 @@ An explicit `--team`/`--project` on the command line always overrides the
 active profile.
 
 Profile and favorite mutations return one JSON result when `--output json` is
-used. Project favorites and project updates require an exact project name or
-ID, and require `--team` or an active profile when more than one team is
-available. Text mode keeps its existing selection prompts.
+used. Project favorites require an exact project name or ID, and require
+`--team` or an active profile when more than one team is available. Project
+updates require an exact project name or ID, and search every team unless
+`--team` is given. Text mode keeps its existing selection prompts.
 
 Issue commands also accept a bare number (`lc issue develop 1234`) in
 place of a full team-prefixed identifier - it's resolved via the active
@@ -558,6 +559,23 @@ $ lc project favorite Manhattan
 $ lc project list
 ----
 
+==== Show the latest project updates
+
+`project list --updates` also prints each project's most recent status update:
+the date, the health (if set), and the full text. Projects with no update show
+`(no updates)`. With `--output json`, each project has a `latest_update` field.
+
+[source,sh]
+----
+$ lc project list --updates
+$ lc project list --updates --team CRY
+----
+
+In a terminal, a workspace-wide `project list` shows 100 projects at a time and
+asks `Show the next 100 projects?` before fetching more. Press Enter for yes.
+With `--output json`, a pipe, `--mine`, `--team`, or an active favorites filter,
+it fetches every project with no prompt.
+
 ==== Post a project status update
 
 Not in Ruby's `linear-cli` - a status post on a project (Linear's own "Project
@@ -567,6 +585,9 @@ Update" feature), not an edit to the project itself.
 ----
 $ lc project update Manhattan --body "Shipping ahead of schedule" --health onTrack
 ----
+
+The project is searched across every team. The active profile's team does not
+narrow the search. Use `--team` to limit the search to one team.
 
 === Wrapper scripts
 

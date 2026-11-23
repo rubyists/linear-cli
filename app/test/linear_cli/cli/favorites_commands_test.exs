@@ -386,6 +386,41 @@ defmodule LinearCli.CLI.FavoritesCommandsTest do
       refute output =~ "Platform Cleanup"
     end
 
+    test "--updates refetches favorites with their latest update" do
+      LinearCli.Favorites.add("project", "p1")
+      {:ok, _} = LinearCli.Favorites.records("project", false)
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        query = Jason.decode!(body)["query"]
+
+        assert query =~ "project(id: $id)"
+        assert query =~ "projectUpdates(first: 1)"
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "project" => %{
+              "id" => "p1",
+              "name" => "Manhattan",
+              "slugId" => "abc",
+              "url" => "https://linear.app/x/project/manhattan-abc",
+              "teams" => %{"nodes" => []},
+              "projectUpdates" => %{
+                "nodes" => [
+                  %{"id" => "pu1", "body" => "On pace.", "createdAt" => "2026-11-18T09:00:00Z"}
+                ]
+              }
+            }
+          }
+        })
+      end)
+
+      output = capture_io(fn -> LinearCli.CLI.main(["project", "list", "--updates"]) end)
+      assert output =~ "Manhattan"
+      assert output =~ "2026-11-18"
+      assert output =~ "On pace."
+    end
+
     test "--all overrides the favorites filter" do
       LinearCli.Favorites.add("project", "p1")
 

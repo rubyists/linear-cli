@@ -62,6 +62,7 @@ erDiagram
         string description
         string url
         Team[] teams
+        ProjectUpdate latest_update
     }
     Issue {
         string id PK
@@ -116,6 +117,7 @@ erDiagram
         string body
         string health
         string url
+        string created_at
     }
 
     Issue }o--o| User : "assignee [nested]"
@@ -150,7 +152,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.User`
 | `id` (`:string`)
-| `name`, `display_name`, `email`, `teams` (`{:array, :term}`)
+| `name`, `display_name`, `email`, `teams` (`{:array, :term}`), `latest_update` (`:term`, a `ProjectUpdate` or `nil`; only set when listed with `with_updates: true`)
 
 | `LinearCli.Linear.Team`
 | `id` (`:string`)
@@ -178,7 +180,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.ProjectUpdate`
 | `id` (`:string`)
-| `body`, `health`, `url`
+| `body`, `health`, `url`, `created_at` (`:string`, ISO-8601)
 
 | `LinearCli.Linear.IssueRelation`
 | `id` (`:string`)
@@ -347,14 +349,14 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:all`
 | read
 | `Linear.Project.Read.All`
-| `projects(first:, after:)` — paginated with `Project.base_fields/0`
+| `projects(first:, after:)` — follows every page (`Paginate.all_pages/4`, no 100-project cap) with `Project.list_fields/1`. The optional `with_updates` argument also selects each project's newest `projectUpdates(first: 1)`
 
 | `Project`
 | `find_project`
 | `:find`
 | read (`get?: true`)
 | `Linear.Project.Read.Find`
-| `project(id: $id)` with `Project.fields_with_teams/0` — exact lookup for saving or hydrating favorite snapshots
+| `project(id: $id)` with `Project.fields_with_teams/0` — exact lookup for saving or hydrating favorite snapshots. The optional `with_updates` argument also selects the newest update (`Project.latest_update_selection/0`)
 
 | `Project`
 | `workspace_projects`
@@ -368,14 +370,14 @@ manual-implementation module, and the Linear GraphQL operation it calls.
 | `:mine`
 | read
 | `Linear.Project.Read.Mine`
-| `team(id:) { projects }` per user team, fanned out concurrently
+| `team(id:) { projects }` per user team, fanned out concurrently. Accepts `with_updates` and passes it to `by_team`
 
 | `Project`
 | `projects_by_team`
 | `:by_team`
 | read
 | `Linear.Project.Read.ByTeam`
-| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects, or applies a server-side name/slug/id filter when `search` is supplied
+| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects, or applies a server-side name/slug/id filter when `search` is supplied. The optional `with_updates` argument also selects each project's newest update (not applied to the `search` filter query)
 
 | `Project`
 | `create_project`
@@ -404,6 +406,14 @@ manual-implementation module, and the Linear GraphQL operation it calls.
   invariant; `assignee_id` filters by exact user ID; `assigned_only` excludes
   unassigned issues for filter-only batch operations; or `issue(id:)` per id
   (full, fanned concurrently).
+
+| `Project`
+| `projects_page`
+| `:page`
+| generic action (`:map`)
+| `Linear.Project.Actions.Page`
+| `projects(first: 100, after:)` — one page. Arguments: `after` (cursor), `with_updates`. Returns
+  `%{projects:, has_next_page:, end_cursor:}`. The action never follows the cursor.
 
 | `Issue`
 | `issues_first_page`
@@ -613,7 +623,8 @@ Used by:
 
 * `Team.Read.All` — `teams(first:, after:)` paginated query
 * `Team.Read.AllForLookup` — complete workspace team lookup
-* `Project.Read.All` — `projects(first:, after:)` paginated query
+* `Project.Read.All` — every project, via `all_pages/4`
+* `Project.Actions.Page` — one page of projects with its end cursor (it calls the API directly rather than `Paginate`)
 * `Project.Read.AllForLookup` — complete workspace project lookup
 * `Issue.Read.List` — `issues(filter:, first:, after:)` paginated list
   (the find-by-ids path fans out individual `issue(id:)` calls instead)
