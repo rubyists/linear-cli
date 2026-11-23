@@ -140,20 +140,22 @@ defmodule LinearCli.CLITest do
             }
           })
 
-        String.contains?(query, "team(id: $teamId)") ->
+        String.contains?(query, "projects(first: $first") ->
           Req.Test.json(conn, %{
             "data" => %{
-              "team" => %{
-                "projects" => %{
-                  "nodes" => [
-                    %{
+              "projects" => %{
+                "edges" => [
+                  %{
+                    "node" => %{
                       "id" => "p1",
                       "name" => "Manhattan",
                       "slugId" => "abc",
                       "url" => "https://linear.app/x/project/manhattan-abc"
-                    }
-                  ]
-                }
+                    },
+                    "cursor" => "c1"
+                  }
+                ],
+                "pageInfo" => %{"hasNextPage" => false}
               }
             }
           })
@@ -198,6 +200,316 @@ defmodule LinearCli.CLITest do
 
     assert_received {:input,
                      %{"projectId" => "p1", "body" => "Doing great", "health" => "onTrack"}}
+  end
+
+  test "project update finds projects on any team when --team is not given" do
+    # The active profile's team must not narrow the search: a project can live
+    # on a different team than the profile's default.
+    {:ok, _} = LinearCli.Profiles.create("other-team", team: "OPS")
+    :ok = LinearCli.Profiles.activate("other-team")
+
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      query = Jason.decode!(body)["query"]
+
+      refute query =~ "team(id: $teamId)"
+
+      if query =~ "projectUpdateCreate" do
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projectUpdateCreate" => %{
+              "projectUpdate" => %{"id" => "pu1", "url" => "https://linear.app/x/update/pu1"}
+            }
+          }
+        })
+      else
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "edges" => [
+                %{
+                  "node" => %{
+                    "id" => "p9",
+                    "name" => "leopard",
+                    "slugId" => "f14",
+                    "url" => "https://linear.app/x/project/leopard-f14"
+                  },
+                  "cursor" => "c1"
+                }
+              ],
+              "pageInfo" => %{"hasNextPage" => false}
+            }
+          }
+        })
+      end
+    end)
+
+    output =
+      capture_io(fn ->
+        assert :ok =
+                 LinearCli.CLI.main(["project", "update", "leopard", "--body", "Shipping"])
+      end)
+
+    assert output =~ "https://linear.app/x/update/pu1"
+  end
+
+  describe "project update with duplicate project names" do
+    setup do
+      test_pid = self()
+
+      first = %{
+        "id" => "p1",
+        "name" => "Website",
+        "slugId" => "first",
+        "url" => "https://linear.app/x/project/website-first"
+      }
+
+      second = %{
+        "id" => "p2",
+        "name" => "Website",
+        "slugId" => "second",
+        "url" => "https://linear.app/x/project/website-second"
+      }
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => variables} = Jason.decode!(body)
+
+        data =
+          cond do
+            query =~ "projectUpdateCreate" ->
+              send(test_pid, {:posted_to, variables["input"]["projectId"]})
+              %{"projectUpdateCreate" => %{"projectUpdate" => %{"id" => "pu1"}}}
+
+            query =~ "team(id: $id)" ->
+              assert variables == %{"id" => "OPS"}
+              %{"team" => %{"id" => "t2", "key" => "OPS", "name" => "Ops"}}
+
+            query =~ "team(id: $teamId)" ->
+              assert variables["teamId"] == "t2"
+              assert query =~ "filter: $filter"
+
+              assert %{"name" => %{"containsIgnoreCase" => "Website"}} in variables["filter"][
+                       "or"
+                     ]
+
+              %{"team" => %{"projects" => %{"nodes" => [second]}}}
+
+            query =~ "projects(first: $first" ->
+              %{
+                "projects" => %{
+                  "edges" => Enum.map([first, second], &%{"node" => &1}),
+                  "pageInfo" => %{"hasNextPage" => false}
+                }
+              }
+          end
+
+        Req.Test.json(conn, %{"data" => data})
+      end)
+
+      %{halt: fn code -> send(test_pid, {:halted, code}) end}
+    end
+
+    test "text mode posts only to the selected project" do
+      output =
+        capture_io([input: "2\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["project", "update", "Website", "--body", "Shipping"])
+        end)
+
+      assert output =~ "1. Website (p1)"
+      assert output =~ "2. Website (p2)"
+      assert_received {:posted_to, "p2"}
+      refute_received {:posted_to, _}
+    end
+
+    test "text mode sends no update when the user cancels", %{halt: halt} do
+      error =
+        capture_io(:stderr, fn ->
+          capture_io([input: "\n"], fn ->
+            LinearCli.CLI.main(["project", "update", "Website", "--body", "Shipping"], halt)
+          end)
+        end)
+
+      assert error =~ "No project selected"
+      assert_received {:halted, 22}
+      refute_received {:posted_to, _}
+    end
+
+    test "JSON mode rejects ambiguity before posting or prompting", %{halt: halt} do
+      error =
+        capture_io(:stderr, fn ->
+          assert capture_io(fn ->
+                   LinearCli.CLI.main(
+                     ["project", "update", "Website", "--body", "Shipping", "--output", "json"],
+                     halt
+                   )
+                 end) == ""
+        end)
+
+      assert error =~ ~s(Ambiguous project match for "Website". Use a project ID or --team.)
+      assert_received {:halted, 22}
+      refute_received {:posted_to, _}
+    end
+
+    test "an explicit ID or team scope selects the intended project in both modes" do
+      for output <- ["text", "json"],
+          {search, scope} <- [{"p2", []}, {"Website", ["--team", "OPS"]}] do
+        args = ["project", "update", search, "--body", "Shipping", "--output", output] ++ scope
+
+        captured = capture_io(fn -> assert :ok = LinearCli.CLI.main(args) end)
+
+        refute captured =~ "Choose a project by number"
+        assert_received {:posted_to, "p2"}
+        refute_received {:posted_to, _}
+      end
+    end
+  end
+
+  test "project list --updates shows each project's latest update and its date" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      query = Jason.decode!(body)["query"]
+
+      assert query =~ "projectUpdates(first: 1)"
+
+      Req.Test.json(conn, %{
+        "data" => %{
+          "projects" => %{
+            "edges" => [
+              %{
+                "node" => %{
+                  "id" => "p1",
+                  "name" => "Manhattan",
+                  "slugId" => "abc",
+                  "url" => "https://linear.app/x/project/manhattan-abc",
+                  "projectUpdates" => %{
+                    "nodes" => [
+                      %{
+                        "id" => "pu1",
+                        "body" => "Phase one done.\nPhase two next.",
+                        "health" => "onTrack",
+                        "url" => "https://linear.app/x/update/pu1",
+                        "createdAt" => "2026-11-14T15:30:00.000Z"
+                      }
+                    ]
+                  }
+                },
+                "cursor" => "c1"
+              },
+              %{
+                "node" => %{
+                  "id" => "p2",
+                  "name" => "Quiet",
+                  "slugId" => "def",
+                  "url" => "https://linear.app/x/project/quiet-def",
+                  "projectUpdates" => %{"nodes" => []}
+                },
+                "cursor" => "c2"
+              }
+            ],
+            "pageInfo" => %{"hasNextPage" => false}
+          }
+        }
+      })
+    end)
+
+    output = capture_io(fn -> LinearCli.CLI.main(["project", "list", "--updates", "--all"]) end)
+
+    assert output =~ "2026-11-14 (onTrack)"
+    assert output =~ "Phase one done."
+    assert output =~ "    Phase two next."
+    assert output =~ "(no updates)"
+  end
+
+  describe "project list paging" do
+    setup do
+      test_pid = self()
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        after_cursor = Jason.decode!(body)["variables"]["after"]
+        send(test_pid, {:requested, after_cursor})
+
+        {node, page_info} =
+          case after_cursor do
+            nil ->
+              {%{"id" => "p1", "name" => "FirstPage", "slugId" => "a", "url" => "u1"},
+               %{"hasNextPage" => true, "endCursor" => "page-1"}}
+
+            "page-1" ->
+              {%{"id" => "p2", "name" => "SecondPage", "slugId" => "b", "url" => "u2"},
+               %{"hasNextPage" => false, "endCursor" => "page-2"}}
+          end
+
+        Req.Test.json(conn, %{
+          "data" => %{
+            "projects" => %{
+              "edges" => [%{"node" => node, "cursor" => node["id"]}],
+              "pageInfo" => page_info
+            }
+          }
+        })
+      end)
+
+      Application.put_env(:linear_cli, :interactive, true)
+      on_exit(fn -> Application.delete_env(:linear_cli, :interactive) end)
+    end
+
+    test "interactive listing asks before fetching the next page and continues on yes" do
+      output =
+        capture_io([input: "y\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all"])
+        end)
+
+      assert output =~ "FirstPage"
+      assert output =~ "Show the next 100 projects?"
+      assert output =~ "SecondPage"
+      assert_received {:requested, "page-1"}
+    end
+
+    test "interactive listing stops after the first page on no" do
+      output =
+        capture_io([input: "n\n"], fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all"])
+        end)
+
+      assert output =~ "FirstPage"
+      refute output =~ "SecondPage"
+      refute_received {:requested, "page-1"}
+    end
+
+    test "JSON output fetches every page without prompting" do
+      output =
+        capture_io(fn ->
+          assert :ok = LinearCli.CLI.main(["project", "list", "--all", "-o", "json"])
+        end)
+
+      refute output =~ "Show the next"
+      assert output =~ "FirstPage"
+      assert output =~ "SecondPage"
+    end
+
+    test "explicitly disabling interactivity fetches every page without prompting" do
+      Application.put_env(:linear_cli, :interactive, false)
+
+      output = capture_io(fn -> assert :ok = LinearCli.CLI.main(["project", "list", "--all"]) end)
+
+      refute output =~ "Show the next"
+      assert output =~ "FirstPage"
+      assert output =~ "SecondPage"
+      assert_received {:requested, "page-1"}
+    end
+  end
+
+  test "project list without --updates does not request project updates" do
+    Req.Test.stub(LinearCli.Api, fn conn ->
+      {:ok, body, conn} = Plug.Conn.read_body(conn)
+      refute Jason.decode!(body)["query"] =~ "projectUpdates"
+      respond(conn, Jason.decode!(body)["query"])
+    end)
+
+    assert capture_io(fn -> LinearCli.CLI.main(["project", "list", "--all"]) end) =~ "Manhattan"
   end
 
   test "issue list prints a one-line summary per issue" do

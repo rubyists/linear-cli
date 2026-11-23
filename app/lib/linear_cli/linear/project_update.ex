@@ -22,6 +22,7 @@ defmodule LinearCli.Linear.ProjectUpdate do
     attribute :body, :string, public?: true
     attribute :health, :string, public?: true
     attribute :url, :string, public?: true
+    attribute :created_at, :string, public?: true
   end
 
   @doc "GraphQL field selection for a project update's own fields."
@@ -35,7 +36,8 @@ defmodule LinearCli.Linear.ProjectUpdate do
       id: map["id"],
       body: map["body"],
       health: map["health"],
-      url: map["url"]
+      url: map["url"],
+      created_at: map["createdAt"]
     )
   end
 end
