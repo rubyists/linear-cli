@@ -139,14 +139,12 @@ jobs:
         if: startsWith(matrix.target, 'linux_')
         # makeup_syntect calls its NIF while compiling generated module docs,
         # so it cannot compile against a musl artifact on the glibc runner.
-        # Compile it for the host first; prepare_musl_nifs.sh replaces only
-        # the packaged NIF after compilation. castore must be named before
-        # rustler_precompiled 0.8.x because deps.compile does not compile
-        # transitive dependencies automatically.
+        # Compile it with its dependencies for the host first.
+        # prepare_musl_nifs.sh then replaces the packaged NIF.
         name: Compile makeup_syntect with its host NIF
         env:
           MIX_ENV: prod
-        run: mix deps.compile castore rustler_precompiled makeup_syntect
+        run: mix deps.compile --include-children makeup_syntect
       -
         # rustler_precompiled resolves the NIF target at compile time from the
         # Ubuntu host unless TARGET_ABI overrides it. This is safe as a

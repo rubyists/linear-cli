@@ -9,7 +9,7 @@ on:  # yamllint disable-line rule:truthy
         description: >-
           Commit comparison base: an exact 40-character SHA (for push events
           and closed-PR validation), a branch name (for workflow_dispatch with
-          an explicit base), or empty (falls back to origin/main). The Test job
+          an explicit base), or empty (falls back to origin/main). The quality job
           exports this as BASE_REF so ci/validate_commit_range.sh uses the
           correct range instead of re-resolving it from scratch.
         required: false
@@ -40,8 +40,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  test:
-    name: Test
+  quality:
+    name: Quality checks
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -113,12 +113,9 @@ jobs:
     # Building Burrito is deliberately reserved for changes that affect its
     # dependency graph or packaging path. The release workflow still builds
     # every target before publishing.
-    # Exclude 'edited' events — a title-only change never alters file content,
-    # so there are no Burrito-impacting diffs to check.
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.action != 'closed'
-      && github.event.action != 'edited'
+    # PR edits rerun the required check on the same commit. Use the full PR
+    # diff so a title edit cannot clear an earlier packaging failure.
+    if: github.event_name == 'pull_request' && github.event.action != 'closed'
     name: Detect Burrito-impacting changes
     runs-on: ubuntu-latest
     outputs:
@@ -139,15 +136,24 @@ jobs:
               app/mix.exs \
               app/mix.lock \
               app/release/ \
+              mise.toml \
+              ci/patch_musl_nifs.sh \
               ci/prepare_musl_nifs.sh \
               ci/test_burrito_shared_loader.sh \
               .github/workflows/ci.yaml \
               .github/workflows/main.yaml
           then
-              printf 'burrito_changed=false\n' >> "$GITHUB_OUTPUT"
+              changed=false
           else
-              printf 'burrito_changed=true\n' >> "$GITHUB_OUTPUT"
+              status=$?
+              if [ "$status" -ne 1 ]
+              then
+                  printf 'Could not compare Burrito inputs at %s and %s\n' "$BASE_SHA" "$HEAD_SHA" >&2
+                  exit "$status"
+              fi
+              changed=true
           fi
+          echo "burrito_changed=$changed" >> "$GITHUB_OUTPUT" || exit 1
 
   burrito_linux_regression:
     # ci.yaml is also called by main.yaml after pushes and closed release PRs.
@@ -181,7 +187,7 @@ jobs:
         name: Compile makeup_syntect with its host NIF
         env:
           MIX_ENV: prod
-        run: mix deps.compile castore rustler_precompiled makeup_syntect
+        run: mix deps.compile --include-children makeup_syntect
       -
         name: Pre-compile mdex_native with its musl NIF
         env:
@@ -198,3 +204,34 @@ jobs:
         name: Test the packaged binary across users
         timeout-minutes: 2
         run: ../ci/test_burrito_shared_loader.sh ./burrito_out/lc_linux_x86_64
+
+  test:
+    # Branch protection requires this exact check name.
+    name: Test
+    needs: [quality, burrito_changes, burrito_linux_regression]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Check quality and packaging results
+        env:
+          QUALITY: ${{ needs.quality.result }}
+          OPEN_PR: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' }}
+          DETECTION: ${{ needs.burrito_changes.result }}
+          CHANGED: ${{ needs.burrito_changes.outputs.burrito_changed }}
+          BURRITO: ${{ needs.burrito_linux_regression.result }}
+        run: |
+          if [ "$QUALITY" != success ]
+          then
+              printf 'Quality checks ended with %s\n' "$QUALITY" >&2
+              exit 1
+          fi
+
+          case "$OPEN_PR/$DETECTION/$CHANGED/$BURRITO" in
+              true/success/true/success|true/success/false/skipped|false/skipped//skipped)
+                  exit 0 ;;
+              *)
+                  printf 'Unexpected Burrito results (open PR=%s, detection=%s, changed=%s, build=%s)\n' \
+                      "$OPEN_PR" "$DETECTION" "$CHANGED" "$BURRITO" >&2
+                  exit 1 ;;
+          esac
