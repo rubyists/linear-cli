@@ -6,6 +6,7 @@ defmodule LinearCli.CLI.Commands.Projects do
 
   alias LinearCli.CLI.{Display, Output, Projects, Prompt, WhatFor}
   alias LinearCli.{Favorites, Linear, Profiles}
+  alias LinearCli.Linear.Project
 
   @doc "Ported from commands/project/list.rb. Ruby's `--mine` defaults false."
   def project_list(%{flags: flags, options: options}) do
@@ -122,17 +123,13 @@ defmodule LinearCli.CLI.Commands.Projects do
   end
 
   @doc """
-  New in this port - Ruby has no equivalent. Posts a status update
-  (Linear's own "Project Update" feature - a journal-style status post,
-  not an edit to the project's own fields) via the projectUpdateCreate
-  mutation. `PROJECT` is resolved against every project in the workspace,
-  prompting if ambiguous, unless `--team` narrows the search to one team.
-  The active profile's team is deliberately not used here: a project can
-  live on a different team than the one the profile defaults to.
+  Posts a status update to a Linear project. The search covers the whole
+  workspace unless `--team` limits it. If multiple projects match exactly,
+  text mode prompts for a choice and JSON mode returns an error.
   """
   def project_update(%{args: %{project: search}, options: options}) do
     with {:ok, projects} <- update_candidates(options),
-         {:ok, project} <- resolve_project(projects, search, options),
+         {:ok, project} <- resolve_update_project(projects, search, options),
          {:ok, update} <-
            Linear.post_project_update(project.id, options.body, %{health: options.health}) do
       Display.show(update, %{output: options.output})
@@ -149,6 +146,43 @@ defmodule LinearCli.CLI.Commands.Projects do
   end
 
   defp update_candidates(_options), do: Linear.workspace_projects()
+
+  defp resolve_update_project(projects, search, options) do
+    matches =
+      case Enum.filter(projects, &Project.matches_attributes?(&1, search, [:id, :url])) do
+        [] -> Enum.filter(projects, &(Project.match_score?(&1, search) == 100))
+        references -> references
+      end
+
+    case Enum.uniq_by(matches, & &1.id) do
+      [] -> resolve_project(projects, search, options)
+      [project] -> {:ok, project}
+      ambiguous -> disambiguate_update_project(ambiguous, search, options)
+    end
+  end
+
+  defp disambiguate_update_project(projects, search, options) do
+    if Output.json?(options) do
+      {:error,
+       {:smells_bad,
+        "Ambiguous project match for #{inspect(search)}. Use a project ID or --team."}}
+    else
+      projects
+      |> Enum.with_index(1)
+      |> Enum.each(fn {project, number} ->
+        Prompt.say("#{number}. #{project.name} (#{project.id})")
+      end)
+
+      with answer when is_binary(answer) <-
+             Prompt.ask("Choose a project by number (Enter to cancel)"),
+           {number, ""} when number > 0 <- Integer.parse(answer),
+           {:ok, project} <- Enum.fetch(projects, number - 1) do
+        {:ok, project}
+      else
+        _ -> {:error, {:smells_bad, "No project selected."}}
+      end
+    end
+  end
 
   defp resolve_team(options) do
     key = options.team || Profiles.default_team()

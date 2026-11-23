@@ -253,6 +253,113 @@ defmodule LinearCli.CLITest do
     assert output =~ "https://linear.app/x/update/pu1"
   end
 
+  describe "project update with duplicate project names" do
+    setup do
+      test_pid = self()
+
+      first = %{
+        "id" => "p1",
+        "name" => "Website",
+        "slugId" => "first",
+        "url" => "https://linear.app/x/project/website-first"
+      }
+
+      second = %{
+        "id" => "p2",
+        "name" => "Website",
+        "slugId" => "second",
+        "url" => "https://linear.app/x/project/website-second"
+      }
+
+      Req.Test.stub(LinearCli.Api, fn conn ->
+        {:ok, body, conn} = Plug.Conn.read_body(conn)
+        %{"query" => query, "variables" => variables} = Jason.decode!(body)
+
+        data =
+          cond do
+            query =~ "projectUpdateCreate" ->
+              send(test_pid, {:posted_to, variables["input"]["projectId"]})
+              %{"projectUpdateCreate" => %{"projectUpdate" => %{"id" => "pu1"}}}
+
+            query =~ "team(id: $id)" ->
+              assert variables == %{"id" => "OPS"}
+              %{"team" => %{"id" => "t2", "key" => "OPS", "name" => "Ops"}}
+
+            query =~ "team(id: $teamId)" ->
+              assert variables["teamId"] == "t2"
+              %{"team" => %{"projects" => %{"nodes" => [second]}}}
+
+            query =~ "projects(first: $first" ->
+              %{
+                "projects" => %{
+                  "edges" => Enum.map([first, second], &%{"node" => &1}),
+                  "pageInfo" => %{"hasNextPage" => false}
+                }
+              }
+          end
+
+        Req.Test.json(conn, %{"data" => data})
+      end)
+
+      %{halt: fn code -> send(test_pid, {:halted, code}) end}
+    end
+
+    test "text mode posts only to the selected project" do
+      output =
+        capture_io([input: "2\n"], fn ->
+          assert :ok =
+                   LinearCli.CLI.main(["project", "update", "Website", "--body", "Shipping"])
+        end)
+
+      assert output =~ "1. Website (p1)"
+      assert output =~ "2. Website (p2)"
+      assert_received {:posted_to, "p2"}
+      refute_received {:posted_to, _}
+    end
+
+    test "text mode sends no update when the user cancels", %{halt: halt} do
+      error =
+        capture_io(:stderr, fn ->
+          capture_io([input: "\n"], fn ->
+            LinearCli.CLI.main(["project", "update", "Website", "--body", "Shipping"], halt)
+          end)
+        end)
+
+      assert error =~ "No project selected"
+      assert_received {:halted, 22}
+      refute_received {:posted_to, _}
+    end
+
+    test "JSON mode rejects ambiguity before posting or prompting", %{halt: halt} do
+      error =
+        capture_io(:stderr, fn ->
+          assert capture_io(fn ->
+                   LinearCli.CLI.main(
+                     ["project", "update", "Website", "--body", "Shipping", "--output", "json"],
+                     halt
+                   )
+                 end) == ""
+        end)
+
+      assert error =~ ~s(Ambiguous project match for "Website". Use a project ID or --team.)
+      assert_received {:halted, 22}
+      refute_received {:posted_to, _}
+    end
+
+    test "an explicit ID or team scope selects the intended project in both modes" do
+      for output <- ["text", "json"],
+          {search, scope} <- [{"p2", []}, {"Website", ["--team", "OPS"]}] do
+        args = ["project", "update", search, "--body", "Shipping", "--output", output] ++ scope
+
+        captured = capture_io(fn -> assert :ok = LinearCli.CLI.main(args) end)
+
+        refute captured =~ "Choose a project by number"
+        assert_received {:posted_to, "p2"}
+        refute_received {:posted_to, _}
+      end
+    end
+  end
+
   test "project list --updates shows each project's latest update and its date" do
     Req.Test.stub(LinearCli.Api, fn conn ->
       {:ok, body, conn} = Plug.Conn.read_body(conn)

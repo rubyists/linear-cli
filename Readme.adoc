@@ -523,9 +523,8 @@ active profile.
 
 Profile and favorite mutations return one JSON result when `--output json` is
 used. Project favorites require an exact project name or ID, and require
-`--team` or an active profile when more than one team is available. Project
-updates require an exact project name or ID, and search every team unless
-`--team` is given. Text mode keeps its existing selection prompts.
+`--team` or an active profile when more than one team is available.
+Project updates require a unique exact match in JSON mode.
 
 Issue commands also accept a bare number (`lc issue develop 1234`) in
 place of a full team-prefixed identifier - it's resolved via the active
@@ -586,8 +585,11 @@ Update" feature), not an edit to the project itself.
 $ lc project update Manhattan --body "Shipping ahead of schedule" --health onTrack
 ----
 
-The project is searched across every team. The active profile's team does not
-narrow the search. Use `--team` to limit the search to one team.
+The search covers the whole workspace, regardless of the active profile.
+Use `--team` to limit the search to one team, or pass the project ID.
+If multiple projects match exactly, text mode lists their names and IDs.
+Select a project by number or press Enter to cancel.
+JSON mode returns an error for an ambiguous match before it posts an update.
 
 === Wrapper scripts
 

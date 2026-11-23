@@ -152,7 +152,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.User`
 | `id` (`:string`)
-| `name`, `display_name`, `email`, `teams` (`{:array, :term}`), `latest_update` (`:term`, a `ProjectUpdate` or `nil`; only set when listed with `with_updates: true`)
+| `name`, `display_name`, `email`, `teams` (`{:array, :term}`)
 
 | `LinearCli.Linear.Team`
 | `id` (`:string`)
@@ -160,7 +160,7 @@ Nine resources are registered in `LinearCli.Linear`
 
 | `LinearCli.Linear.Project`
 | `id` (`:string`)
-| `name`, `content`, `slug_id`, `description`, `url`, `teams` (`{:array, :term}`)
+| `name`, `content`, `slug_id`, `description`, `url`, `teams` (`{:array, :term}`), `latest_update` (`:term`, a `ProjectUpdate` or `nil`, loaded with `with_updates: true`)
 
 | `LinearCli.Linear.Issue`
 | `id` (`:string`)
