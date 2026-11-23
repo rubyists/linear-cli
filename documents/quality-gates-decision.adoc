@@ -91,6 +91,13 @@ Those final test runs include both ordinary tests and tests tagged `ci_only`;
 the tag is excluded only by `mix precommit`, never globally. GitHub Actions
 calls `mix ci`, not `mix precommit`.
 
+GitHub requires the `Test` check before merge. It checks the result of
+`mix ci` on every run. On open pull requests, it also checks whether the
+packaging inputs changed. If they changed, the Linux Burrito regression
+must pass. That job builds the native executable and runs it as two users.
+It runs in CI because it needs a native toolchain and system accounts.
+An edit to the pull request title or description repeats the same checks.
+
 The repository's `pre-commit` hook refuses commits directly on `main` and then
 invokes `mix precommit`. The subsequent `commit-msg` hook validates the commit
 message after Git writes it; the `pre-push` hook remains the final local guard
