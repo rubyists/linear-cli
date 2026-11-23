@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.12.0](https://github.com/rubyists/linear-cli/compare/v2.11.3...v2.12.0) (2026-11-23)
+
+
+### Features
+
+* **project:** search all teams on update, add list --updates, page past 100 ([#312](https://github.com/rubyists/linear-cli/issues/312)) ([1841af7](https://github.com/rubyists/linear-cli/commit/1841af7da39b22060801b4d7e2d4707d67ff533f))
+
+
+### Bug Fixes
+
+* **stokowski:** restore the workflow-compatible submodule pin (EXT-79) ([#313](https://github.com/rubyists/linear-cli/issues/313)) ([4c0b90a](https://github.com/rubyists/linear-cli/commit/4c0b90ab4aa0de36912e0b49f0c1a56fe0f6bd72))
+
 ## [2.11.3](https://github.com/rubyists/linear-cli/compare/v2.11.2...v2.11.3) (2026-11-18)
 
 
