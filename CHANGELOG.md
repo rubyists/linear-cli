@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.12.0](https://github.com/rubyists/linear-cli/compare/v2.11.3...v2.12.0) (2026-11-23)
+
+
+### Features
+
+* **project:** search all teams on update, add list --updates, page past 100 ([#312](https://github.com/rubyists/linear-cli/issues/312)) ([1841af7](https://github.com/rubyists/linear-cli/commit/1841af7da39b22060801b4d7e2d4707d67ff533f))
+
+
+### Bug Fixes
+
+* **ci:** require a passing Linux Burrito build for packaging changes (EXT-83) ([#318](https://github.com/rubyists/linear-cli/issues/318)) ([8f7e513](https://github.com/rubyists/linear-cli/commit/8f7e513d16ada43c689c574326c966f943a97ab3))
+* **stokowski:** pin stage concurrency and blocker fixes (EXT-80, EXT-81) ([#316](https://github.com/rubyists/linear-cli/issues/316)) ([7b17fbf](https://github.com/rubyists/linear-cli/commit/7b17fbfed3a165d249f60aa83d4845199330dca8))
+* **stokowski:** restore the workflow-compatible submodule pin (EXT-79) ([#313](https://github.com/rubyists/linear-cli/issues/313)) ([4c0b90a](https://github.com/rubyists/linear-cli/commit/4c0b90ab4aa0de36912e0b49f0c1a56fe0f6bd72))
+
 ## [2.11.3](https://github.com/rubyists/linear-cli/compare/v2.11.2...v2.11.3) (2026-11-18)
 
 
