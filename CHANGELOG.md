@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.12.0](https://github.com/rubyists/linear-cli/compare/v2.11.3...v2.12.0) (2026-11-23)
+
+
+### Features
+
+* **project:** search all teams on update, add list --updates, page past 100 ([#312](https://github.com/rubyists/linear-cli/issues/312)) ([1841af7](https://github.com/rubyists/linear-cli/commit/1841af7da39b22060801b4d7e2d4707d67ff533f))
+
 ## [2.11.3](https://github.com/rubyists/linear-cli/compare/v2.11.2...v2.11.3) (2026-11-18)
 
 
